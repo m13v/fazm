@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UserNotifications
 @preconcurrency import ObjectiveC
@@ -117,6 +118,9 @@ class AppState: ObservableObject {
                 self?.checkNotificationPermission()
             }
         }
+
+        // Check microphone permission status on launch
+        checkMicrophonePermission()
     }
 
     /// Setup observers for app lifecycle
@@ -861,10 +865,19 @@ class AppState: ObservableObject {
     func startTranscription(source: AudioSource? = nil) {}
     /// Stop transcription (no-op stub)
     func stopTranscription() {}
-    /// Request microphone permission (no-op stub)
-    func requestMicrophonePermission() {}
-    /// Check microphone permission status (no-op stub)
-    func checkMicrophonePermission() {}
+    /// Request microphone permission
+    func requestMicrophonePermission() {
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            DispatchQueue.main.async {
+                self?.hasMicrophonePermission = granted
+                log("Microphone permission \(granted ? "granted" : "denied")")
+            }
+        }
+    }
+    /// Check microphone permission status
+    func checkMicrophonePermission() {
+        hasMicrophonePermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
     /// Check if microphone permission was explicitly denied
     func isMicrophonePermissionDenied() -> Bool {
         return AudioCaptureService.isPermissionDenied()
