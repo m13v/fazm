@@ -828,6 +828,11 @@ actor RewindDatabase {
                           on: "task_chat_messages", columns: ["taskId"])
         }
 
+        // V3: Rename task_chat_messages → chat_messages for generic use
+        migrator.registerMigration("fazmV3") { db in
+            try db.execute(sql: "ALTER TABLE task_chat_messages RENAME TO chat_messages")
+        }
+
         try migrator.migrate(queue)
     }
 

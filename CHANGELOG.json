@@ -7,7 +7,8 @@
     "After onboarding, the main window closes and only the floating bar with tutorial is shown",
     "Added microphone selection in Settings and silence detection overlay when PTT captures no speech",
     "Fixed floating bar chat not closing when clicking outside the app",
-    "Push-to-Talk now opens the chat panel immediately, showing live transcription in the input field"
+    "Push-to-Talk now opens the chat panel immediately, showing live transcription in the input field",
+    "Chat messages from Ask Fazm floating bar are now persisted locally"
   ],
   "releases": [
     {

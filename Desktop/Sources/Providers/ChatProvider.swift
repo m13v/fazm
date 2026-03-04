@@ -1834,6 +1834,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             if isOnboarding {
                 let msg = userMessage
                 Task { await OnboardingChatPersistence.saveMessage(msg) }
+            } else if sessionKey == "floating" {
+                let msg = userMessage
+                Task { await ChatMessageStore.saveMessage(msg, context: "__floating__") }
             }
         }
 
@@ -1993,6 +1996,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 if isOnboarding, !messageText.isEmpty {
                     let msg = messages[index]
                     Task { await OnboardingChatPersistence.saveMessage(msg) }
+                } else if sessionKey == "floating", !messageText.isEmpty {
+                    let msg = messages[index]
+                    Task { await ChatMessageStore.saveMessage(msg, context: "__floating__") }
                 }
             } else {
                 // Message no longer in memory (user switched away from this session).
