@@ -60,6 +60,9 @@ class AudioCaptureService: @unchecked Sendable {
     private let noiseFloor: Float = 0.005  // Very low threshold for preamp noise
     private let decayRate: Float = 0.85    // Decay multiplier per frame (lower = faster decay)
 
+    // Explicit device selection (nil = system default)
+    private var requestedDeviceUID: String?
+
     // Device change handling
     private var isReconfiguring = false
     private let listenerQueue = DispatchQueue(label: "com.fazm.audiocapture.listener")
@@ -103,9 +106,10 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Start capturing audio from microphone
     /// - Parameters:
+    ///   - deviceUID: Optional UID of a specific input device. Pass nil to use the system default.
     ///   - onAudioChunk: Callback receiving 16-bit PCM audio data chunks at 16kHz
     ///   - onAudioLevel: Optional callback receiving normalized audio level (0.0 - 1.0)
-    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) async throws {
+    func startCapture(deviceUID: String? = nil, onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) async throws {
         guard !isCapturing else {
             log("AudioCapture: Already capturing")
             return
@@ -113,6 +117,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
+        self.requestedDeviceUID = deviceUID
 
         // All CoreAudio HAL calls (AudioObjectGetPropertyData, AudioDeviceStart, etc.) are
         // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
@@ -136,26 +141,34 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
     private func startCaptureOnQueue() throws {
-        // 1. Get default input device
+        // 1. Get input device — use explicit UID if provided, else system default
         var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
 
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &inputDeviceID
-        )
+        if let uid = requestedDeviceUID {
+            inputDeviceID = Self.deviceIDForUID(uid)
+        }
 
-        guard status == noErr, inputDeviceID != kAudioObjectUnknown else {
-            throw AudioCaptureError.noInputAvailable
+        if inputDeviceID == kAudioObjectUnknown {
+            // Fall back to default input device
+            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+
+            let status = AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                0,
+                nil,
+                &size,
+                &inputDeviceID
+            )
+
+            guard status == noErr, inputDeviceID != kAudioObjectUnknown else {
+                throw AudioCaptureError.noInputAvailable
+            }
         }
         self.deviceID = inputDeviceID
 
@@ -240,6 +253,7 @@ class AudioCaptureService: @unchecked Sendable {
         deviceID = kAudioObjectUnknown
         isCapturing = false
         isReconfiguring = false
+        requestedDeviceUID = nil
         onAudioChunk = nil
         onAudioLevel = nil
 
@@ -311,6 +325,35 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     // MARK: - Private Methods
+
+    /// Look up an AudioDeviceID by its UID string.
+    private static func deviceIDForUID(_ uid: String) -> AudioDeviceID {
+        var deviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+
+        var translation = AudioValueTranslation(
+            mInputData: UnsafeMutableRawPointer(mutating: (uid as CFString as UnsafeRawPointer)),
+            mInputDataSize: UInt32(MemoryLayout<CFString>.size),
+            mOutputData: &deviceID,
+            mOutputDataSize: UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDeviceForUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var translationSize = UInt32(MemoryLayout<AudioValueTranslation>.size)
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &translationSize,
+            &translation
+        )
+        return status == noErr ? deviceID : kAudioObjectUnknown
+    }
 
     /// Get stream format for a device on input scope
     private func getStreamFormat(for deviceID: AudioObjectID) -> AudioStreamBasicDescription? {
@@ -570,25 +613,38 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
-        // Get new default input device
+        // Get input device — prefer explicit UID if set, else system default
         var newDeviceID: AudioDeviceID = kAudioObjectUnknown
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
 
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &newDeviceID
-        )
+        if let uid = requestedDeviceUID {
+            newDeviceID = Self.deviceIDForUID(uid)
+        }
 
-        guard status == noErr, newDeviceID != kAudioObjectUnknown else {
+        if newDeviceID == kAudioObjectUnknown {
+            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+
+            let status = AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                0,
+                nil,
+                &size,
+                &newDeviceID
+            )
+
+            guard status == noErr else {
+                log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
+                retryOrGiveUp(retryCount: retryCount)
+                return
+            }
+        }
+
+        guard newDeviceID != kAudioObjectUnknown else {
             log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
             retryOrGiveUp(retryCount: retryCount)
             return
