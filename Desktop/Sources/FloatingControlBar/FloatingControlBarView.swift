@@ -120,7 +120,9 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 HStack(spacing: 6) {
-                    compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                    compactButton(title: "Push to talk", keys: [shortcutSettings.pttKey.symbol]) {
+                        onAskAI()
+                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
