@@ -156,18 +156,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(FazmApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
-        // Force macOS to use the correct app icon (bypasses icon cache)
-        // NOTE: Only set NSApp.applicationIconImage (in-memory).
+        // Force macOS to use the correct app icon (bypasses icon cache).
+        // Apply squircle mask with proper margins because NSApp.applicationIconImage
+        // renders the raw image without macOS auto-masking.
         // Do NOT call NSWorkspace.setIcon(forFile:) — it writes a resource fork onto
         // the .app bundle, which breaks the code signature and prevents Sparkle
         // auto-updates from working ("An error occurred while running the updater").
-        if let iconURL = Bundle.main.url(forResource: "FazmIcon", withExtension: "icns"),
+        if let iconURL = Bundle.resourceBundle.url(forResource: "fazm_app_icon", withExtension: "png"),
            let icon = NSImage(contentsOf: iconURL) {
-            NSApp.applicationIconImage = icon
+            let size = icon.size
+            let maskedIcon = NSImage(size: size)
+            maskedIcon.lockFocus()
+            // Scale content to ~88% with 6% margin on each side (matches macOS Dock icon sizing)
+            let margin = size.width * 0.06
+            let contentRect = NSRect(x: margin, y: margin,
+                                     width: size.width - margin * 2,
+                                     height: size.height - margin * 2)
+            // Corner radius ≈ 22.37% of content size
+            let radius = contentRect.width * 0.2237
+            let path = NSBezierPath(roundedRect: contentRect, xRadius: radius, yRadius: radius)
+            path.addClip()
+            icon.draw(in: contentRect)
+            maskedIcon.unlockFocus()
+            NSApp.applicationIconImage = maskedIcon
             if let cfURL = Bundle.main.bundleURL as CFURL? {
                 LSRegisterURL(cfURL, true)
             }
-            log("AppDelegate: Set application icon from FazmIcon.icns")
+            log("AppDelegate: Set application icon with squircle mask")
         }
 
         // One-time icon cache reset: forces macOS to pick up the new squircle icon.
@@ -361,7 +376,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
     /// Includes a safety net to restart the Dock if it crashes during the reset.
     private func resetIconCacheIfNeeded() {
-        let key = "hasResetIconCache_v1"
+        let key = "hasResetIconCache_v2"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         log("AppDelegate: Running one-time icon cache reset")
@@ -758,15 +773,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 log("LaunchAtLogin migration: Already enabled, skipping")
             }
         }
-    }
-
-    /// Legacy migration methods — no longer needed, kept as no-ops
-    private func migrateAppNameToBeta() {
-        // No-op: legacy migration from "Omi Computer.app" to "Omi Beta.app"
-    }
-
-    private func cleanupOldOmiComputerApp() {
-        // No-op: legacy cleanup of old "Omi Computer.app" bundles
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
