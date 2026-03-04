@@ -934,6 +934,11 @@ class FloatingControlBarManager {
         return window?.state
     }
 
+    /// Access the bar window frame for positioning other UI (e.g. tutorial overlay).
+    var barWindowFrame: NSRect? {
+        return window?.frame
+    }
+
     /// Resize the floating bar for PTT state changes.
     func resizeForPTT(expanded: Bool) {
         window?.resizeForPTTState(expanded: expanded)
