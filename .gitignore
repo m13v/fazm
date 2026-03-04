@@ -15,7 +15,9 @@ DerivedData/
 
 # Credentials
 **/google-credentials.json
-.claude/settings.json
+
+# Claude (user-local config, skills, memory)
+.claude/
 
 # macOS
 .DS_Store
@@ -67,6 +69,13 @@ linkedin-*.md
 /*.docx
 /*.doc
 /*.pdf
+/*.icns
+namecheap_current_state.md
+PLAN.md
+network-requests.log
+
+# Provisioning profiles (machine-specific)
+*.provisionprofile
 
 # IDE directories
 .cursor/
