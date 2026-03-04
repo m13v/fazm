@@ -951,6 +951,7 @@ struct ChatPrompts {
         "indexed_files": "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
         "local_kg_nodes": "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
         "local_kg_edges": "knowledge graph edges — relationships between entities",
+        "task_chat_messages": "persisted chat messages for onboarding and task conversations",
     ]
 
     /// Per-column descriptions for every non-excluded table.
