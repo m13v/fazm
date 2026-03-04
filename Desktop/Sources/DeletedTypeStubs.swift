@@ -356,6 +356,10 @@ class APIClient {
     func recordLlmUsage(inputTokens: Int = 0, outputTokens: Int = 0, cacheReadTokens: Int = 0, cacheWriteTokens: Int = 0, totalTokens: Int = 0, costUsd: Double = 0, account: String = "") async {}
     func fetchTotalOmiAICost() async -> Double? { 0.0 }
 
+    // Knowledge Graph
+    func getKnowledgeGraph() async throws -> KnowledgeGraphResponse { KnowledgeGraphResponse(nodes: [], edges: []) }
+    func rebuildKnowledgeGraph() async throws -> Bool { false }
+
     // Search
     func searchApps(query: String = "", installedOnly: Bool = false) async throws -> [AppInfo] { [] }
 
@@ -815,7 +819,47 @@ class AIUserProfileService: ObservableObject {
 
 class KnowledgeGraphStorage {
     static let shared = KnowledgeGraphStorage()
-    func mergeGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {}
+
+    private var nodes: [LocalKGNodeRecord] = []
+    private var edges: [LocalKGEdgeRecord] = []
+
+    func mergeGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {
+        // Merge by deduplicating on nodeId / edgeId
+        let existingNodeIds = Set(self.nodes.map { $0.nodeId })
+        let existingEdgeIds = Set(self.edges.map { $0.edgeId })
+        for node in nodes where !existingNodeIds.contains(node.nodeId) {
+            self.nodes.append(node)
+        }
+        for edge in edges where !existingEdgeIds.contains(edge.edgeId) {
+            self.edges.append(edge)
+        }
+        log("KnowledgeGraphStorage: Merged to \(self.nodes.count) nodes, \(self.edges.count) edges")
+    }
+
+    func loadGraph() async -> KnowledgeGraphResponse {
+        let graphNodes = nodes.map { node in
+            KnowledgeGraphNode(
+                id: node.nodeId,
+                label: node.label,
+                nodeType: KnowledgeGraphNodeType(rawValue: node.nodeType) ?? .concept,
+                aliases: [],
+                memoryIds: [],
+                createdAt: node.createdAt,
+                updatedAt: node.updatedAt
+            )
+        }
+        let graphEdges = edges.map { edge in
+            KnowledgeGraphEdge(
+                id: edge.edgeId,
+                sourceId: edge.sourceNodeId,
+                targetId: edge.targetNodeId,
+                label: edge.label,
+                memoryIds: [],
+                createdAt: edge.createdAt
+            )
+        }
+        return KnowledgeGraphResponse(nodes: graphNodes, edges: graphEdges)
+    }
 }
 
 // MARK: - Storage Actors
@@ -903,12 +947,6 @@ class TasksStore: ObservableObject {
 class MemoriesViewModel: ObservableObject {
     var isActive: Bool = false
     func loadMemories() async {}
-}
-
-@MainActor
-class MemoryGraphViewModel: ObservableObject {
-    var isEmpty: Bool { true }
-    func addGraphFromStorage() async {}
 }
 
 @MainActor
@@ -1019,11 +1057,6 @@ struct HelpPage: View {
 
 struct GoalCelebrationView: View {
     var body: some View { EmptyView() }
-}
-
-struct MemoryGraphSceneView: View {
-    var viewModel: MemoryGraphViewModel
-    var body: some View { Color.clear }
 }
 
 struct AppIconView: View {
@@ -1146,6 +1179,40 @@ struct LocalKGEdgeRecord: Codable, Equatable, Identifiable {
     var targetNodeId: String
     var label: String
     var createdAt: Date
+}
+
+// MARK: - Knowledge Graph API Models
+
+enum KnowledgeGraphNodeType: String, Codable {
+    case person
+    case place
+    case organization
+    case thing
+    case concept
+}
+
+struct KnowledgeGraphNode: Identifiable, Codable {
+    var id: String
+    var label: String
+    var nodeType: KnowledgeGraphNodeType
+    var aliases: [String]
+    var memoryIds: [String]
+    var createdAt: Date
+    var updatedAt: Date
+}
+
+struct KnowledgeGraphEdge: Identifiable, Codable {
+    var id: String
+    var sourceId: String
+    var targetId: String
+    var label: String
+    var memoryIds: [String]
+    var createdAt: Date
+}
+
+struct KnowledgeGraphResponse {
+    var nodes: [KnowledgeGraphNode]
+    var edges: [KnowledgeGraphEdge]
 }
 
 // MARK: - ToolCall Model
