@@ -178,7 +178,8 @@ struct FloatingControlBarView: View {
                 Text(key)
                     .scaledFont(size: 9)
                     .foregroundColor(.white)
-                    .frame(width: 15, height: 15)
+                    .frame(minWidth: 15, minHeight: 15)
+                    .padding(.horizontal, 3)
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(3)
             }
