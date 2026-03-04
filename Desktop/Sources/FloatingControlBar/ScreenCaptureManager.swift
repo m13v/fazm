@@ -65,7 +65,7 @@ class ScreenCaptureManager {
             return nil
         }
         let screenshotsDirectory = documentsDirectory
-            .appendingPathComponent("Omi")
+            .appendingPathComponent("Fazm")
             .appendingPathComponent("Screenshots")
 
         do {
