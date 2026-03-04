@@ -42,6 +42,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var pendingRestoreOrigin: NSPoint?
     /// Global mouse monitor that detects clicks outside the app to dismiss the chat.
     private var globalClickOutsideMonitor: Any?
+    /// When true, clicks outside the app don't dismiss the chat (e.g. browser tool running).
+    var suppressClickOutsideDismiss = false
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
@@ -213,6 +215,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     func closeAIConversation() {
         removeGlobalClickOutsideMonitor()
+        suppressClickOutsideDismiss = false
         AnalyticsManager.shared.floatingBarAskFazmClosed()
 
         // Cancel any in-flight chat streaming to prevent re-expansion
@@ -300,7 +303,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private func installGlobalClickOutsideMonitor() {
         removeGlobalClickOutsideMonitor()
         globalClickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, self.state.showingAIConversation else { return }
+            guard let self, self.state.showingAIConversation, !self.suppressClickOutsideDismiss else { return }
             self.dismissConversationAnimated()
         }
     }
@@ -857,6 +860,11 @@ class FloatingControlBarManager {
         window?.makeKeyAndOrderFront(nil)
     }
 
+    /// Suppress or restore click-outside-dismiss (used while browser/Playwright tools run).
+    func setSuppressClickOutsideDismiss(_ suppress: Bool) {
+        window?.suppressClickOutsideDismiss = suppress
+    }
+
     /// Cancel any in-flight chat streaming.
     func cancelChat() {
         chatCancellable?.cancel()
@@ -993,6 +1001,39 @@ class FloatingControlBarManager {
     /// Close the AI conversation panel (used by PTT when no transcript was captured).
     func closeAIConversation() {
         window?.closeAIConversation()
+    }
+
+    /// Re-send the pending message that was interrupted by browser extension setup.
+    /// Opens the floating bar and routes through `sendAIQuery` so streaming is wired up.
+    func retryPendingQuery() {
+        guard let provider = chatProvider,
+              let text = provider.pendingRetryMessage else { return }
+        provider.pendingRetryMessage = nil
+        guard let window = window else { return }
+
+        log("FloatingControlBarManager: Retrying pending query via floating bar")
+
+        // Reset stale state
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        window.cancelInputHeightObserver()
+        window.state.showingAIConversation = false
+        window.state.showingAIResponse = false
+        window.state.aiInputText = ""
+        window.state.currentAIMessage = nil
+        window.state.chatHistory = []
+
+        NSApp.activate(ignoringOtherApps: true)
+        if !window.isVisible { show() }
+        window.cancelPendingDismiss()
+        window.savePreChatCenterIfNeeded()
+        window.showAIConversation()
+        window.orderFrontRegardless()
+
+        // Send the query through the normal streaming path
+        Task { @MainActor in
+            await self.sendAIQuery(text, barWindow: window, provider: provider)
+        }
     }
 
     // MARK: - AI Query

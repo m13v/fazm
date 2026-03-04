@@ -1886,6 +1886,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
+        var activeBrowserToolCount = 0
 
         do {
             // Use the system prompt built at warmup. The ACP bridge applies it only
