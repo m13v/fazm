@@ -685,11 +685,11 @@ actor RewindDatabase {
             }
 
             if importSuccess && fileManager.fileExists(atPath: recoveredPath) {
-                // Count recovered memories as a proxy for recovery success
+                // Count recovered tables as a proxy for recovery success
                 do {
                     let queue = try DatabaseQueue(path: recoveredPath)
                     return try await queue.read { db in
-                        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memories") ?? 0
+                        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type='table'") ?? 0
                     }
                 } catch {
                     return 0
@@ -755,47 +755,11 @@ actor RewindDatabase {
         var migrator = DatabaseMigrator()
 
         // Single clean migration for Fazm (no legacy OMI tables).
-        // Creates only the 5 active tables used by the app.
+        // Creates only the active tables used by the app.
+        // Note: memories will live in a separate DB (separate conversation).
         migrator.registerMigration("fazmV1") { db in
 
-            // 1. memories
-            try db.create(table: "memories") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("backendId", .text).unique()
-                t.column("backendSynced", .boolean).notNull().defaults(to: false)
-                t.column("content", .text).notNull()
-                t.column("category", .text).notNull()
-                t.column("tagsJson", .text)
-                t.column("visibility", .text).notNull().defaults(to: "private")
-                t.column("reviewed", .boolean).notNull().defaults(to: false)
-                t.column("userReview", .boolean)
-                t.column("manuallyAdded", .boolean).notNull().defaults(to: false)
-                t.column("scoring", .text)
-                t.column("source", .text)
-                t.column("conversationId", .text)
-                t.column("confidence", .double)
-                t.column("reasoning", .text)
-                t.column("sourceApp", .text)
-                t.column("windowTitle", .text)
-                t.column("contextSummary", .text)
-                t.column("currentActivity", .text)
-                t.column("inputDeviceName", .text)
-                t.column("isRead", .boolean).notNull().defaults(to: false)
-                t.column("isDismissed", .boolean).notNull().defaults(to: false)
-                t.column("deleted", .boolean).notNull().defaults(to: false)
-                t.column("headline", .text)
-                t.column("accessCount", .integer).notNull().defaults(to: 0)
-                t.column("lastAccessedAt", .datetime)
-                t.column("createdAt", .datetime).notNull()
-                t.column("updatedAt", .datetime).notNull()
-            }
-            try db.create(index: "idx_memories_backend_id", on: "memories", columns: ["backendId"])
-            try db.create(index: "idx_memories_created", on: "memories", columns: ["createdAt"])
-            try db.create(index: "idx_memories_category", on: "memories", columns: ["category"])
-            try db.create(index: "idx_memories_synced", on: "memories", columns: ["backendSynced"])
-            try db.create(index: "idx_memories_deleted", on: "memories", columns: ["deleted"])
-
-            // 2. ai_user_profiles
+            // ai_user_profiles
             try db.create(table: "ai_user_profiles") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("profileText", .text).notNull()
@@ -806,7 +770,7 @@ actor RewindDatabase {
             try db.create(index: "idx_ai_user_profiles_generated",
                           on: "ai_user_profiles", columns: ["generatedAt"])
 
-            // 3. indexed_files
+            // indexed_files
             try db.create(table: "indexed_files") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("path", .text).notNull()
@@ -826,7 +790,7 @@ actor RewindDatabase {
             try db.create(index: "idx_indexed_files_ext", on: "indexed_files", columns: ["fileExtension"])
             try db.create(index: "idx_indexed_files_modified", on: "indexed_files", columns: ["modifiedAt"])
 
-            // 4. local_kg_nodes
+            // local_kg_nodes
             try db.create(table: "local_kg_nodes") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("nodeId", .text).notNull().unique()
@@ -838,7 +802,7 @@ actor RewindDatabase {
                 t.column("updatedAt", .datetime).notNull()
             }
 
-            // 5. local_kg_edges
+            // local_kg_edges
             try db.create(table: "local_kg_edges") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("edgeId", .text).notNull().unique()

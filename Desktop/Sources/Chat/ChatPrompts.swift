@@ -946,7 +946,6 @@ struct ChatPrompts {
     /// Used alongside dynamically-queried sqlite_master DDL to build the schema section.
     /// Key = table name, value = short description for the prompt.
     static let tableAnnotations: [String: String] = [
-        "memories": "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
         "ai_user_profiles": "AI-generated user profile summaries",
         "indexed_files": "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
         "local_kg_nodes": "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
@@ -958,28 +957,6 @@ struct ChatPrompts {
     /// Used by formatSchema() to annotate each column with a human-readable hint.
     /// Key = table name, value = (column name → description).
     static let columnAnnotations: [String: [String: String]] = [
-        "memories": [
-            "content": "The remembered fact, preference, or personal detail",
-            "category": "system | interesting | manual",
-            "tagsJson": "JSON array of tag strings (e.g. [\"tip\", \"preference\"])",
-            "visibility": "private | public",
-            "reviewed": "Whether a human has reviewed this memory",
-            "userReview": "User thumbs-up (true) / thumbs-down (false) / unreviewed (null)",
-            "manuallyAdded": "True if user typed this directly rather than AI-extracted",
-            "scoring": "Internal scoring metadata from extraction",
-            "source": "desktop | fazm | screenshot | phone — how the memory was created",
-            "conversationId": "Backend conversation ID if extracted from a voice session",
-            "confidence": "Extraction confidence 0–1",
-            "reasoning": "AI reasoning for why this was saved as a memory",
-            "sourceApp": "App that was active when memory was extracted",
-            "windowTitle": "Window title at extraction time",
-            "contextSummary": "AI summary of screen context at extraction",
-            "currentActivity": "User activity label at extraction time",
-            "inputDeviceName": "Audio device used if from a voice session",
-            "isRead": "Whether the user has seen this memory in the UI",
-            "isDismissed": "Whether the user dismissed this memory",
-            "deleted": "Soft-delete flag",
-        ],
         "ai_user_profiles": [
             "profileText": "Full AI-generated profile summary text",
             "dataSourcesUsed": "Bitmask of data sources used to generate the profile",
@@ -1004,7 +981,7 @@ struct ChatPrompts {
     /// Any table whose name contains "_fts" is an FTS virtual or internal table — exclude all.
     /// Specific infra tables also excluded.
     static let excludedTables: Set<String> = [
-        "goals",
+        "goals", "memories",
     ]
 
     /// Infrastructure columns to strip from schema — file paths, binary blobs, sync state, internal flags.
