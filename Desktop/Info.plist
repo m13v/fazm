@@ -39,10 +39,6 @@
     <string>Fazm needs permission to detect which application is currently active.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Fazm needs microphone access to transcribe your conversations in real-time.</string>
-    <key>NSAudioCaptureUsageDescription</key>
-    <string>Fazm needs permission to capture system audio for transcription of calls and meetings.</string>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Fazm needs Bluetooth access to connect to peripheral devices.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
