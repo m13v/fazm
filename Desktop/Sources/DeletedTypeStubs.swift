@@ -38,22 +38,7 @@ enum ConversationSource: String {
     static func from(deviceType: String) -> ConversationSource { .omi }
 }
 
-@MainActor
-class AudioCaptureService {
-    static func checkPermission() -> Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
-    static func requestPermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                continuation.resume(returning: granted)
-            }
-        }
-    }
-    static func authorizationStatus() -> AVAuthorizationStatus { AVCaptureDevice.authorizationStatus(for: .audio) }
-    static func isPermissionDenied() -> Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .denied }
-    static func getCurrentMicrophoneName() -> String? { nil }
-    func startCapture(onAudioChunk: @escaping (Data) -> Void, onAudioLevel: @escaping (Float) -> Void) async throws {}
-    func stopCapture() {}
-}
+// AudioCaptureService — real implementation in AudioCaptureService.swift
 
 @MainActor
 class AudioLevelMonitor: ObservableObject {
@@ -93,38 +78,7 @@ class VADGateService {
     func remapTimestamp(start: Double, end: Double) -> (Double, Double) { (start, end) }
 }
 
-class TranscriptionService {
-    struct TranscriptSegment {
-        struct Word {
-            var word: String
-            var start: Double
-            var end: Double
-            var confidence: Double
-            var speaker: Int?
-            var punctuatedWord: String
-        }
-        var text: String
-        var isFinal: Bool
-        var speechFinal: Bool
-        var confidence: Double
-        var words: [Word]
-        var channelIndex: Int
-    }
-
-    init(language: String = "en", vocabulary: [String] = [], channels: Int = 1) throws {}
-    func start(onTranscript: @escaping (TranscriptSegment) -> Void,
-               onError: @escaping (Error) -> Void,
-               onConnected: @escaping () -> Void,
-               onDisconnected: @escaping () -> Void) {}
-    func stop() {}
-    func sendAudio(_ data: Data) {}
-    func sendKeepalivePublic() {}
-    func sendFinalize() {}
-    func finishStream() {}
-
-    static func batchTranscribeFull(audioData: Data, language: String, vocabulary: [String] = []) async throws -> [TranscriptSegment] { [] }
-    static func batchTranscribe(audioData: Data, language: String, vocabulary: [String] = []) async throws -> String? { nil }
-}
+// TranscriptionService — real implementation in TranscriptionService.swift
 
 @MainActor
 class RecordingTimer: ObservableObject {
@@ -393,11 +347,14 @@ class APIClient {
 @MainActor
 class AuthService {
     static let shared = AuthService()
-    var displayName: String { UserDefaults.standard.string(forKey: "auth_userEmail") ?? "" }
-    var givenName: String { "" }
+    var displayName: String { UserDefaults.standard.string(forKey: "user_displayName") ?? "" }
+    var givenName: String { UserDefaults.standard.string(forKey: "user_givenName") ?? "" }
     func getIdToken() async throws -> String { "" }
     func signOut() {}
-    func updateGivenName(_ name: String) async {}
+    func updateGivenName(_ name: String) async {
+        UserDefaults.standard.set(name, forKey: "user_givenName")
+        UserDefaults.standard.set(name, forKey: "user_displayName")
+    }
 }
 
 class ScreenCaptureService {
@@ -711,11 +668,7 @@ enum GlowColorMode: String {
     case distracted
 }
 
-class FileIndexerService {
-    static let shared = FileIndexerService()
-    func backgroundRescan() async {}
-    func scanFolders(_ folders: [URL]) async -> Int { 0 }
-}
+// FileIndexerService moved to FileIndexing/FileIndexerService.swift
 
 @MainActor
 class CrispManager: ObservableObject {
@@ -796,71 +749,8 @@ class RewindIndexer {
     func getStats() async -> Stats { Stats() }
 }
 
-@MainActor
-class AIUserProfileService: ObservableObject {
-    static let shared = AIUserProfileService()
-    struct Profile {
-        var id: Int64?
-        var text: String
-        var profileText: String
-        var createdAt: Date
-        var generatedAt: Date
-        var dataSourcesUsed: Int = 0
-    }
-    func getLatestProfile() async -> Profile? { nil }
-    func generateProfile() async throws -> Profile { Profile(text: "", profileText: "", createdAt: Date(), generatedAt: Date()) }
-    @discardableResult
-    func updateProfileText(_ text: String) async -> Profile? { nil }
-    @discardableResult
-    func updateProfileText(id: Int64, newText: String) async -> Bool { false }
-    func deleteProfile() async {}
-    func deleteProfile(id: Int64) async -> Profile? { nil }
-}
-
-class KnowledgeGraphStorage {
-    static let shared = KnowledgeGraphStorage()
-
-    private var nodes: [LocalKGNodeRecord] = []
-    private var edges: [LocalKGEdgeRecord] = []
-
-    func mergeGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {
-        // Merge by deduplicating on nodeId / edgeId
-        let existingNodeIds = Set(self.nodes.map { $0.nodeId })
-        let existingEdgeIds = Set(self.edges.map { $0.edgeId })
-        for node in nodes where !existingNodeIds.contains(node.nodeId) {
-            self.nodes.append(node)
-        }
-        for edge in edges where !existingEdgeIds.contains(edge.edgeId) {
-            self.edges.append(edge)
-        }
-        log("KnowledgeGraphStorage: Merged to \(self.nodes.count) nodes, \(self.edges.count) edges")
-    }
-
-    func loadGraph() async -> KnowledgeGraphResponse {
-        let graphNodes = nodes.map { node in
-            KnowledgeGraphNode(
-                id: node.nodeId,
-                label: node.label,
-                nodeType: KnowledgeGraphNodeType(rawValue: node.nodeType) ?? .concept,
-                aliases: [],
-                memoryIds: [],
-                createdAt: node.createdAt,
-                updatedAt: node.updatedAt
-            )
-        }
-        let graphEdges = edges.map { edge in
-            KnowledgeGraphEdge(
-                id: edge.edgeId,
-                sourceId: edge.sourceNodeId,
-                targetId: edge.targetNodeId,
-                label: edge.label,
-                memoryIds: [],
-                createdAt: edge.createdAt
-            )
-        }
-        return KnowledgeGraphResponse(nodes: graphNodes, edges: graphEdges)
-    }
-}
+// AIUserProfileService moved to FileIndexing/AIUserProfileService.swift
+// KnowledgeGraphStorage moved to FileIndexing/KnowledgeGraphStorage.swift
 
 // MARK: - Storage Actors
 
@@ -1159,27 +1049,7 @@ struct OCRTextBlock: Codable, Equatable {
     var confidence: Float = 1.0
 }
 
-// MARK: - Knowledge Graph Models
-
-struct LocalKGNodeRecord: Codable, Equatable, Identifiable {
-    var id: String { nodeId }
-    var nodeId: String
-    var label: String
-    var nodeType: String = "concept"
-    var aliasesJson: String?
-    var sourceFileIds: String?
-    var createdAt: Date
-    var updatedAt: Date
-}
-
-struct LocalKGEdgeRecord: Codable, Equatable, Identifiable {
-    var id: String { edgeId }
-    var edgeId: String
-    var sourceNodeId: String
-    var targetNodeId: String
-    var label: String
-    var createdAt: Date
-}
+// LocalKGNodeRecord and LocalKGEdgeRecord moved to FileIndexing/KnowledgeGraphRecord.swift
 
 // MARK: - Knowledge Graph API Models
 
