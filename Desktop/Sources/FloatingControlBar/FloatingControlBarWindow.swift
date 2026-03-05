@@ -779,7 +779,7 @@ class FloatingControlBarManager {
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
-    private var chatProvider: ChatProvider?
+    private(set) var chatProvider: ChatProvider?
     private var workspaceObserver: Any?
 
     /// PID of the last active app before Fazm. Used to capture that app's window for screenshots.
@@ -1221,7 +1221,7 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating", imageData: screenshotData)
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating", imageData: screenshotData)
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
