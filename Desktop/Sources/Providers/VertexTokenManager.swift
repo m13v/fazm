@@ -29,17 +29,21 @@ actor VertexTokenManager {
 
     // MARK: - Init
 
+    private static func env(_ key: String) -> String {
+        if let ptr = getenv(key) { return String(cString: ptr) }
+        return ""
+    }
+
     init() {
-        let env = ProcessInfo.processInfo.environment
-        self.backendUrl = (env["FAZM_BACKEND_URL"] ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        self.backendSecret = env["FAZM_BACKEND_SECRET"] ?? ""
+        self.backendUrl = Self.env("FAZM_BACKEND_URL").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        self.backendSecret = Self.env("FAZM_BACKEND_SECRET")
         self.deviceId = Self.getDeviceId()
-        self.projectId = env["VERTEX_PROJECT_ID"] ?? "fazm-prod"
-        self.region = env["VERTEX_REGION"] ?? "us-east5"
-        self.gcpProjectNumber = env["GCP_PROJECT_NUMBER"] ?? ""
-        self.gcpWorkloadPool = env["GCP_WORKLOAD_POOL"] ?? "fazm-desktop-pool"
-        self.gcpOidcProvider = env["GCP_OIDC_PROVIDER"] ?? "fazm-backend-provider"
-        self.gcpServiceAccount = env["GCP_SERVICE_ACCOUNT"] ?? ""
+        self.projectId = { let v = Self.env("VERTEX_PROJECT_ID"); return v.isEmpty ? "fazm-prod" : v }()
+        self.region = { let v = Self.env("VERTEX_REGION"); return v.isEmpty ? "us-east5" : v }()
+        self.gcpProjectNumber = Self.env("GCP_PROJECT_NUMBER")
+        self.gcpWorkloadPool = { let v = Self.env("GCP_WORKLOAD_POOL"); return v.isEmpty ? "fazm-desktop-pool" : v }()
+        self.gcpOidcProvider = { let v = Self.env("GCP_OIDC_PROVIDER"); return v.isEmpty ? "fazm-backend-provider" : v }()
+        self.gcpServiceAccount = Self.env("GCP_SERVICE_ACCOUNT")
 
         let tmpDir = NSTemporaryDirectory()
         self.subjectTokenPath = (tmpDir as NSString).appendingPathComponent("fazm-vertex-subject-token.txt")

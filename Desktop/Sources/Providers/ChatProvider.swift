@@ -411,9 +411,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             if vertexTokenManager != nil {
                 let tmpDir = NSTemporaryDirectory()
                 let adcPath = (tmpDir as NSString).appendingPathComponent("fazm-vertex-adc.json")
-                let env = ProcessInfo.processInfo.environment
-                let projectId = env["VERTEX_PROJECT_ID"] ?? "fazm-prod"
-                let region = env["VERTEX_REGION"] ?? "us-east5"
+                let projectId = { if let p = getenv("VERTEX_PROJECT_ID") { return String(cString: p) } else { return "fazm-prod" } }()
+                let region = { if let r = getenv("VERTEX_REGION") { return String(cString: r) } else { return "us-east5" } }()
                 log("ChatProvider: Using Vertex mode (ADC=\(adcPath))")
                 return ACPBridge(mode: .vertex(adcFilePath: adcPath, projectId: projectId, region: region))
             }
