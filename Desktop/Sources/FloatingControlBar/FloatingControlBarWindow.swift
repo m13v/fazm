@@ -104,12 +104,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             }
             return
         }
-        // ⌘P toggles pin while dialog is open
-        if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "p",
-           state.showingAIConversation {
-            state.isPinned.toggle()
-            return
-        }
         super.keyDown(with: event)
     }
 
@@ -121,7 +115,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
-            onResumeLastChat: { [weak self] in self?.resumeLastConversation() },
+            onNewChat: { [weak self] in self?.startNewChat() },
             onInterruptAndFollowUp: { [weak self] message in self?.onInterruptAndFollowUp?(message) },
             onStopAgent: { [weak self] in self?.onStopAgent?() }
         ).environmentObject(state)
@@ -227,7 +221,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     func closeAIConversation() {
         removeGlobalClickOutsideMonitor()
         suppressClickOutsideDismiss = false
-        state.isPinned = false
+        state.isCollapsed = false
+        self.alphaValue = 1.0
         AnalyticsManager.shared.floatingBarAskFazmClosed()
 
         // Cancel any in-flight chat streaming to prevent re-expansion
@@ -331,7 +326,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private func installGlobalClickOutsideMonitor() {
         removeGlobalClickOutsideMonitor()
         globalClickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, self.state.showingAIConversation, !self.suppressClickOutsideDismiss, !self.state.isPinned else { return }
+            guard let self, self.state.showingAIConversation, !self.suppressClickOutsideDismiss, !self.state.isCollapsed else { return }
             // Don't collapse while AI is generating a response
             if self.state.showingAIResponse, self.state.currentAIMessage?.isStreaming == true || self.state.isAILoading { return }
             self.dismissConversationAnimated()
@@ -346,23 +341,47 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     /// Shared dismiss animation used by both windowDidResignKey (in-app) and global click monitor (cross-app).
+    /// Collapses to half height and semi-transparent instead of fully closing.
     private func dismissConversationAnimated() {
+        guard state.showingAIResponse, state.currentAIMessage != nil else {
+            // No response to show — fully close
+            closeAIConversation()
+            return
+        }
+
         resignKeyAnimationToken += 1
-        let token = resignKeyAnimationToken
+        state.isCollapsed = true
+        preCollapseHeight = frame.height
+
+        // Collapse to half height
+        let halfHeight = frame.height / 2
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.25
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.animator().alphaValue = 0.5
+        })
+        resizeAnchored(to: NSSize(width: frame.width, height: halfHeight), makeResizable: false, animated: true, anchorTop: true)
+    }
+
+    /// Height of the window before it was collapsed (used to restore on focus).
+    private var preCollapseHeight: CGFloat = 0
+
+    /// Expand back from collapsed state when the window regains focus.
+    func expandFromCollapsed() {
+        guard state.isCollapsed else { return }
+        state.isCollapsed = false
 
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            self.animator().alphaValue = 0
-        }) { [weak self] in
-            guard let self, self.resignKeyAnimationToken == token else { return }
-            self.closeAIConversation()
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                self.animator().alphaValue = 1
-            })
+            ctx.duration = 0.25
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.animator().alphaValue = 1.0
+        })
+
+        if preCollapseHeight > 0 {
+            resizeAnchored(to: NSSize(width: frame.width, height: preCollapseHeight), makeResizable: true, animated: true, anchorTop: true)
         }
+
+        makeKeyAndOrderFront(nil)
     }
 
     private func hideBar() {
@@ -414,26 +433,34 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             self?.focusInputField()
         }
 
+        // Auto-resume the last conversation if one was saved (click-away preserves chat)
+        if let last = state.lastConversation {
+            state.chatHistory = last.history
+            state.displayedQuery = last.lastQuestion
+            state.currentAIMessage = last.lastMessage
+            state.isAILoading = false
+            state.showingAIResponse = true
+            state.clearLastConversation()
+            resizeToResponseHeight(animated: true)
+        }
     }
 
-    func resumeLastConversation() {
-        guard let last = state.lastConversation else { return }
-
-        // Open the conversation UI (resize, monitors, etc.)
-        showAIConversation()
-
-        // Populate with saved conversation
-        state.chatHistory = last.history
-        state.displayedQuery = last.lastQuestion
-        state.currentAIMessage = last.lastMessage
+    func startNewChat() {
+        state.chatHistory = []
+        state.displayedQuery = ""
+        state.currentAIMessage = nil
         state.isAILoading = false
-        state.showingAIResponse = true
+        state.showingAIResponse = false
+        state.aiInputText = ""
 
-        // One-shot: clear saved conversation
-        state.clearLastConversation()
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        state.inputViewHeight = 120
+        setupInputHeightObserver()
 
-        // Resize to response mode
-        resizeToResponseHeight(animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.focusInputField()
+        }
     }
 
     private func setupInputHeightObserver() {
@@ -693,11 +720,17 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    func windowDidBecomeKey(_ notification: Notification) {
+        if state.isCollapsed {
+            expandFromCollapsed()
+        }
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         guard state.showingAIConversation else { return }
 
-        // Don't dismiss when pinned
-        guard !state.isPinned else { return }
+        // Don't dismiss when already collapsed
+        guard !state.isCollapsed else { return }
 
         // Only dismiss when the user physically clicks away within our app.
         // Programmatic focus changes — e.g. the AI agent activating a browser
@@ -1031,6 +1064,7 @@ class FloatingControlBarManager {
         window.savePreChatCenterIfNeeded()
 
         // Show the input view with the transcription pre-filled (user can edit before sending)
+        window.state.clearLastConversation()
         window.state.aiInputText = query
         window.showAIConversation()
         // Override the empty text that showAIConversation sets
@@ -1109,6 +1143,7 @@ class FloatingControlBarManager {
         window.state.aiInputText = ""
         window.state.currentAIMessage = nil
         window.state.chatHistory = []
+        window.state.clearLastConversation()
 
         NSApp.activate(ignoringOtherApps: true)
         if !window.isVisible { show() }
