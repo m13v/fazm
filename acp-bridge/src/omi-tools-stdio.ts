@@ -209,20 +209,24 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     description: `Interact with Google Workspace (Gmail, Calendar, Drive, Sheets, Docs).
 Actions:
 - "status": Check if Google Workspace is connected. ALWAYS call this first before any other action.
-- "login": Trigger OAuth login flow (opens browser). Use when status returns not_connected.
+- "login": Start OAuth login. Returns an oauth_url. You MUST then use the Playwright browser tools to:
+  1. Navigate to the oauth_url (browser_navigate)
+  2. Complete the Google sign-in flow (click account, approve permissions)
+  3. After approval, call this tool with action "auth_callback" to verify success.
+- "auth_callback": Check if the OAuth flow completed. Call AFTER completing sign-in in the browser.
 - "exec": Run a gws CLI command. Pass the full command string (everything after "gws ").
   Examples: exec "gmail messages list --params '{\\"maxResults\\": 5}'"
             exec "calendar events list --params '{\\"timeMin\\": \\"2026-03-05T00:00:00Z\\", \\"timeMax\\": \\"2026-03-06T00:00:00Z\\"}'"
             exec "drive files list --params '{\\"pageSize\\": 10}'"
             exec "sheets spreadsheets.values get --params '{\\"spreadsheetId\\": \\"ID\\", \\"range\\": \\"Sheet1\\"}'"
 
-Call with action "status" first. If not connected, tell the user and call "login". After login succeeds, retry the original request.`,
+Flow: status → login → browser_navigate(oauth_url) → complete sign-in → auth_callback → exec.`,
     inputSchema: {
       type: "object" as const,
       properties: {
         action: {
           type: "string" as const,
-          enum: ["status", "login", "exec"],
+          enum: ["status", "login", "auth_callback", "exec"],
           description: "The action to perform",
         },
         command: {

@@ -957,6 +957,9 @@ class ChatToolExecutor {
             }
             return await runGWSLogin(gwsPath: gwsPath)
 
+        case "auth_callback":
+            return await checkGWSAuthCallback()
+
         case "exec":
             guard let command = args["command"] as? String, !command.isEmpty else {
                 return "Error: 'command' parameter is required for action 'exec'"
@@ -973,12 +976,20 @@ class ChatToolExecutor {
             return await runGWSCommand(gwsPath: gwsPath, command: command)
 
         default:
-            return "Error: unknown action '\(action)'. Valid actions: status, login, exec"
+            return "Error: unknown action '\(action)'. Valid actions: status, login, auth_callback, exec"
         }
     }
 
-    /// Run `gws auth login` — reads the OAuth URL from stdout, opens browser, waits for completion
+    /// Active gws login process — kept alive while the AI completes OAuth via Playwright
+    private static var activeLoginProcess: Process?
+
+    /// Run `gws auth login` — extracts the OAuth URL and returns it for the AI to handle via Playwright.
+    /// The gws process stays alive in the background waiting for the OAuth callback on localhost.
     private static func runGWSLogin(gwsPath: String) async -> String {
+        // Kill any previous login process
+        activeLoginProcess?.terminate()
+        activeLoginProcess = nil
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gwsPath)
         process.arguments = ["auth", "login"]
@@ -989,11 +1000,11 @@ class ChatToolExecutor {
         process.standardError = stderrPipe
 
         // Accumulate stdout asynchronously so we can detect the OAuth URL while gws blocks
-        let stdoutAccumulator = StdoutAccumulator()
+        let accumulator = StdoutAccumulator()
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if !data.isEmpty, let text = String(data: data, encoding: .utf8) {
-                stdoutAccumulator.append(text)
+                accumulator.append(text)
             }
         }
 
@@ -1002,64 +1013,83 @@ class ChatToolExecutor {
             log("GWS auth login started (pid=\(process.processIdentifier))")
 
             // Wait for the OAuth URL to appear in stdout (up to 10 seconds)
-            var urlOpened = false
             for _ in 0..<20 {
                 try await Task.sleep(nanoseconds: 500_000_000)
-                let output = stdoutAccumulator.text
+                let output = accumulator.text
                 if let urlRange = output.range(of: "https://accounts.google.com[^\n ]*", options: .regularExpression) {
                     let authURL = String(output[urlRange])
-                    log("GWS auth login: opening OAuth URL in browser")
-                    if let url = URL(string: authURL) {
-                        NSWorkspace.shared.open(url)
-                        urlOpened = true
-                    }
-                    break
+                    log("GWS auth login: extracted OAuth URL (\(authURL.prefix(80))...)")
+
+                    // Keep the process alive — it's listening on localhost for the OAuth callback
+                    activeLoginProcess = process
+
+                    // Return the URL to the AI so it can navigate there via Playwright
+                    return """
+                    {"success": false, "action_required": "oauth", \
+                    "oauth_url": "\(authURL)", \
+                    "message": "Navigate to this OAuth URL using the browser (Playwright), sign in with the user's Google account, and approve the permissions. \
+                    The gws CLI is listening on localhost for the callback. Once you complete the OAuth flow in the browser, call google_workspace with action 'auth_callback' to check if login succeeded."}
+                    """
                 }
             }
 
-            if !urlOpened && process.isRunning {
-                process.terminate()
-                return """
-                {"success": false, "message": "Could not detect OAuth URL from gws. Try running 'gws auth login' manually in Terminal."}
-                """
-            }
-
-            // Wait up to 120 seconds for user to complete OAuth in browser
-            let deadline = Date().addingTimeInterval(120)
-            while process.isRunning && Date() < deadline {
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-
-            // Clean up handler
+            // URL never appeared
+            process.terminate()
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
-
-            if process.isRunning {
-                process.terminate()
-                return """
-                {"success": false, "message": "Login timed out after 2 minutes. Please complete the Google sign-in in your browser and try again."}
-                """
-            }
-
-            let exitCode = process.terminationStatus
-            if exitCode == 0 {
-                log("GWS auth login succeeded")
-                return """
-                {"success": true, "message": "Google Workspace connected successfully! You can now access Gmail, Calendar, Drive, Sheets, and Docs."}
-                """
-            } else {
-                let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                let stdout = stdoutAccumulator.text
-                log("GWS auth login failed: exit=\(exitCode) stderr=\(stderr)")
-                let errMsg = stderr.isEmpty ? stdout : stderr
-                return """
-                {"success": false, "message": "Login failed: \(String(errMsg.prefix(500)))"}
-                """
-            }
+            let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let stdout = accumulator.text
+            log("GWS auth login: no OAuth URL detected. stdout=\(stdout.prefix(200)) stderr=\(stderr.prefix(200))")
+            return """
+            {"success": false, "message": "Could not detect OAuth URL from gws. Output: \(String(stdout.prefix(300)))"}
+            """
         } catch {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             logError("GWS auth login error", error: error)
             return """
             {"success": false, "message": "Failed to start login: \(error.localizedDescription)"}
+            """
+        }
+    }
+
+    /// Check if the background gws login process completed (called after Playwright finishes OAuth)
+    private static func checkGWSAuthCallback() async -> String {
+        guard let process = activeLoginProcess else {
+            // No active login — check if we're already authenticated
+            if isGWSAuthenticated {
+                return """
+                {"success": true, "message": "Google Workspace is connected and ready."}
+                """
+            }
+            return """
+            {"success": false, "message": "No active login session. Call with action 'login' first."}
+            """
+        }
+
+        // Wait up to 15 seconds for the process to finish (OAuth callback should arrive quickly)
+        for _ in 0..<30 {
+            if !process.isRunning { break }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        if process.isRunning {
+            // Still waiting — OAuth callback hasn't arrived yet
+            return """
+            {"success": false, "message": "Still waiting for OAuth callback. Make sure you completed the Google sign-in flow in the browser and approved all permissions."}
+            """
+        }
+
+        let exitCode = process.terminationStatus
+        activeLoginProcess = nil
+
+        if exitCode == 0 {
+            log("GWS auth login completed successfully via Playwright")
+            return """
+            {"success": true, "message": "Google Workspace connected successfully! You can now access Gmail, Calendar, Drive, Sheets, and Docs."}
+            """
+        } else {
+            log("GWS auth login process exited with code \(exitCode)")
+            return """
+            {"success": false, "message": "OAuth flow completed but gws reported an error (exit code \(exitCode)). Try again."}
             """
         }
     }
