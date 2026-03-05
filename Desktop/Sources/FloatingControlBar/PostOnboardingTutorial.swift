@@ -108,9 +108,9 @@ class PostOnboardingTutorialManager {
         let windowSize = NSSize(width: max(fittingSize.width, 340), height: max(fittingSize.height, 120))
 
         if let barFrame = FloatingControlBarManager.shared.barWindowFrame {
-            // Position to the left of the bar, vertically centered on it
+            // Position to the left of the bar, aligned so the arrow points at the bar's vertical center
             let x = barFrame.minX - windowSize.width - 12
-            let y = barFrame.midY - windowSize.height / 2
+            let y = barFrame.midY - windowSize.height / 2 + 20
 
             // If it would go off the left edge, position to the right instead
             if x < (NSScreen.main?.visibleFrame.minX ?? 0) {
@@ -442,10 +442,11 @@ struct PostOnboardingTutorialView: View {
                     .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
             )
 
-            // Right-pointing arrow toward the floating bar
+            // Right-pointing arrow toward the floating bar (offset down to align with bar center)
             RightTriangle()
                 .fill(Color(nsColor: NSColor(white: 0.12, alpha: 1.0)))
                 .frame(width: 8, height: 16)
+                .offset(y: 20)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -551,6 +552,7 @@ struct PostOnboardingTutorialView: View {
 struct SpeakingPromptText: View {
     let text: String
     @State private var glowPhase: CGFloat = 0
+    @State private var scalePhase: CGFloat = 1.0
 
     var body: some View {
         Text("\"\(text)\"")
@@ -558,20 +560,24 @@ struct SpeakingPromptText: View {
             .foregroundColor(.white)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            .shadow(color: FazmColors.purplePrimary.opacity(0.6), radius: 4 + glowPhase * 4, x: 0, y: 0)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .shadow(color: FazmColors.purplePrimary.opacity(0.5 + glowPhase * 0.5), radius: 6 + glowPhase * 10, x: 0, y: 0)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(FazmColors.purplePrimary.opacity(0.12 + glowPhase * 0.08))
+                    .fill(FazmColors.purplePrimary.opacity(0.1 + glowPhase * 0.15))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(FazmColors.purplePrimary.opacity(0.3 + glowPhase * 0.2), lineWidth: 1)
+                    .strokeBorder(FazmColors.purplePrimary.opacity(0.4 + glowPhase * 0.4), lineWidth: 1.5)
             )
+            .scaleEffect(scalePhase)
             .onAppear {
-                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     glowPhase = 1
+                }
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    scalePhase = 1.03
                 }
             }
     }
