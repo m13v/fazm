@@ -1198,6 +1198,15 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "resetSession": {
+        const key = (msg as any).sessionKey;
+        if (key && sessions.has(key)) {
+          sessions.delete(key);
+          logErr(`Session reset: ${key} (will create new on next query)`);
+        }
+        break;
+      }
+
       case "stop":
         logErr("Received stop signal, exiting");
         if (activeAbort) activeAbort.abort();
