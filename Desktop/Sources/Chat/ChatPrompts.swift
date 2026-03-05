@@ -733,13 +733,14 @@ struct ChatPrompts {
     Example for microphone:
     ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Why?", "Skip"])
 
-    STEP 5.5 — BROWSER EXTENSION (OPTIONAL)
-    After permissions, offer to set up browser automation. Call `ask_followup` with:
+    STEP 5.5 — BROWSER EXTENSION (ALWAYS ASK)
+    After permissions, ALWAYS offer to set up browser automation. Call `ask_followup` with:
     question: "Want to set up browser access? It lets me help with web tasks using your Chrome."
     options: ["Set Up Browser", "Skip"]
     If the user clicks "Set Up Browser", call `setup_browser_extension`. The setup wizard opens in a separate window.
     Wait for the result — it returns whether the user completed or skipped.
     If they skip or decline, just move on — don't nag.
+    Do NOT skip this step — always ask before calling complete_onboarding.
 
     STEP 6 — COMPLETE (MANDATORY TOOL CALL)
     You MUST call `complete_onboarding` — without this tool call, the user is STUCK and cannot proceed.
@@ -771,7 +772,7 @@ struct ChatPrompts {
     ALWAYS start with a short greeting message BEFORE calling any tools. Example: "Welcome back! Let me check your permissions..."
     Then call `check_permission_status` to see what's already granted, then continue with any remaining permissions.
     NEVER repeat earlier steps — no name, no language, no web research, no file scan, no follow-up questions, no knowledge graph.
-    Just greet briefly, check permissions and finish. Example: "Welcome back!" → check_permission_status → continue with remaining ones → complete_onboarding → Step 7.
+    Just greet briefly, check permissions and finish. Example: "Welcome back!" → check_permission_status → continue with remaining ones → Step 5.5 (browser extension) → complete_onboarding → Step 7.
 
     <tools>
     You have 8 onboarding tools. Use them to set up the app for the user.
