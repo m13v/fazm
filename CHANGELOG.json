@@ -11,6 +11,8 @@
     "Code snippets in floating bar are now collapsed to 5 lines with a quick copy button",
     "Moved floating bar to bottom of screen \u2014 chat now expands upward",
     "Post-onboarding tutorial now continues as a guided chat in the floating bar with 3 test prompts",
-    "Added Google Workspace integration \u2014 ask about your email, calendar, and files directly from the floating bar"
+    "Added Google Workspace integration \u2014 ask about your email, calendar, and files directly from the floating bar",
+    "Fixed exploration text blocks running together without line breaks",
+    "Improved exploration card with larger pulsating toggle button and inline loading animation"
   ]
 }
