@@ -51,13 +51,19 @@ export interface WarmupMessage {
   sessions?: WarmupSessionConfig[];  // new: per-session config with system prompts
 }
 
+export interface ResetSessionMessage {
+  type: "resetSession";
+  sessionKey?: string;
+}
+
 export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
   | StopMessage
   | InterruptMessage
   | AuthenticateMessage
-  | WarmupMessage;
+  | WarmupMessage
+  | ResetSessionMessage;
 
 // === Bridge → Swift (stdout) ===
 
