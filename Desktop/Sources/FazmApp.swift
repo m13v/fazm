@@ -264,6 +264,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.identify()
         AnalyticsManager.shared.reportAllSettingsIfNeeded()
 
+        // One-time migration: Switch existing users from personal OAuth to Vertex built-in
+        migrateBridgeModeToBuiltin()
+
         // One-time migration: Enable launch at login for existing users who haven't set it
         migrateLaunchAtLoginDefault()
 
@@ -765,6 +768,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         log("FazmApp AppDelegate: URL callback received (no auth handler)")
 
+    }
+
+    /// One-time migration: switch bridgeMode from "personal" to "builtin" (Vertex AI)
+    /// Existing installs had "personal" as default, which shows "Connect your Claude account"
+    private func migrateBridgeModeToBuiltin() {
+        let migrationKey = "didMigrateBridgeModeToBuiltinV1"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        UserDefaults.standard.set(true, forKey: migrationKey)
+
+        let current = UserDefaults.standard.string(forKey: "bridgeMode") ?? "personal"
+        if current == "personal" {
+            UserDefaults.standard.set("builtin", forKey: "bridgeMode")
+            log("BridgeMode migration: Switched from personal → builtin (Vertex AI)")
+        } else {
+            log("BridgeMode migration: Already \(current), skipping")
+        }
     }
 
     /// One-time migration to enable launch at login for existing users
