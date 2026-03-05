@@ -8,6 +8,7 @@
     "Chat persists when clicking away from floating bar; collapses to half-height semi-transparent preview and restores on focus",
     "Replaced pin button with New Chat button in floating bar",
     "Removed background style (solid/transparent) toggle from settings",
-    "Code snippets in floating bar are now collapsed to 5 lines with a quick copy button"
+    "Code snippets in floating bar are now collapsed to 5 lines with a quick copy button",
+    "Moved floating bar to bottom of screen \u2014 chat now expands upward"
   ]
 }
