@@ -435,7 +435,12 @@ struct PostOnboardingTutorialView: View {
             .padding(.top, 16)
             .padding(.bottom, 12)
             .frame(width: 320)
-            .floatingBackground(cornerRadius: 16)
+            .background(Color(nsColor: NSColor(white: 0.12, alpha: 1.0)))
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
+            )
 
             // Right-pointing arrow toward the floating bar
             RightTriangle()
