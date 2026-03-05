@@ -22,8 +22,21 @@ impl Config {
                 .unwrap_or(8080),
             backend_secret: std::env::var("FAZM_BACKEND_SECRET")
                 .expect("FAZM_BACKEND_SECRET must be set"),
-            vertex_sa_private_key_pem: std::env::var("VERTEX_SA_PRIVATE_KEY_PEM")
-                .expect("VERTEX_SA_PRIVATE_KEY_PEM must be set"),
+            vertex_sa_private_key_pem: {
+                let raw = std::env::var("VERTEX_SA_PRIVATE_KEY_PEM")
+                    .expect("VERTEX_SA_PRIVATE_KEY_PEM must be set");
+                // Support base64-encoded PEM (no BEGIN/END header = base64)
+                if raw.contains("BEGIN") {
+                    raw
+                } else {
+                    use base64::Engine;
+                    String::from_utf8(
+                        base64::engine::general_purpose::STANDARD
+                            .decode(&raw)
+                            .expect("VERTEX_SA_PRIVATE_KEY_PEM is not valid base64")
+                    ).expect("VERTEX_SA_PRIVATE_KEY_PEM base64 is not valid UTF-8")
+                }
+            },
             vertex_issuer: std::env::var("VERTEX_ISSUER")
                 .expect("VERTEX_ISSUER must be set"),
             vertex_project_id: std::env::var("VERTEX_PROJECT_ID")
