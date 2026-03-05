@@ -393,7 +393,12 @@ class PushToTalkManager: ObservableObject {
     if pttOpenedChat {
       // PTT already opened the chat and synced live transcript — just finalize the text
       log("PushToTalkManager: finalizing PTT transcript in open chat (\(query.count) chars): \(query)")
-      barState?.aiInputText = query
+      if barState?.showingAIResponse == true {
+        // Response is showing — use pendingFollowUpText to insert into follow-up field
+        barState?.pendingFollowUpText = query
+      } else {
+        barState?.aiInputText = query
+      }
       pttOpenedChat = false
     } else {
       log("PushToTalkManager: inserting transcription into input (\(query.count) chars): \(query)")
