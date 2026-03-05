@@ -39,7 +39,8 @@ class SilenceOverlayWindow {
         panel.hasShadow = true
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.becomesKeyOnlyIfNeeded = true
+        // Must accept key to allow Picker dropdown menus to work
+        panel.becomesKeyOnlyIfNeeded = false
 
         hostingView.frame = NSRect(origin: .zero, size: overlaySize)
         panel.contentView = hostingView
