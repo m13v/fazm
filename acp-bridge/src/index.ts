@@ -663,6 +663,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
   let isNewSession = false;
   const pendingTools: string[] = [];
   lastTextContentBlockIndex = -1;
+  pendingBoundary = false;
 
   try {
     const mode = msg.mode ?? "act";
@@ -870,6 +871,8 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
 /** Track the last content block index to detect boundaries between consecutive text blocks */
 let lastTextContentBlockIndex = -1;
+/** Whether the next text delta should be preceded by a boundary (e.g. after tool use) */
+let pendingBoundary = false;
 
 /** Translate ACP session/update notifications into our JSON-lines protocol.
  *
@@ -916,10 +919,12 @@ function handleSessionUpdate(
           pendingTools.length = 0;
         }
 
-        // Signal a boundary when the content block index changes
-        // (consecutive text blocks from the API without tool calls in between)
-        if (blockIndex >= 0 && lastTextContentBlockIndex >= 0 && blockIndex !== lastTextContentBlockIndex) {
+        // Signal a boundary between text blocks:
+        // - when content block index changes within a single response
+        // - when resuming text after a tool call (pendingBoundary)
+        if (pendingBoundary || (blockIndex >= 0 && lastTextContentBlockIndex >= 0 && blockIndex !== lastTextContentBlockIndex)) {
           send({ type: "text_block_boundary" });
+          pendingBoundary = false;
         }
         if (blockIndex >= 0) {
           lastTextContentBlockIndex = blockIndex;
@@ -941,6 +946,9 @@ function handleSessionUpdate(
     }
 
     case "tool_call": {
+      // Mark that text after tool use should get a boundary separator
+      pendingBoundary = true;
+
       const toolCallId = (update.toolCallId as string) ?? "";
       let title = (update.title as string) ?? "unknown";
       const kind = (update.kind as string) ?? "";
