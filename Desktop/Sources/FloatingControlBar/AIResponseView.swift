@@ -22,6 +22,10 @@ struct AIResponseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if state.isTutorialChatActive {
+                tutorialBanner
+            }
+
             headerView
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -33,8 +37,10 @@ struct AIResponseView: View {
                             chatExchangeView(exchange)
                         }
 
-                        // Current question
-                        questionBar
+                        // Current question (hidden when empty, e.g. tutorial guide messages)
+                        if !userInput.isEmpty {
+                            questionBar
+                        }
 
                         // Current response
                         currentContentView
@@ -132,6 +138,29 @@ struct AIResponseView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    // MARK: - Tutorial Banner
+
+    private var tutorialBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "graduationcap.fill")
+                .font(.system(size: 11))
+            Text("Getting Started — Test \(min(state.tutorialChatStep + 1, TutorialChatGuide.testPrompts.count))/\(TutorialChatGuide.testPrompts.count)")
+                .scaledFont(size: 11, weight: .medium)
+            Spacer()
+            Button("Skip") {
+                TutorialChatGuide.shared.finish(barState: state)
+            }
+            .buttonStyle(.plain)
+            .scaledFont(size: 11)
+            .foregroundColor(.white.opacity(0.6))
+        }
+        .foregroundColor(FazmColors.purplePrimary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(FazmColors.purplePrimary.opacity(0.15))
+        .cornerRadius(8)
     }
 
     // MARK: - Content Blocks Rendering
