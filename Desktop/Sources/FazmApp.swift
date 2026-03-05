@@ -206,7 +206,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Initialize Sentry for crash reporting and error tracking (including dev builds)
         let isDev = AnalyticsManager.isDevBuild
         SentrySDK.start { options in
-            options.dsn = "https://8f700584deda57b26041ff015539c8c1@o4507617161314304.ingest.us.sentry.io/4510790686277632"
+            options.dsn = "https://47b23bc65deb3c58b0c7314e7b648110@o4507617161314304.ingest.us.sentry.io/4510989741326336"
             options.debug = false
             options.enableAutoSessionTracking = true
             options.environment = isDev ? "development" : "production"
