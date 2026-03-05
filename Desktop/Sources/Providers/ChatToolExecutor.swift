@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GRDB
 
@@ -976,7 +977,7 @@ class ChatToolExecutor {
         }
     }
 
-    /// Run `gws auth login` — opens browser for OAuth
+    /// Run `gws auth login` — reads the OAuth URL from stdout, opens browser, waits for completion
     private static func runGWSLogin(gwsPath: String) async -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gwsPath)
@@ -987,41 +988,97 @@ class ChatToolExecutor {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        // Accumulate stdout asynchronously so we can detect the OAuth URL while gws blocks
+        let stdoutAccumulator = StdoutAccumulator()
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty, let text = String(data: data, encoding: .utf8) {
+                stdoutAccumulator.append(text)
+            }
+        }
+
         do {
             try process.run()
-            // Wait up to 120 seconds for the user to complete OAuth in their browser
+            log("GWS auth login started (pid=\(process.processIdentifier))")
+
+            // Wait for the OAuth URL to appear in stdout (up to 10 seconds)
+            var urlOpened = false
+            for _ in 0..<20 {
+                try await Task.sleep(nanoseconds: 500_000_000)
+                let output = stdoutAccumulator.text
+                if let urlRange = output.range(of: "https://accounts.google.com[^\n ]*", options: .regularExpression) {
+                    let authURL = String(output[urlRange])
+                    log("GWS auth login: opening OAuth URL in browser")
+                    if let url = URL(string: authURL) {
+                        NSWorkspace.shared.open(url)
+                        urlOpened = true
+                    }
+                    break
+                }
+            }
+
+            if !urlOpened && process.isRunning {
+                process.terminate()
+                return """
+                {"success": false, "message": "Could not detect OAuth URL from gws. Try running 'gws auth login' manually in Terminal."}
+                """
+            }
+
+            // Wait up to 120 seconds for user to complete OAuth in browser
             let deadline = Date().addingTimeInterval(120)
             while process.isRunning && Date() < deadline {
-                try await Task.sleep(nanoseconds: 500_000_000)
+                try await Task.sleep(nanoseconds: 1_000_000_000)
             }
+
+            // Clean up handler
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+
             if process.isRunning {
                 process.terminate()
                 return """
-                {"success": false, "message": "Login timed out after 2 minutes. The user may need to complete the OAuth flow in their browser."}
+                {"success": false, "message": "Login timed out after 2 minutes. Please complete the Google sign-in in your browser and try again."}
                 """
             }
 
             let exitCode = process.terminationStatus
-            let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
             if exitCode == 0 {
                 log("GWS auth login succeeded")
                 return """
                 {"success": true, "message": "Google Workspace connected successfully! You can now access Gmail, Calendar, Drive, Sheets, and Docs."}
                 """
             } else {
+                let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                let stdout = stdoutAccumulator.text
                 log("GWS auth login failed: exit=\(exitCode) stderr=\(stderr)")
                 let errMsg = stderr.isEmpty ? stdout : stderr
                 return """
-                {"success": false, "message": "Login failed: \(errMsg.prefix(500))"}
+                {"success": false, "message": "Login failed: \(String(errMsg.prefix(500)))"}
                 """
             }
         } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
             logError("GWS auth login error", error: error)
             return """
             {"success": false, "message": "Failed to start login: \(error.localizedDescription)"}
             """
+        }
+    }
+
+    /// Thread-safe accumulator for reading process stdout asynchronously
+    private class StdoutAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var buffer = ""
+
+        func append(_ text: String) {
+            lock.lock()
+            buffer += text
+            lock.unlock()
+        }
+
+        var text: String {
+            lock.lock()
+            defer { lock.unlock() }
+            return buffer
         }
     }
 
