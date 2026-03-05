@@ -273,13 +273,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         suppressHoverResize = true
 
         // Determine the target origin for the collapsed pill.
-        // Keep the bottom edge fixed (same y as the chat window) so the pill doesn't
-        // shift vertically. Only re-center horizontally.
+        // Non-draggable: always use the fixed default position so the pill never drifts.
+        // Draggable: restore from preChatCenter (which preserves the true pill center
+        // through hover's center-anchor resize, avoiding the hover→open→close drift
+        // that occurs if we use frame.origin.y directly).
         let size = FloatingControlBarWindow.minBarSize
-        let restoreOrigin = NSPoint(
-            x: frame.midX - size.width / 2,
-            y: frame.origin.y
-        )
+        let restoreOrigin: NSPoint
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            restoreOrigin = defaultPillOrigin()
+        } else if let center = preChatCenter {
+            restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
+        } else {
+            restoreOrigin = defaultPillOrigin()
+        }
 
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
