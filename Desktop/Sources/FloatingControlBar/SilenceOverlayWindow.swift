@@ -1,6 +1,13 @@
 import Cocoa
 import SwiftUI
 
+/// NSPanel subclass that can become key (required for NSPopUpButton and other
+/// interactive controls to work in a borderless floating panel).
+private class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 /// Manages a separate floating window for the silence overlay (shown when PTT ends with no speech).
 @MainActor
 class SilenceOverlayWindow {
@@ -27,7 +34,7 @@ class SilenceOverlayWindow {
         let x = barFrame.midX - overlaySize.width / 2
         let y = barFrame.minY - overlaySize.height - 8
 
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: NSRect(origin: NSPoint(x: x, y: y), size: overlaySize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -39,13 +46,12 @@ class SilenceOverlayWindow {
         panel.hasShadow = true
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        // Must accept key to allow Picker dropdown menus to work
         panel.becomesKeyOnlyIfNeeded = false
 
         hostingView.frame = NSRect(origin: .zero, size: overlaySize)
         panel.contentView = hostingView
 
-        panel.orderFront(nil)
+        panel.makeKeyAndOrderFront(nil)
         self.window = panel
     }
 
