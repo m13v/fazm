@@ -147,6 +147,7 @@ struct AIResponseView: View {
                     SelectableMarkdown(text: text, sender: .ai)
                         .textSelection(.enabled)
                         .environment(\.colorScheme, .dark)
+                        .environment(\.compactCodeBlocks, true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .toolCalls(_, let calls):
                     ToolCallsGroup(calls: calls)
@@ -163,6 +164,7 @@ struct AIResponseView: View {
             SelectableMarkdown(text: message.text, sender: .ai)
                 .textSelection(.enabled)
                 .environment(\.colorScheme, .dark)
+                .environment(\.compactCodeBlocks, true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
