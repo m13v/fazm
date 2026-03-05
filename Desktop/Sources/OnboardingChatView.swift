@@ -602,6 +602,10 @@ struct OnboardingChatView: View {
                 AppDatabase.shared.configure(userId: userId)
                 try? await AppDatabase.shared.initialize()
 
+                // Clear any stale messages from a previous onboarding session
+                // (clear() fires clearMessages() before DB is ready, so it silently fails)
+                await OnboardingChatPersistence.clearMessages()
+
                 await chatProvider.sendMessage(
                     "Hi, I just installed Fazm!",
                     model: "claude-sonnet-4-6",
