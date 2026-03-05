@@ -487,7 +487,7 @@ struct PostOnboardingTutorialView: View {
 
         case .pressKey:
             VStack(spacing: 8) {
-                KeyCapView(pulseScale: viewModel.pulseScale)
+                KeyboardBottomRowView(pulseScale: viewModel.pulseScale)
                 Text("Press and hold Right ⌘ to talk")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(FazmColors.textPrimary)
@@ -569,6 +569,107 @@ struct SpeakingPromptText: View {
                     glowPhase = 1
                 }
             }
+    }
+}
+
+// MARK: - KeyboardBottomRowView
+
+/// Simplified bottom row of a Mac keyboard showing where the Right ⌘ key is,
+/// with a repeating press-down animation on the highlighted key.
+struct KeyboardBottomRowView: View {
+    var pulseScale: CGFloat
+
+    @State private var isPressed = false
+
+    private let keyHeight: CGFloat = 24
+    private let gap: CGFloat = 2
+    private let keyColor = Color(nsColor: NSColor(white: 0.15, alpha: 1.0))
+    private let keyBorder = Color(nsColor: NSColor(white: 0.28, alpha: 1.0))
+
+    var body: some View {
+        VStack(spacing: gap) {
+            // Bottom modifier row: fn, ctrl, opt, cmd, space, cmd*, opt, arrows
+            HStack(spacing: gap) {
+                keyView("fn", width: 24)
+                keyView("⌃", width: 24)
+                keyView("⌥", width: 24)
+                keyView("⌘", width: 28)
+                // Space bar
+                keyView("", width: 80)
+                // Right ⌘ — highlighted & animated
+                rightCommandKey
+                keyView("⌥", width: 24)
+                // Arrow keys
+                HStack(spacing: 1) {
+                    keyView("◀", width: 14)
+                    VStack(spacing: 1) {
+                        keyView("▲", width: 14, height: keyHeight / 2 - 0.5)
+                        keyView("▼", width: 14, height: keyHeight / 2 - 0.5)
+                    }
+                    keyView("▶", width: 14)
+                }
+            }
+        }
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: NSColor(white: 0.1, alpha: 1.0)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+        )
+        .onAppear {
+            startPressAnimation()
+        }
+    }
+
+    private func startPressAnimation() {
+        // Repeating: press down for 1.5s, release for 0.8s
+        withAnimation(.easeIn(duration: 0.15)) {
+            isPressed = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeOut(duration: 0.15)) {
+                isPressed = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                startPressAnimation()
+            }
+        }
+    }
+
+    private var rightCommandKey: some View {
+        Text("⌘")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 28, height: keyHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(FazmColors.purplePrimary.opacity(isPressed ? 0.6 : 0.25))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(FazmColors.purplePrimary.opacity(isPressed ? 1.0 : 0.7), lineWidth: 1)
+            )
+            .shadow(color: FazmColors.purplePrimary.opacity(isPressed ? 0.8 : 0.4), radius: isPressed ? 10 : 4, x: 0, y: 0)
+            .scaleEffect(isPressed ? 0.92 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isPressed)
+    }
+
+    private func keyView(_ label: String, width: CGFloat, height: CGFloat? = nil) -> some View {
+        Text(label)
+            .font(.system(size: 8, weight: .medium))
+            .foregroundColor(Color.white.opacity(0.4))
+            .frame(width: width, height: height ?? keyHeight)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(keyColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(keyBorder, lineWidth: 0.5)
+            )
     }
 }
 
