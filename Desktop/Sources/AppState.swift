@@ -248,7 +248,9 @@ class AppState: ObservableObject {
 
         // Log final state of important keys
         if getenv("DEEPGRAM_API_KEY") != nil {
-            log("DEEPGRAM_API_KEY is set")
+            log("DEEPGRAM_API_KEY is set via env")
+        } else if !DeepgramKeyProvider.deobfuscate().isEmpty {
+            log("DEEPGRAM_API_KEY is set via bundled key")
         } else {
             log("WARNING: DEEPGRAM_API_KEY is NOT set")
         }
