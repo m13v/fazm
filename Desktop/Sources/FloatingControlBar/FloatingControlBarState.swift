@@ -89,6 +89,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
 
     func clearLastConversation() { lastConversation = nil }
 
+    // Send button hint (pulsating animation during tutorial)
+    @Published var showSendButtonHint: Bool = false
+
     // Model selection
     @Published var selectedModel: String = "claude-sonnet-4-6"
 

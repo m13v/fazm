@@ -154,7 +154,10 @@ class PostOnboardingTutorialManager {
                                 withAnimation(.easeInOut(duration: 0.3)) {
                                     self.viewModel.step = .done
                                 }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                                // Show pulsating send button hint and focus the input field
+                                barState.showSendButtonHint = true
+                                FloatingControlBarManager.shared.focusInputField()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                                     self?.dismiss()
                                 }
                             }

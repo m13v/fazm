@@ -1035,6 +1035,15 @@ class FloatingControlBarManager {
         return window?.frame
     }
 
+    /// Focus the text input field in the floating bar.
+    func focusInputField() {
+        guard let window else { return }
+        window.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            window.focusInputField()
+        }
+    }
+
     /// Resize the floating bar for PTT state changes.
     func resizeForPTT(expanded: Bool) {
         window?.resizeForPTTState(expanded: expanded)
