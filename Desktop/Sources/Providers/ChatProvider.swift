@@ -429,8 +429,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
     /// Switch bridge mode, tearing down old bridge and setting up new one
     func switchBridgeMode(to newMode: String) async {
-        guard newMode != bridgeMode else { return }
-        log("ChatProvider: switching bridge mode from \(bridgeMode) to \(newMode)")
+        log("ChatProvider: switching bridge mode to \(newMode) (current stored: \(bridgeMode))")
 
         // Stop current bridge
         await acpBridge.stop()
@@ -700,6 +699,26 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
         }
         guard !acpBridgeStarted else { return true }
+
+        // If builtin mode but Vertex not set up yet, do it now (e.g. first launch with stored bridgeMode)
+        if bridgeMode == "builtin" && vertexTokenManager == nil {
+            let vtm = VertexTokenManager()
+            if await vtm.isConfigured {
+                do {
+                    let config = try await vtm.setup()
+                    vertexTokenManager = vtm
+                    await vtm.startRefreshLoop()
+                    log("ChatProvider: Vertex token manager set up on first bridge start (project=\(config.projectId))")
+                    // Recreate bridge now that vertex is ready
+                    acpBridge = createBridge()
+                } catch {
+                    log("ChatProvider: Vertex setup failed on bridge start: \(error.localizedDescription)")
+                }
+            } else {
+                log("ChatProvider: Vertex env vars not configured, using fallback")
+            }
+        }
+
         do {
             try await acpBridge.start()
             acpBridgeStarted = true
