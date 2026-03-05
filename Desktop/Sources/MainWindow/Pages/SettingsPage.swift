@@ -107,6 +107,7 @@ struct SettingsContentView: View {
     @State private var fileViewerContent = ""
     @State private var fileViewerTitle = ""
     @State private var skillSearchQuery = ""
+    @State private var newDictionaryTerm = ""
 
     // Dev Mode setting
     @AppStorage("devModeEnabled") private var devModeEnabled = false
@@ -123,6 +124,7 @@ struct SettingsContentView: View {
     enum SettingsSection: String, CaseIterable {
         case general = "General"
         case aiChat = "AI Chat"
+        case dictionary = "Dictionary"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -167,6 +169,8 @@ struct SettingsContentView: View {
                     generalSection
                 case .aiChat:
                     aiChatSection
+                case .dictionary:
+                    dictionarySection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -1005,6 +1009,87 @@ struct SettingsContentView: View {
            let json = String(data: data, encoding: .utf8) {
             UserDefaults.standard.set(json, forKey: "disabledSkillsJSON")
         }
+    }
+
+    // MARK: - Dictionary Section
+
+    private var dictionarySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Custom words and phrases to improve transcription accuracy.")
+                .scaledFont(size: 13)
+                .foregroundColor(FazmColors.textSecondary)
+
+            HStack(spacing: 8) {
+                TextField("Add a word or phrase…", text: $newDictionaryTerm)
+                    .textFieldStyle(.plain)
+                    .scaledFont(size: 14)
+                    .foregroundColor(FazmColors.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(FazmColors.backgroundTertiary)
+                    )
+                    .onSubmit {
+                        addDictionaryTerm()
+                    }
+
+                Button(action: addDictionaryTerm) {
+                    Text("Add")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(FazmColors.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(FazmColors.purplePrimary)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(newDictionaryTerm.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            if !AssistantSettings.shared.transcriptionVocabulary.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(AssistantSettings.shared.transcriptionVocabulary, id: \.self) { term in
+                        HStack {
+                            Text(term)
+                                .scaledFont(size: 14)
+                                .foregroundColor(FazmColors.textPrimary)
+
+                            Spacer()
+
+                            Button {
+                                AssistantSettings.shared.transcriptionVocabulary.removeAll { $0 == term }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(FazmColors.backgroundTertiary)
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 32)
+    }
+
+    private func addDictionaryTerm() {
+        let trimmed = newDictionaryTerm.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        guard !AssistantSettings.shared.transcriptionVocabulary.contains(trimmed) else {
+            newDictionaryTerm = ""
+            return
+        }
+        AssistantSettings.shared.transcriptionVocabulary.append(trimmed)
+        newDictionaryTerm = ""
     }
 
     // MARK: - Advanced Section

@@ -437,7 +437,7 @@ class PushToTalkManager: ObservableObject {
 
       do {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-        let service = try TranscriptionService(language: language, channels: 1)
+        let service = try TranscriptionService(language: language, vocabulary: AssistantSettings.shared.effectiveVocabulary, channels: 1)
         transcriptionService = service
 
         service.start(

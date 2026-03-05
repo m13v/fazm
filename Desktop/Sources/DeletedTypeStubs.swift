@@ -446,7 +446,11 @@ class AssistantSettings: ObservableObject {
     @Published var batchTranscriptionEnabled: Bool = false
     @Published var vadGateEnabled: Bool = false
     @Published var screenAnalysisEnabled: Bool = false
-    @Published var transcriptionVocabulary: [String] = []
+    @Published var transcriptionVocabulary: [String] = UserDefaults.standard.stringArray(forKey: "transcription_vocabulary") ?? ["fazm"] {
+        didSet {
+            UserDefaults.standard.set(transcriptionVocabulary, forKey: "transcription_vocabulary")
+        }
+    }
     @Published var analysisDelay: Int = 3
     @Published var glowOverlayEnabled: Bool = false
     var effectiveTranscriptionLanguage: String { transcriptionLanguage }

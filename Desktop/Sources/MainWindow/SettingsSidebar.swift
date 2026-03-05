@@ -35,6 +35,9 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "AI Provider", subtitle: "Choose between Agent SDK and Claude Code for AI chat", keywords: ["provider", "agent sdk", "claude code", "acp", "bridge mode"], section: .aiChat, advancedSubsection: nil, icon: "cpu", settingId: "aichat.provider"),
         SettingsSearchItem(name: "Dev Mode", subtitle: "Developer tools and debugging options", keywords: ["developer", "debug", "dev mode", "development"], section: .aiChat, advancedSubsection: nil, icon: "cpu", settingId: "aichat.devmode"),
 
+        // Dictionary
+        SettingsSearchItem(name: "Dictionary", subtitle: "Custom words to improve transcription accuracy", keywords: ["dictionary", "vocabulary", "transcription", "words", "phrases", "keyterm"], section: .dictionary, advancedSubsection: nil, icon: "character.book.closed", settingId: "dictionary.dictionary"),
+
         // About
         SettingsSearchItem(name: "Software Updates", subtitle: "Check for and manage app updates", keywords: ["update", "auto update", "sparkle", "version", "check for updates", "check now"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.updates"),
         SettingsSearchItem(name: "Automatic Updates", subtitle: "Check for updates automatically in the background", keywords: ["auto check", "background updates", "check automatically"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.autoupdates"),
@@ -236,6 +239,7 @@ struct SettingsSidebarItem: View {
         switch section {
         case .general: return "gearshape"
         case .aiChat: return "cpu"
+        case .dictionary: return "character.book.closed"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"
         }
