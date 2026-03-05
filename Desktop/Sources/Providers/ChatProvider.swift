@@ -349,7 +349,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     @AppStorage("multiChatEnabled") var multiChatEnabled = false
 
     /// Bridge mode: "personal" (user's Claude OAuth), "builtin" (Vertex AI built-in account)
-    @AppStorage("bridgeMode") var bridgeMode: String = "personal"
+    @AppStorage("bridgeMode") var bridgeMode: String = "builtin"
 
     // MARK: - Bridge (prefers user's Claude session, falls back to Vertex or bundled key)
     private lazy var acpBridge: ACPBridge = {

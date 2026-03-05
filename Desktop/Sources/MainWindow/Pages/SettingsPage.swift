@@ -368,7 +368,7 @@ struct SettingsContentView: View {
 
     // MARK: - AI Chat Section
 
-    @AppStorage("bridgeMode") private var bridgeMode: String = "personal"
+    @AppStorage("bridgeMode") private var bridgeMode: String = "builtin"
 
     private var aiChatSection: some View {
         VStack(spacing: 20) {
