@@ -187,7 +187,7 @@ workflows:
             SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
           fi
           if [ -d "$SPARKLE_FW" ]; then
-            cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
+            ditto "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
           fi
 
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
@@ -282,6 +282,14 @@ workflows:
           # Sign Sparkle components — innermost first
           SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
           if [ -d "$SPARKLE_FW" ]; then
+            # Verify symlinks are intact (ditto should preserve them)
+            if [ ! -L "$SPARKLE_FW/Autoupdate" ]; then
+              echo "ERROR: Sparkle.framework symlinks are broken — Autoupdate is not a symlink"
+              ls -la "$SPARKLE_FW/"
+              exit 1
+            fi
+            # Ensure Autoupdate binary is executable
+            chmod +x "$SPARKLE_FW/Versions/B/Autoupdate"
             codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
               "$SPARKLE_FW/Versions/B/XPCServices/Downloader.xpc"
             codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
