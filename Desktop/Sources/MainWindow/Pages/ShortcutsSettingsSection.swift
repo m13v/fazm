@@ -12,6 +12,7 @@ struct ShortcutsSettingsSection: View {
     var body: some View {
         VStack(spacing: 20) {
             aiModelCard
+            responseStyleCard
             draggableBarCard
             askFazmKeyCard
             pttKeyCard
@@ -54,6 +55,56 @@ struct ShortcutsSettingsSection: View {
             settings.selectedModel = model.id
         } label: {
             Text(model.label)
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(FazmColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected
+                              ? FazmColors.purplePrimary.opacity(0.3)
+                              : FazmColors.backgroundTertiary.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? FazmColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var responseStyleCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Response Style")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(FazmColors.textPrimary)
+                Text(settings.floatingBarCompactness.description)
+                    .scaledFont(size: 13)
+                    .foregroundColor(FazmColors.textSecondary)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(ShortcutSettings.FloatingBarCompactness.allCases, id: \.self) { mode in
+                    responseStyleButton(mode)
+                }
+                Spacer()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(FazmColors.backgroundTertiary.opacity(0.5))
+        )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.responsestyle", highlightedSettingId: $highlightedSettingId))
+    }
+
+    private func responseStyleButton(_ mode: ShortcutSettings.FloatingBarCompactness) -> some View {
+        let isSelected = settings.floatingBarCompactness == mode
+        return Button {
+            settings.floatingBarCompactness = mode
+        } label: {
+            Text(mode.rawValue)
                 .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(FazmColors.textPrimary)
                 .padding(.horizontal, 14)

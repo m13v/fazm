@@ -278,17 +278,31 @@ enum ChatMode: String, CaseIterable {
 class ChatProvider: ObservableObject {
 
     // MARK: - Floating Bar System Prompt Prefix
-    /// Static prefix injected at the top of the system prompt for floating bar sessions.
-    /// Defined here so it can be referenced both at warmup time and at query time.
-    static let floatingBarSystemPromptPrefix = """
-================================================================================
-🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
-================================================================================
-If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
-Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
-A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
-================================================================================
-"""
+    /// Build the floating bar system prompt prefix based on compactness level.
+    static func floatingBarSystemPromptPrefix(compactness: ShortcutSettings.FloatingBarCompactness) -> String {
+        var lines: [String] = [
+            "================================================================================",
+            "🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨",
+            "================================================================================",
+            "If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.",
+        ]
+        switch compactness {
+        case .off:
+            break
+        case .soft:
+            lines.append("Be concise — prefer short answers (1-3 sentences) unless the question needs more detail. No unnecessary lists or headers.")
+        case .strict:
+            lines.append("Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.")
+        }
+        lines.append("A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.")
+        lines.append("================================================================================")
+        return lines.joined(separator: "\n")
+    }
+
+    /// Convenience property that reads the current compactness setting.
+    static var floatingBarSystemPromptPrefixCurrent: String {
+        floatingBarSystemPromptPrefix(compactness: ShortcutSettings.shared.floatingBarCompactness)
+    }
 
     // MARK: - Published State
     @Published var chatMode: ChatMode = .act
@@ -726,7 +740,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             // This is the only place the system prompt is built and applied.
             let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
             cachedMainSystemPrompt = mainSystemPrompt
-            let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
+            let floatingSystemPrompt = Self.floatingBarSystemPromptPrefixCurrent + "\n\n" + mainSystemPrompt
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
                 .init(key: "main", model: "claude-opus-4-6", systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: "claude-sonnet-4-6", systemPrompt: floatingSystemPrompt)

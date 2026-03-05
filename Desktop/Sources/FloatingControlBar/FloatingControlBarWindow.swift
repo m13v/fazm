@@ -1163,7 +1163,7 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating", imageData: screenshotData)
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
