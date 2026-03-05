@@ -12,7 +12,6 @@ struct ShortcutsSettingsSection: View {
     var body: some View {
         VStack(spacing: 20) {
             aiModelCard
-            backgroundStyleCard
             draggableBarCard
             askFazmKeyCard
             pttKeyCard
@@ -71,31 +70,6 @@ struct ShortcutsSettingsSection: View {
                 )
         }
         .buttonStyle(.plain)
-    }
-
-    private var backgroundStyleCard: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Background Style")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(FazmColors.textPrimary)
-                Text(settings.solidBackground
-                     ? "Solid dark background"
-                     : "Semi-transparent with blur")
-                    .scaledFont(size: 13)
-                    .foregroundColor(FazmColors.textSecondary)
-            }
-            Spacer()
-            Toggle("", isOn: $settings.solidBackground)
-                .toggleStyle(.switch)
-                .tint(FazmColors.purplePrimary)
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(FazmColors.backgroundTertiary.opacity(0.5))
-        )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.background", highlightedSettingId: $highlightedSettingId))
     }
 
     private var draggableBarCard: some View {
