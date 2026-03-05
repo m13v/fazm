@@ -769,6 +769,11 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Reset a named ACP session so the next query starts fresh (no history).
+    func resetSession(key: String) async {
+        await acpBridge.resetSession(key: key)
+    }
+
     /// Start Claude OAuth authentication
     /// Opens the OAuth URL (provided by the bridge) in the default browser.
     /// The bridge handles the full OAuth flow: local callback server, token exchange,
