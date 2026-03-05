@@ -918,9 +918,14 @@ class ChatToolExecutor {
     private static var isGWSAuthenticated: Bool {
         let configDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/gws")
-        // gws stores encrypted credentials in ~/.config/gws/
-        let credFiles = (try? FileManager.default.contentsOfDirectory(atPath: configDir.path)) ?? []
-        return credFiles.contains(where: { $0.contains("credentials") || $0.contains("token") })
+        let fm = FileManager.default
+        // Prefer plain credentials (credentials.json) — encrypted (credentials.enc) has
+        // a decryption bug in gws 0.5.0 on macOS
+        let plainCreds = configDir.appendingPathComponent("credentials.json").path
+        if fm.fileExists(atPath: plainCreds) { return true }
+        // Fall back to checking encrypted (may work in future gws versions)
+        let encCreds = configDir.appendingPathComponent("credentials.enc").path
+        return fm.fileExists(atPath: encCreds)
     }
 
     /// Execute a Google Workspace tool action
@@ -992,7 +997,11 @@ class ChatToolExecutor {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gwsPath)
-        process.arguments = ["auth", "login"]
+        // Use --plain to store credentials as unencrypted JSON.
+        // gws 0.5.0 has a bug where encrypted credentials (credentials.enc)
+        // can't be decrypted on macOS, causing 401 errors despite auth status
+        // showing token_valid: true. Plain storage works reliably.
+        process.arguments = ["auth", "login", "--plain"]
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
