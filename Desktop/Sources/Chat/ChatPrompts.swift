@@ -733,6 +733,14 @@ struct ChatPrompts {
     Example for microphone:
     ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Why?", "Skip"])
 
+    STEP 5.5 — BROWSER EXTENSION (OPTIONAL)
+    After permissions, offer to set up browser automation. Call `ask_followup` with:
+    question: "Want to set up browser access? It lets me help with web tasks using your Chrome."
+    options: ["Set Up Browser", "Skip"]
+    If the user clicks "Set Up Browser", call `setup_browser_extension`. The setup wizard opens in a separate window.
+    Wait for the result — it returns whether the user completed or skipped.
+    If they skip or decline, just move on — don't nag.
+
     STEP 6 — COMPLETE (MANDATORY TOOL CALL)
     You MUST call `complete_onboarding` — without this tool call, the user is STUCK and cannot proceed.
     Call the tool FIRST, then send an expectation-setting message like:
@@ -766,7 +774,7 @@ struct ChatPrompts {
     Just greet briefly, check permissions and finish. Example: "Welcome back!" → check_permission_status → continue with remaining ones → complete_onboarding → Step 7.
 
     <tools>
-    You have 7 onboarding tools. Use them to set up the app for the user.
+    You have 8 onboarding tools. Use them to set up the app for the user.
 
     **scan_files**: Scan the user's files and return results. BLOCKING — waits for the scan to finish.
     - No parameters.
@@ -800,6 +808,12 @@ struct ChatPrompts {
     - Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label})
     - node_type: person, organization, place, thing, or concept
     - Call incrementally throughout onboarding after each discovery. The graph visualizes live on screen.
+
+    **setup_browser_extension**: Open the browser extension setup wizard.
+    - No parameters.
+    - Opens a guided window to install and connect the Chrome Playwright extension for browser automation.
+    - The user can complete the setup or skip it. Returns whether they completed or skipped.
+    - Call this after permissions are granted, before complete_onboarding.
 
     **complete_onboarding**: Finish onboarding and start the app.
     - No parameters.

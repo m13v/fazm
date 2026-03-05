@@ -7,7 +7,7 @@ final class BrowserExtensionSetupWindowController {
     private var window: NSWindow?
     private var hostingView: NSHostingView<AnyView>?
 
-    func show(chatProvider: ChatProvider?, onComplete: @escaping () -> Void) {
+    func show(chatProvider: ChatProvider?, onSkip: (() -> Void)? = nil, onComplete: @escaping () -> Void) {
         // If already showing, just bring to front
         if let existing = window, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
@@ -20,7 +20,14 @@ final class BrowserExtensionSetupWindowController {
                 onComplete()
                 controller.close()
             },
+            onSkip: onSkip.map { skip in
+                {
+                    skip()
+                    controller.close()
+                }
+            },
             onDismiss: {
+                (onSkip ?? {})()
                 controller.close()
             },
             chatProvider: chatProvider
