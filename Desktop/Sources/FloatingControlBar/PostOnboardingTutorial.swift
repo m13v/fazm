@@ -78,7 +78,7 @@ class PostOnboardingTutorialManager {
         let tutorialWindow = PostOnboardingTutorialWindow(viewModel: viewModel)
         self.window = tutorialWindow
 
-        positionBelowBar(tutorialWindow)
+        positionLeftOfBar(tutorialWindow)
         log("PostOnboardingTutorial: show() — window frame=\(tutorialWindow.frame), barFrame=\(FloatingControlBarManager.shared.barWindowFrame ?? .zero)")
 
         // Re-position when step changes (content size changes)
@@ -89,7 +89,7 @@ class PostOnboardingTutorialManager {
                 // Small delay to let SwiftUI layout update
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                     guard let self, let window = self.window else { return }
-                    self.positionBelowBar(window)
+                    self.positionLeftOfBar(window)
                 }
             }
             .store(in: &cancellables)
@@ -102,15 +102,23 @@ class PostOnboardingTutorialManager {
         }
     }
 
-    private func positionBelowBar(_ tutorialWindow: NSWindow) {
+    private func positionLeftOfBar(_ tutorialWindow: NSWindow) {
         // Let SwiftUI determine the ideal content size
-        let fittingSize = tutorialWindow.contentView?.fittingSize ?? NSSize(width: 320, height: 160)
-        let windowSize = NSSize(width: max(fittingSize.width, 320), height: max(fittingSize.height, 120))
+        let fittingSize = tutorialWindow.contentView?.fittingSize ?? NSSize(width: 340, height: 160)
+        let windowSize = NSSize(width: max(fittingSize.width, 340), height: max(fittingSize.height, 120))
 
         if let barFrame = FloatingControlBarManager.shared.barWindowFrame {
-            let x = barFrame.midX - windowSize.width / 2
-            let y = barFrame.maxY + 12
-            tutorialWindow.setFrame(NSRect(origin: NSPoint(x: x, y: y), size: windowSize), display: true)
+            // Position to the left of the bar, vertically centered on it
+            let x = barFrame.minX - windowSize.width - 12
+            let y = barFrame.midY - windowSize.height / 2
+
+            // If it would go off the left edge, position to the right instead
+            if x < (NSScreen.main?.visibleFrame.minX ?? 0) {
+                let xRight = barFrame.maxX + 12
+                tutorialWindow.setFrame(NSRect(origin: NSPoint(x: xRight, y: y), size: windowSize), display: true)
+            } else {
+                tutorialWindow.setFrame(NSRect(origin: NSPoint(x: x, y: y), size: windowSize), display: true)
+            }
         } else if let screen = NSScreen.main {
             let x = screen.frame.midX - windowSize.width / 2
             let y = screen.visibleFrame.minY + 80
@@ -396,12 +404,7 @@ struct PostOnboardingTutorialView: View {
     var onSkip: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Upward arrow
-            Triangle()
-                .fill(Color(nsColor: NSColor(white: 0.12, alpha: 1.0)))
-                .frame(width: 16, height: 8)
-
+        HStack(spacing: 0) {
             // Card
             VStack(spacing: 12) {
                 stepContent
@@ -431,6 +434,11 @@ struct PostOnboardingTutorialView: View {
             .padding(.bottom, 12)
             .frame(width: 320)
             .floatingBackground(cornerRadius: 16)
+
+            // Right-pointing arrow toward the floating bar
+            RightTriangle()
+                .fill(Color(nsColor: NSColor(white: 0.12, alpha: 1.0)))
+                .frame(width: 8, height: 16)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -699,7 +707,19 @@ private class TutorialMicMenuTarget: NSObject {
     }
 }
 
-// MARK: - Triangle Shape
+// MARK: - Triangle Shapes
+
+/// Right-pointing triangle (arrow pointing toward the floating bar).
+struct RightTriangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
 
 struct Triangle: Shape {
     func path(in rect: CGRect) -> Path {
