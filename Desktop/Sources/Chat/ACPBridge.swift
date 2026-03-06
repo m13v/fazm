@@ -69,6 +69,8 @@ actor ACPBridge {
   enum BridgeMode {
     /// User's own Claude account via OAuth (strip API key + Vertex vars)
     case personalOAuth
+    /// Bundled Anthropic API key (direct API, fastest)
+    case bundledKey(apiKey: String)
     /// Vertex AI via Workload Identity Federation
     case vertex(adcFilePath: String, projectId: String, region: String)
   }
@@ -164,6 +166,9 @@ actor ACPBridge {
     switch mode {
     case .personalOAuth:
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
+      env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
+    case .bundledKey(let apiKey):
+      env["ANTHROPIC_API_KEY"] = apiKey
       env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     case .vertex(let adcFilePath, let projectId, let region):
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
