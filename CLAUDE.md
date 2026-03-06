@@ -88,9 +88,11 @@ To promote: `./scripts/promote_release.sh <tag>` (staging → beta → stable).
 - Legacy `com.omi.*` bundle IDs still appear in cleanup/migration code (TCC permission resets, old app bundle removal) for users who had the app when it was called Omi
 
 ### After Implementing Changes
-- **By default**, do NOT build or run the app — let the user test manually with `./run.sh`
-- **When the user says "test it"** (or similar), use the `test-local` skill to build, run, and verify changes using macOS automation
-- See `.claude/skills/test-local/SKILL.md` for the full build → run → test → iterate workflow
+- **ALWAYS test your changes** — see global CLAUDE.md "After Implementing Changes — MANDATORY Testing" for the full workflow
+- **UI/visual changes**: build with `./run.sh`, then use macOS automation (MCP macos-use) to navigate to the relevant screen and screenshot to verify
+- **Logic/backend changes**: use programmatic test hooks (distributed notifications, etc.) to trigger and verify
+- Use the `test-local` skill for the build → run → test → iterate workflow
+- See `.claude/skills/test-local/SKILL.md` for details
 
 ### Changelog Entries
 
