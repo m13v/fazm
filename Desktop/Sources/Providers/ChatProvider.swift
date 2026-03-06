@@ -2534,14 +2534,19 @@ class ChatProvider: ObservableObject {
             let buffered = streamingTextBuffer
             streamingTextBuffer = ""
 
-            messages[index].text += buffered
-
             if !forceNewTextBlock,
                let lastBlockIndex = messages[index].contentBlocks.indices.last,
                case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
                 messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
+                messages[index].text += buffered
             } else {
                 messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
+                // Add separator to plain text when starting a new text block
+                // so copy-paste and fallback rendering have proper paragraph breaks
+                if !messages[index].text.isEmpty {
+                    messages[index].text += "\n\n"
+                }
+                messages[index].text += buffered
             }
             forceNewTextBlock = false
         }
@@ -2567,6 +2572,7 @@ class ChatProvider: ObservableObject {
         messages[index].contentBlocks.append(
             .discoveryCard(id: UUID().uuidString, title: title, summary: summary, fullText: fullText)
         )
+        forceNewTextBlock = true
     }
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
@@ -2578,6 +2584,9 @@ class ChatProvider: ObservableObject {
             (!streamingTextBuffer.isEmpty || !streamingThinkingBuffer.isEmpty) {
             flushStreamingBuffer()
         }
+        // Ensure text after the tool call starts a new content block, even if
+        // the text_block_boundary message hasn't arrived yet.
+        forceNewTextBlock = true
 
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 

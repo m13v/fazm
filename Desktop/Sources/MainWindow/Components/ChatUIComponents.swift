@@ -50,7 +50,7 @@ enum ContentBlockGroup: Identifiable {
                 if pendingText.isEmpty {
                     pendingTextId = id
                 }
-                pendingText += (pendingText.isEmpty ? "" : "\n") + text
+                pendingText += (pendingText.isEmpty ? "" : "\n\n") + text
 
             case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
                 flushText()
