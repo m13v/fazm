@@ -136,6 +136,30 @@ workflows:
             fi
           done
 
+      - name: Build mcp-server-macos-use (arm64 + x86_64)
+        script: |
+          git clone --depth 1 https://github.com/mediar-ai/mcp-server-macos-use.git /tmp/mcp-server-macos-use
+          cd /tmp/mcp-server-macos-use
+
+          xcrun swift package resolve
+
+          echo "Building arm64..."
+          xcrun swift build -c release --triple arm64-apple-macosx
+          cp .build/arm64-apple-macosx/release/mcp-server-macos-use /tmp/mcp-macos-use-arm64
+
+          echo "Building x86_64..."
+          xcrun swift build -c release --triple x86_64-apple-macosx
+
+          echo "Creating universal binary..."
+          lipo -create /tmp/mcp-macos-use-arm64 .build/x86_64-apple-macosx/release/mcp-server-macos-use \
+            -output /tmp/mcp-server-macos-use-universal
+          file /tmp/mcp-server-macos-use-universal | grep -q "universal binary" || {
+            echo "ERROR: Failed to create universal mcp-server-macos-use binary"
+            exit 1
+          }
+          echo "MCP_MACOS_USE_BINARY=/tmp/mcp-server-macos-use-universal" >> $CM_ENV
+          echo "mcp-server-macos-use: $(du -h /tmp/mcp-server-macos-use-universal | cut -f1) universal"
+
       - name: Build Swift app (arm64 + x86_64)
         script: |
           mkdir -p "$BUILD_DIR"
@@ -238,6 +262,12 @@ workflows:
           cp -f "$GWS_BIN" "$APP_BUNDLE/Contents/Resources/gws"
           chmod +x "$APP_BUNDLE/Contents/Resources/gws"
 
+          # Copy mcp-server-macos-use binary
+          if [ -f "$MCP_MACOS_USE_BINARY" ]; then
+              cp "$MCP_MACOS_USE_BINARY" "$APP_BUNDLE/Contents/MacOS/mcp-server-macos-use"
+              echo "Bundled mcp-server-macos-use"
+          fi
+
           # Update Info.plist metadata
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable   $BINARY_NAME"  "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier   $BUNDLE_ID"    "$APP_BUNDLE/Contents/Info.plist"
@@ -307,6 +337,13 @@ workflows:
                 codesign --force --options runtime --timestamp \
                   --sign "$SIGN_IDENTITY" "$candidate"
             done
+          fi
+
+          # Sign mcp-server-macos-use
+          MCP_BIN="$APP_BUNDLE/Contents/MacOS/mcp-server-macos-use"
+          if [ -f "$MCP_BIN" ]; then
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGN_IDENTITY" "$MCP_BIN"
           fi
 
           # Sign gws binary

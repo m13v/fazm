@@ -141,6 +141,17 @@ mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 substep "Copying binary ($(du -h "Desktop/.build/debug/$BINARY_NAME" 2>/dev/null | cut -f1))"
 cp -f "Desktop/.build/debug/$BINARY_NAME" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
 
+# Build and bundle mcp-server-macos-use
+MCP_REPO="$HOME/mcp-server-macos-use"
+if [ -d "$MCP_REPO" ]; then
+    substep "Building mcp-server-macos-use..."
+    xcrun swift build -c debug --package-path "$MCP_REPO"
+    cp -f "$MCP_REPO/.build/debug/mcp-server-macos-use" "$APP_BUNDLE/Contents/MacOS/mcp-server-macos-use"
+    substep "Bundled mcp-server-macos-use ($(du -h "$APP_BUNDLE/Contents/MacOS/mcp-server-macos-use" | cut -f1))"
+else
+    echo "Warning: mcp-server-macos-use not found at $MCP_REPO — skipping"
+fi
+
 substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 
@@ -228,6 +239,11 @@ if [ -n "$SIGN_IDENTITY" ]; then
     if [ -f "$NODE_BIN" ]; then
         substep "Signing bundled node binary"
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
+    fi
+    MCP_BIN="$APP_BUNDLE/Contents/MacOS/mcp-server-macos-use"
+    if [ -f "$MCP_BIN" ]; then
+        substep "Signing mcp-server-macos-use"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$MCP_BIN"
     fi
     GWS_BUNDLED_BIN="$APP_BUNDLE/Contents/Resources/gws"
     if [ -f "$GWS_BUNDLED_BIN" ]; then
