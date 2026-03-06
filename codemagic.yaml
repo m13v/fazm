@@ -43,26 +43,34 @@ workflows:
       tag_patterns:
         - pattern: "v*-macos"
           include: true
+        - pattern: "v*-macos-staging"
+          include: true
     cache:
       cache_paths:
         - ~/Library/Caches/org.swift.swiftpm
     scripts:
       - name: Extract version and build number from tag
         script: |
-          # Tag format: v{version}+{build}-macos  e.g. v0.0.1+1-macos
-          VERSION=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\1/')
-          BUILD_NUMBER=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\2/')
+          # Tag format: v{version}+{build}-macos[-staging]  e.g. v0.0.1+1-macos or v0.0.1+1-macos-staging
+          VERSION=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos(-staging)?$/\1/')
+          BUILD_NUMBER=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos(-staging)?$/\2/')
           if [ -z "$VERSION" ] || [ "$VERSION" = "$CM_TAG" ]; then
             echo "ERROR: Could not parse version from tag: $CM_TAG"
-            echo "Expected format: v{version}+{build}-macos (e.g. v0.0.1+1-macos)"
+            echo "Expected format: v{version}+{build}-macos[-staging] (e.g. v0.0.1+1-macos)"
             exit 1
+          fi
+          # Detect staging build
+          IS_STAGING="false"
+          if echo "$CM_TAG" | grep -q "\-staging$"; then
+            IS_STAGING="true"
           fi
           echo "VERSION=$VERSION" >> $CM_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
+          echo "IS_STAGING=$IS_STAGING" >> $CM_ENV
           echo "APP_BUNDLE=$BUILD_DIR/$APP_NAME.app" >> $CM_ENV
           echo "DMG_PATH=$BUILD_DIR/$APP_NAME.dmg" >> $CM_ENV
           echo "SPARKLE_ZIP_PATH=$BUILD_DIR/Fazm.zip" >> $CM_ENV
-          echo "Building Fazm Desktop v$VERSION (build $BUILD_NUMBER)"
+          echo "Building Fazm Desktop v$VERSION (build $BUILD_NUMBER) staging=$IS_STAGING"
 
       - name: Set up keychain and import Developer ID certificate
         script: |
@@ -566,14 +574,20 @@ workflows:
           gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
             gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
 
+          PRERELEASE_FLAG=""
+          if [ "$IS_STAGING" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
           gh release create "$CM_TAG" \
             --repo "$GITHUB_REPO" \
             --title "Fazm Desktop v${VERSION}" \
             --notes "$RELEASE_NOTES" \
+            $PRERELEASE_FLAG \
             "$SPARKLE_ZIP_PATH" \
             "$DMG_PATH"
 
-          echo "GitHub release created: $CM_TAG"
+          echo "GitHub release created: $CM_TAG (staging=$IS_STAGING)"
 
       - name: Deploy appcast.xml
         script: |

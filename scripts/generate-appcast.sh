@@ -11,8 +11,8 @@ OUTPUT_FILE="${1:-appcast.xml}"
 
 echo "Generating appcast.xml from $GITHUB_REPO releases..."
 
-# Get recent releases as JSON
-RELEASES_JSON=$(gh release list --repo "$GITHUB_REPO" --limit 5 --json tagName,publishedAt,name,isDraft,isPrerelease 2>/dev/null)
+# Get recent releases as JSON (include prereleases for staging)
+RELEASES_JSON=$(gh release list --repo "$GITHUB_REPO" --limit 10 --json tagName,publishedAt,name,isDraft,isPrerelease 2>/dev/null)
 
 if [ -z "$RELEASES_JSON" ] || [ "$RELEASES_JSON" = "[]" ]; then
     echo "Error: No releases found for $GITHUB_REPO"
@@ -73,8 +73,9 @@ download_url = zip_asset['url']
 file_size = zip_asset['size']
 
 # Parse version from tag: v0.0.7+7-macos -> 0.0.7, build 7
-# Also handle simpler tags like v0.0.7
-version_match = re.match(r'v?(\d+\.\d+\.\d+)(?:\+(\d+))?', tag)
+# Also handle staging tags: v0.0.7+7-macos-staging
+version_match = re.match(r'v?(\d+\.\d+\.\d+)(?:\+(\d+))?(?:-macos)?(?:-(staging))?', tag)
+is_staging = bool(version_match and version_match.group(3))
 if not version_match:
     sys.exit(0)
 
@@ -108,12 +109,13 @@ if ed_sig:
 enclosure_attrs += f'\\n                 length=\"{file_size}\"'
 enclosure_attrs += '\\n                 type=\"application/octet-stream\"'
 
+channel_tag = '\\n      <sparkle:channel>staging</sparkle:channel>' if is_staging else ''
 print(f'''    <item>
       <title>Version {version}</title>
       <pubDate>{rfc2822}</pubDate>
       <sparkle:version>{build_number}</sparkle:version>
       <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>{channel_tag}
       <enclosure {enclosure_attrs}/>
     </item>''')
 " 2>/dev/null)

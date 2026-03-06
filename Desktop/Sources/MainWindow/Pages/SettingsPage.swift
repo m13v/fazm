@@ -1485,13 +1485,11 @@ struct SettingsContentView: View {
                                 .scaledFont(size: 13)
                                 .foregroundColor(FazmColors.textTertiary)
                                 .onTapGesture {
-                                    // Hidden: Option+click to enable staging channel
+                                    // Hidden: Option+click to toggle staging channel
                                     if NSEvent.modifierFlags.contains(.option) {
-                                        // Set staging directly in UserDefaults, bypassing the
-                                        // updateChannel didSet which would overwrite with "beta"
-                                        UserDefaults.standard.set("staging", forKey: "update_channel")
-                                        updaterViewModel.activeChannelLabel = "Staging"
-                                        logSync("Settings: Staging channel enabled via hidden gesture")
+                                        let newChannel: UpdateChannel = updaterViewModel.updateChannel == .staging ? .stable : .staging
+                                        updaterViewModel.updateChannel = newChannel
+                                        logSync("Settings: Channel toggled to \(newChannel.rawValue) via hidden gesture")
                                     }
                                 }
                         }
