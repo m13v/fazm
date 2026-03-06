@@ -146,6 +146,7 @@ struct SettingsContentView: View {
 
     @State private var showResetOnboardingAlert: Bool = false
     @State private var showRescanFilesAlert: Bool = false
+    @State private var showChannelPicker: Bool = false
 
     init(
         appState: AppState,
@@ -1484,13 +1485,45 @@ struct SettingsContentView: View {
                             Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
                                 .scaledFont(size: 13)
                                 .foregroundColor(FazmColors.textTertiary)
-                                .onTapGesture {
-                                    // Hidden: Option+click to toggle staging channel
-                                    if NSEvent.modifierFlags.contains(.option) {
-                                        let newChannel: UpdateChannel = updaterViewModel.updateChannel == .staging ? .stable : .staging
-                                        updaterViewModel.updateChannel = newChannel
-                                        logSync("Settings: Channel toggled to \(newChannel.rawValue) via hidden gesture")
+                                .onTapGesture(count: 3) {
+                                    // Triple-click to show channel picker popover
+                                    showChannelPicker = true
+                                    logSync("Settings: Channel picker opened via triple-click")
+                                }
+                                .popover(isPresented: $showChannelPicker, arrowEdge: .bottom) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Update Channel")
+                                            .font(.headline)
+                                            .padding(.bottom, 4)
+                                        ForEach(UpdateChannel.allCases, id: \.self) { channel in
+                                            Button(action: {
+                                                updaterViewModel.updateChannel = channel
+                                                showChannelPicker = false
+                                                logSync("Settings: Channel set to \(channel.rawValue) via popover")
+                                            }) {
+                                                HStack {
+                                                    VStack(alignment: .leading, spacing: 2) {
+                                                        Text(channel.displayName)
+                                                            .font(.system(size: 13, weight: .medium))
+                                                        Text(channel.description)
+                                                            .font(.system(size: 11))
+                                                            .foregroundColor(.secondary)
+                                                    }
+                                                    Spacer()
+                                                    if updaterViewModel.updateChannel == channel {
+                                                        Image(systemName: "checkmark")
+                                                            .foregroundColor(FazmColors.purplePrimary)
+                                                    }
+                                                }
+                                                .padding(.vertical, 4)
+                                                .padding(.horizontal, 8)
+                                                .contentShape(Rectangle())
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
                                     }
+                                    .padding(12)
+                                    .frame(width: 220)
                                 }
                         }
 
