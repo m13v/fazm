@@ -205,22 +205,23 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    /// Focus the text input field by finding the NSTextView in the view hierarchy.
-    /// Returns `true` if the text view was found and focused.
+    /// Focus the text input field by finding the NSTextView or NSTextField in the view hierarchy.
+    /// Returns `true` if a text field was found and focused.
     @discardableResult
     func focusInputField() -> Bool {
         guard let contentView = self.contentView else { return false }
-        // Find the NSTextView inside the hosting view hierarchy
-        func findTextView(in view: NSView) -> NSTextView? {
+        // Find the first editable text view (NSTextView from FazmTextEditor or NSTextField from SwiftUI TextField)
+        func findTextField(in view: NSView) -> NSView? {
             if let textView = view as? NSTextView { return textView }
+            if let textField = view as? NSTextField, textField.isEditable { return textField }
             for subview in view.subviews {
-                if let found = findTextView(in: subview) { return found }
+                if let found = findTextField(in: subview) { return found }
             }
             return nil
         }
-        if let textView = findTextView(in: contentView) {
+        if let field = findTextField(in: contentView) {
             makeKeyAndOrderFront(nil)
-            makeFirstResponder(textView)
+            makeFirstResponder(field)
             return true
         }
         return false
@@ -697,6 +698,22 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         log("FloatingControlBarWindow: centered at (\(x), \(y)) on screen \(visibleFrame)")
     }
 
+    /// Move the bar to the active monitor (where the foreground app is) if it's on a different screen.
+    /// Called when starting a new interaction (PTT, shortcut) so the bar follows the user.
+    func moveToActiveScreen() {
+        guard let activeScreen = NSScreen.main,
+              let currentScreen = self.screen,
+              activeScreen != currentScreen else { return }
+        let visibleFrame = activeScreen.visibleFrame
+        let x = visibleFrame.midX - frame.width / 2
+        let y = visibleFrame.minY + 20
+        isResizingProgrammatically = true
+        setFrameOrigin(NSPoint(x: x, y: y))
+        canonicalBottomY = y
+        isResizingProgrammatically = false
+        log("FloatingControlBarWindow: moved to active screen at (\(x), \(y))")
+    }
+
     func resetPosition() {
         UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
         centerOnMainScreen()
@@ -1028,6 +1045,9 @@ class FloatingControlBarManager {
     func openAIInput() {
         guard let window = window else { return }
 
+        // Move to the active monitor before opening
+        window.moveToActiveScreen()
+
         // Activate the app so the window can become key and accept keyboard input.
         // Without this, makeFirstResponder silently fails when triggered from a global shortcut.
         NSApp.activate(ignoringOtherApps: true)
@@ -1051,6 +1071,9 @@ class FloatingControlBarManager {
     /// Open AI input with a pre-filled transcription from PTT (inserts into input field without sending).
     func openAIInputWithQuery(_ query: String) {
         guard let window = window else { return }
+
+        // Move to the active monitor before opening
+        window.moveToActiveScreen()
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
         chatCancellable?.cancel()
@@ -1149,6 +1172,7 @@ class FloatingControlBarManager {
     /// Focus the text input field in the floating bar.
     func focusInputField() {
         guard let window else { return }
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             window.focusInputField()
@@ -1159,6 +1183,11 @@ class FloatingControlBarManager {
     func expandFromCollapsed(instant: Bool = false) {
         guard let window else { return }
         window.expandFromCollapsed(instant: instant)
+    }
+
+    /// Move the floating bar to the active monitor (where the foreground app is).
+    func moveToActiveScreen() {
+        window?.moveToActiveScreen()
     }
 
     /// Resize the floating bar for PTT state changes.
