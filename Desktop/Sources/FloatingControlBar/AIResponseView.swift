@@ -8,6 +8,7 @@ struct AIResponseView: View {
     @State private var isQuestionExpanded = false
     @State private var followUpText: String = ""
     @State private var preVoiceFollowUpText: String = ""
+    @State private var userHasScrolledUp: Bool = false
     @FocusState private var isFollowUpFocused: Bool
 
     let userInput: String
@@ -64,23 +65,36 @@ struct AIResponseView: View {
                         }
                     )
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 1)
+                        .onChanged { _ in
+                            userHasScrolledUp = true
+                        }
+                )
                 .onChange(of: currentMessage?.text) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
+                    if !userHasScrolledUp {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
                     }
                 }
                 .onChange(of: currentMessage?.contentBlocks.count) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
+                    if !userHasScrolledUp {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
                     }
                 }
                 .onChange(of: chatHistory.count) {
+                    // New exchange added — always scroll to bottom and reset
+                    userHasScrolledUp = false
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
                 .onChange(of: isVoiceFollowUp) {
                     if isVoiceFollowUp {
+                        userHasScrolledUp = false
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("voiceFollowUp", anchor: .bottom)
                         }
@@ -99,7 +113,9 @@ struct AIResponseView: View {
             onClose?()
         }
         .onChange(of: isLoading) {
-            if !isLoading {
+            if isLoading {
+                userHasScrolledUp = false
+            } else {
                 // Auto-focus follow-up field when loading finishes
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     isFollowUpFocused = true
@@ -420,6 +436,7 @@ struct AIResponseView: View {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         followUpText = ""
+        userHasScrolledUp = false
         onSendFollowUp?(trimmed)
     }
 }
