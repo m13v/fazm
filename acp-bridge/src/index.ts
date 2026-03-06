@@ -661,6 +661,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
   let fullText = "";
   let fullPrompt = "";
   let isNewSession = false;
+  let retryingWithHint = false;
   const pendingTools: string[] = [];
   lastTextContentBlockIndex = -1;
   pendingBoundary = false;
@@ -754,7 +755,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     // Send the prompt — retry with fresh session if stale
     const sendPrompt = async (): Promise<void> => {
       const promptBlocks: Array<Record<string, unknown>> = [];
-      if (msg.imageBase64) {
+      if (msg.imageBase64 && !retryingWithHint) {
         promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: "image/jpeg" });
       }
       promptBlocks.push({ type: "text", text: fullPrompt });
@@ -822,20 +823,29 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         await startAuthFlow();
         return handleQuery(msg);
       }
-      // If we already have partial streamed text, don't retry — send what we have.
-      // Retrying would lose the partial response and likely hit the same error.
-      if (fullText.length > 0) {
-        logErr(`session/prompt failed after partial response (${fullText.length} chars), sending partial result: ${err}`);
+      // If an internal error occurred mid-conversation (e.g. "Image was too large"),
+      // retry on the SAME session with a hint so the model can adjust its approach.
+      // The session history is intact — the model just needs to know what went wrong.
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isRetryableInternalError = errMsg.includes("Image was too large") ||
+        errMsg.includes("too large") ||
+        errMsg.includes("content too long");
+      if (isRetryableInternalError && sessionId && !retryingWithHint) {
+        logErr(`session/prompt failed with recoverable error, retrying on same session with hint: ${errMsg}`);
+        // Clear pending tool indicators
         for (const name of pendingTools) {
           send({ type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        const inputTokens = Math.ceil(fullPrompt.length / 4);
-        const outputTokens = Math.ceil(fullText.length / 4);
-        send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 });
-        // Also send the error so the UI can show it
-        const errMsg = err instanceof Error ? err.message : String(err);
-        send({ type: "error", message: errMsg });
+
+        // Retry on the same session — the model sees the error and can adjust
+        retryingWithHint = true;
+        fullPrompt = `The previous tool result caused an error: "${errMsg}". Please continue with a different approach — for example, avoid reading large image files directly. Use smaller outputs or describe what you see from the tool's text output instead.`;
+        try {
+          await sendPrompt();
+        } finally {
+          retryingWithHint = false;
+        }
         return;
       }
       // If session/prompt failed while reusing an existing session, retry once with a fresh one.
