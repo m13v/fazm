@@ -21,6 +21,13 @@
     "Screen capture and macOS automation now uses native accessibility APIs instead of browser screenshot",
     "Fixed AI responses appearing concatenated without spaces when using tool calls or chain of thought",
     "Added staging update channel for pre-release testing",
-    "Fixed memory crash during initial file indexing on large filesystems"
+    "Fixed memory crash during initial file indexing on large filesystems",
+    "Fixed Right Command push-to-talk triggering on Left Cmd and modifier combos",
+    "Optimized memory usage in file indexing service",
+    "Fixed floating bar horizontal jumps and screen switching on multi-monitor setups",
+    "Added copy buttons to messages and conversations in floating bar",
+    "Fixed plain text copying in markdown responses",
+    "Fixed orphaned ACP bridge processes on quit",
+    "Added escape key hint to floating bar close button"
   ]
 }
