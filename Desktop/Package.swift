@@ -30,8 +30,12 @@ let package = Package(
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ],
             path: "Sources",
+            exclude: [
+                "Resources/BundledSkills",
+            ],
             resources: [
-                .process("Resources")
+                .copy("Resources/BundledSkills"),
+                .process("Resources"),
             ]
         )
     ]
