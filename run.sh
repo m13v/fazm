@@ -105,7 +105,7 @@ else
 fi
 
 step "Ensuring gws binary..."
-GWS_VERSION="0.5.0"
+GWS_VERSION="0.6.3"
 GWS_BIN_DIR="Desktop/bin"
 GWS_BIN="$GWS_BIN_DIR/gws"
 if [ ! -f "$GWS_BIN" ]; then
