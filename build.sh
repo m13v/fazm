@@ -77,6 +77,17 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 # Copy binary
 cp "$BINARY_PATH" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
 
+# Build and bundle mcp-server-macos-use
+echo "Building mcp-server-macos-use..."
+MCP_REPO="$HOME/mcp-server-macos-use"
+if [ -d "$MCP_REPO" ]; then
+    swift build -c release --package-path "$MCP_REPO"
+    cp "$MCP_REPO/.build/release/mcp-server-macos-use" "$APP_BUNDLE/Contents/MacOS/mcp-server-macos-use"
+    echo "Bundled mcp-server-macos-use"
+else
+    echo "Warning: mcp-server-macos-use not found at $MCP_REPO — skipping"
+fi
+
 # Copy Info.plist
 cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
