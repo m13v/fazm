@@ -269,7 +269,8 @@ struct FloatingControlBarView: View {
                 onCancel: onCloseAI,
                 onHeightChange: { [weak state] height in
                     guard let state = state else { return }
-                    let totalHeight = 50 + height + 24
+                    // 106 = controlBarView(50) + Group top padding(8) + AskAIInputView top bar(24) + input vertical padding(24)
+                    let totalHeight = height + 106
                     state.inputViewHeight = totalHeight
                 }
             )
