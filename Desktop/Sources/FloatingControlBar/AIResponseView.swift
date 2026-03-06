@@ -230,6 +230,7 @@ struct AIResponseView: View {
                 Text(exchange.question)
                     .scaledFont(size: 13)
                     .foregroundColor(.white)
+                    .textSelection(.enabled)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
@@ -266,6 +267,7 @@ struct AIResponseView: View {
                             Text(userInput)
                                 .scaledFont(size: 13)
                                 .foregroundColor(.white)
+                                .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(maxHeight: 120)
@@ -273,6 +275,7 @@ struct AIResponseView: View {
                         Text(userInput)
                             .scaledFont(size: 13)
                             .foregroundColor(.white)
+                            .textSelection(.enabled)
                             .lineLimit(1)
                             .truncationMode(.head)
                             .frame(maxWidth: .infinity, alignment: .leading)
