@@ -190,7 +190,6 @@ struct AIResponseView: View {
                 switch group {
                 case .text(_, let text):
                     SelectableMarkdown(text: text, sender: .ai)
-                        .textSelection(.enabled)
                         .environment(\.colorScheme, .dark)
                         .environment(\.compactCodeBlocks, true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -207,7 +206,6 @@ struct AIResponseView: View {
             }
         } else if !message.text.isEmpty {
             SelectableMarkdown(text: message.text, sender: .ai)
-                .textSelection(.enabled)
                 .environment(\.colorScheme, .dark)
                 .environment(\.compactCodeBlocks, true)
                 .frame(maxWidth: .infinity, alignment: .leading)
