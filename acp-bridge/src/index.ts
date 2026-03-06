@@ -822,6 +822,22 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         await startAuthFlow();
         return handleQuery(msg);
       }
+      // If we already have partial streamed text, don't retry — send what we have.
+      // Retrying would lose the partial response and likely hit the same error.
+      if (fullText.length > 0) {
+        logErr(`session/prompt failed after partial response (${fullText.length} chars), sending partial result: ${err}`);
+        for (const name of pendingTools) {
+          send({ type: "tool_activity", name, status: "completed" });
+        }
+        pendingTools.length = 0;
+        const inputTokens = Math.ceil(fullPrompt.length / 4);
+        const outputTokens = Math.ceil(fullText.length / 4);
+        send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 });
+        // Also send the error so the UI can show it
+        const errMsg = err instanceof Error ? err.message : String(err);
+        send({ type: "error", message: errMsg });
+        return;
+      }
       // If session/prompt failed while reusing an existing session, retry once with a fresh one.
       // Do NOT retry if we already started fresh (isNewSession) — that would infinite-loop.
       if (!isNewSession && sessionId) {
