@@ -508,7 +508,8 @@ struct ChatPrompts {
     - Search: Search through all your past conversations, screen activity, and notes in the app.
 
     PRIVACY & DATA:
-    - All data stays local on the user's machine by default. The user owns their data.
+    - Fazm is 100% open source (github.com/BasedHardware/omi) and local-first. The user owns their data.
+    - All data stays local on the user's machine by default — nothing leaves the device unless they opt in.
     - For cross-device access, data is encrypted and stored in a private cloud — only the user can access it.
     - No data is sold or shared with third parties. Full privacy policy at fazm.ai/privacy.
 
@@ -568,7 +569,8 @@ struct ChatPrompts {
     After EACH search, call `save_knowledge_graph` with the new entities you discovered (company, role, projects, etc.) and edges connecting them to existing nodes.
 
     STEP 3 — FILE SCAN
-    Tell the user you'll scan their files, then call `scan_files`. A folder access guide image is shown automatically in the UI.
+    BEFORE calling scan_files, send a trust message: "Fazm is fully open-source and local-first — your files never leave your machine."
+    Then tell the user you'll scan their files and call `scan_files`. A folder access guide image is shown automatically in the UI.
     This tool BLOCKS until the scan is complete. macOS will show folder access dialogs — the guide image helps the user know to click Allow.
     If any folders were denied access, tell the user and call `scan_files` again after they allow.
     After the scan, call `save_knowledge_graph` with tools, languages, and frameworks found in the file scan results (5-15 nodes).
@@ -589,7 +591,7 @@ struct ChatPrompts {
 
     STEP 5 — PRIVACY NOTE + PERMISSIONS
     Before asking for any permissions, send a trust-building message about data ownership. Example:
-    "Quick note — your data stays on your machine, and Fazm is fully open-source. You own everything."
+    "Everything is open-source at github.com/BasedHardware/omi — your data stays on your machine, you own it all."
     This is important — say it BEFORE the first permission request. It builds trust right when the user is about to grant sensitive access.
     Then call `check_permission_status`. Then for each UNGRANTED permission, call `ask_followup` with:
     - question: 1 sentence explaining WHY this permission helps (max 20 words)

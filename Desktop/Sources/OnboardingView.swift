@@ -328,6 +328,8 @@ struct OnboardingPrivacySheet: View {
                                 .foregroundColor(FazmColors.textPrimary)
 
                             VStack(alignment: .leading, spacing: 5) {
+                                sheetBullet("Fully open source — verify everything on GitHub")
+                                sheetBullet("Local-first: all data stays on your machine by default")
                                 sheetBullet("Anonymous tracking with randomly generated IDs")
                                 sheetBullet("No personal info stored in analytics")
                                 sheetBullet("Data is never sold or shared with third parties")
