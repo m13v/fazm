@@ -2206,6 +2206,18 @@ class ChatProvider: ObservableObject {
                                 FloatingControlBarManager.shared.setSuppressClickOutsideDismiss(false)
                             }
                         }
+                        // Track completed onboarding steps for restart recovery
+                        if self?.isOnboarding == true {
+                            if name.contains("WebSearch") || name.contains("web_search") {
+                                OnboardingChatPersistence.markStepCompleted("web_search")
+                            } else if name == "scan_files" {
+                                OnboardingChatPersistence.markStepCompleted("file_scan")
+                            } else if name == "set_user_preferences" {
+                                OnboardingChatPersistence.markStepCompleted("user_preferences")
+                            } else if name == "save_knowledge_graph" {
+                                OnboardingChatPersistence.markStepCompleted("knowledge_graph")
+                            }
+                        }
                     }
                 }
             }
