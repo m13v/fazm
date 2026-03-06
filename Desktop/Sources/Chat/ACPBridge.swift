@@ -242,6 +242,7 @@ actor ACPBridge {
 
     try proc.run()
     isRunning = true
+    log("ACPBridge: bridge process started (pid=\(proc.processIdentifier))")
 
     // Start reading stdout
     startReadingStdout()
@@ -276,6 +277,7 @@ actor ACPBridge {
     // terminate() only signals the top process, leaving grandchildren alive.
     if let proc = process, proc.isRunning {
       let pid = proc.processIdentifier
+      log("ACPBridge: killing process group (pid=\(pid))")
       // Kill the process group (negative PID sends signal to all processes in the group)
       kill(-pid, SIGTERM)
       // Also terminate the main process in case it's not in its own group
