@@ -410,7 +410,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // in the old 28x28 frame (which causes a visible jump).
 
         // Anchor from bottom so the control bar stays visually in place, chat grows upward.
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+        // 146 = default text editor(40) + overhead(106) — matches the inputViewHeight formula.
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 146)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true)
 
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -420,7 +421,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.aiInputText = ""
             state.currentAIMessage = nil
             // Match the explicit resize height so the observer doesn't immediately override it
-            state.inputViewHeight = 120
+            state.inputViewHeight = 146
         }
         setupInputHeightObserver()
         installGlobalClickOutsideMonitor()
@@ -463,9 +464,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         state.showingAIResponse = false
         state.aiInputText = ""
 
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 146)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true)
-        state.inputViewHeight = 120
+        state.inputViewHeight = 146
         setupInputHeightObserver()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
