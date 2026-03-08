@@ -211,18 +211,19 @@ Actions:
 - "status": Check connection status and list connected accounts. ALWAYS call this first.
 - "accounts": List all connected Google accounts and which is the default.
 - "login": Start OAuth login for a new account. Optionally pass "account" (email) to associate.
-  Returns an oauth_url. You MUST then use the Playwright browser tools to:
-  1. Navigate to the oauth_url (browser_navigate)
-  2. Complete the Google sign-in flow (click the correct account, approve permissions)
-  3. After approval, call this tool with action "auth_callback" to verify success.
-- "auth_callback": Check if the OAuth flow completed. Call AFTER completing sign-in in the browser.
+  Opens the Google sign-in page in the user's default browser automatically.
+  After calling login, tell the user a sign-in page opened and they need to approve permissions.
+  Then call ask_followup with options like ["I've signed in", "Cancel"].
+  Do NOT use Playwright or try to automate the OAuth flow — the user completes it themselves.
+  When the user confirms they signed in, call this tool with action "auth_callback" to verify.
+- "auth_callback": Check if the OAuth flow completed. Call AFTER the user confirms they signed in.
 - "exec": Run a gws CLI command. Optionally pass "account" (email) to target a specific account.
   Pass the full command string (everything after "gws ").
   Examples: exec "gmail users messages list --params '{\\"userId\\": \\"me\\", \\"maxResults\\": 5}'"
             exec "calendar events list --params '{\\"calendarId\\": \\"primary\\", \\"timeMin\\": \\"2026-03-05T00:00:00Z\\"}'"
             exec "drive files list --params '{\\"pageSize\\": 10}'"
 
-Flow: status → login (if needed) → browser OAuth → auth_callback → exec.
+Flow: status → login (if needed, opens browser for user) → ask_followup → user confirms → auth_callback → exec.
 
 Account selection:
 - 0 accounts connected → call login. The user picks during OAuth.
