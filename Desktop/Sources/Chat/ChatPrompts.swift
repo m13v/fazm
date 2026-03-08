@@ -494,7 +494,6 @@ struct ChatPrompts {
     - Use what you know about {user_name} to personalize your responses.
     - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way.
     - If you don't know, say so honestly in 1-2 lines.
-    - When searching screen history, summarize findings naturally — don't dump raw data.
     </instructions>
     """
 
@@ -787,10 +786,9 @@ struct ChatPrompts {
     6. Document types: SELECT fileExtension, COUNT(*) as count FROM indexed_files WHERE fileType IN ('document', 'spreadsheet', 'presentation') GROUP BY fileExtension ORDER BY count DESC LIMIT 15
 
     **Activity data queries (may be empty for new users — skip if no results):**
-    7. Recent screen activity: SELECT appName, COUNT(*) as count FROM screenshots GROUP BY appName ORDER BY count DESC LIMIT 15
-    8. Recent observations: SELECT appName, currentActivity, contextSummary FROM observations ORDER BY createdAt DESC LIMIT 10
-    9. Conversation topics: SELECT title, category FROM transcription_sessions WHERE title IS NOT NULL ORDER BY startedAt DESC LIMIT 10
-    10. Memories: SELECT content, category FROM memories WHERE deleted = 0 ORDER BY createdAt DESC LIMIT 15
+    7. Recent observations: SELECT appName, currentActivity, contextSummary FROM observations ORDER BY createdAt DESC LIMIT 10
+    8. Conversation topics: SELECT title, category FROM transcription_sessions WHERE title IS NOT NULL ORDER BY startedAt DESC LIMIT 10
+    9. Memories: SELECT content, category FROM memories WHERE deleted = 0 ORDER BY createdAt DESC LIMIT 15
 
     STEP 2 — BUILD KNOWLEDGE GRAPH (MANDATORY — 20-50 nodes)
     This is the entire purpose of this session. You MUST call `save_knowledge_graph` with a comprehensive graph.
@@ -852,10 +850,9 @@ struct ChatPrompts {
     6. Document types: SELECT fileExtension, COUNT(*) as count FROM indexed_files WHERE fileType IN ('document', 'spreadsheet', 'presentation') GROUP BY fileExtension ORDER BY count DESC LIMIT 15
 
     **Activity data queries (may be empty for new users — skip if no results):**
-    7. Recent screen activity: SELECT appName, COUNT(*) as count FROM screenshots GROUP BY appName ORDER BY count DESC LIMIT 15
-    8. Recent observations: SELECT appName, currentActivity, contextSummary FROM observations ORDER BY createdAt DESC LIMIT 10
-    9. Conversation topics: SELECT title, category FROM transcription_sessions WHERE title IS NOT NULL ORDER BY startedAt DESC LIMIT 10
-    10. Memories: SELECT content, category FROM memories WHERE deleted = 0 ORDER BY createdAt DESC LIMIT 15
+    7. Recent observations: SELECT appName, currentActivity, contextSummary FROM observations ORDER BY createdAt DESC LIMIT 10
+    8. Conversation topics: SELECT title, category FROM transcription_sessions WHERE title IS NOT NULL ORDER BY startedAt DESC LIMIT 10
+    9. Memories: SELECT content, category FROM memories WHERE deleted = 0 ORDER BY createdAt DESC LIMIT 15
 
     STEP 2 — PROFILE SUMMARY
     After gathering data, write a 3-5 paragraph profile summary. Cover:
