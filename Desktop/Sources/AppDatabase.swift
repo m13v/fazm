@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-/// Actor-based database manager for app data (screenshots, file index, knowledge graph, etc.)
+/// Actor-based database manager for app data (file index, knowledge graph, etc.)
 actor AppDatabase {
     static let shared = AppDatabase()
 
