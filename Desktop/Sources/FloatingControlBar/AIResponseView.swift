@@ -257,8 +257,10 @@ struct AIResponseView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(exchange.aiMessage.text, forType: .string)
             } content: {
-                contentBlocksView(for: exchange.aiMessage)
-                    .padding(.horizontal, 4)
+                VStack(alignment: .leading, spacing: 4) {
+                    contentBlocksView(for: exchange.aiMessage)
+                }
+                .padding(.horizontal, 4)
             }
 
             Divider()
