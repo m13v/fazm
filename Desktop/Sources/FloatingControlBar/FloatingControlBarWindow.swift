@@ -109,8 +109,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             // Verify saved position is on a visible screen
             let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 14, y: origin.y + 14)) }
             if onScreen {
+                // Saved position was from drag, which may have included collapsedYOffset.
+                // The pill will always be at collapsed size during init, so use origin as-is
+                // for placement and derive canonicalBottomY by stripping the offset.
                 self.setFrameOrigin(origin)
-                canonicalBottomY = origin.y
+                canonicalBottomY = origin.y - FloatingControlBarWindow.collapsedYOffset
             } else {
                 centerOnMainScreen()
             }
@@ -314,6 +317,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             x: defaultPillOrigin(followFocus: false).x,
             y: canonicalBottomY + FloatingControlBarWindow.collapsedYOffset
         )
+        // NOTE: offset applied here because this path doesn't go through originForBottomCenterAnchor
 
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -569,10 +573,14 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Bottom-center: keeps bottom edge at canonicalBottomY, centers horizontally.
     /// Uses the stored canonical Y instead of frame.origin.y to prevent drift.
+    /// Adds `collapsedYOffset` when the target size matches `minBarSize` so the
+    /// collapsed pill always sits slightly higher than the expanded bar.
     private func originForBottomCenterAnchor(newSize: NSSize) -> NSPoint {
-        NSPoint(
+        let yOffset = (newSize == FloatingControlBarWindow.minBarSize)
+            ? FloatingControlBarWindow.collapsedYOffset : 0
+        return NSPoint(
             x: frame.midX - newSize.width / 2,
-            y: canonicalBottomY
+            y: canonicalBottomY + yOffset
         )
     }
 
@@ -635,10 +643,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
-            var newOrigin = self.originForBottomCenterAnchor(newSize: targetSize)
-            if !expanded {
-                newOrigin.y += FloatingControlBarWindow.collapsedYOffset
-            }
+            let newOrigin = self.originForBottomCenterAnchor(newSize: targetSize)
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
             self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
@@ -661,19 +666,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let size = expanded
             ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
             : FloatingControlBarWindow.minBarSize
-        if !expanded {
-            // Collapsed pill sits slightly higher than the expanded bar.
-            let origin = NSPoint(
-                x: frame.midX - size.width / 2,
-                y: canonicalBottomY + FloatingControlBarWindow.collapsedYOffset
-            )
-            styleMask.remove(.resizable)
-            isResizingProgrammatically = true
-            setFrame(NSRect(origin: origin, size: size), display: true, animate: true)
-            isResizingProgrammatically = false
-        } else {
-            resizeAnchored(to: size, makeResizable: false, animated: true)
-        }
+        resizeAnchored(to: size, makeResizable: false, animated: true)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
@@ -750,8 +743,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let visibleFrame = screen.visibleFrame
         let x = visibleFrame.midX - frame.width / 2
         let y = visibleFrame.minY + 20  // 20pt from bottom, just above dock
-        self.setFrameOrigin(NSPoint(x: x, y: y))
         canonicalBottomY = y
+        // Apply collapsed offset so the pill sits slightly higher on initial display
+        self.setFrameOrigin(NSPoint(x: x, y: y + FloatingControlBarWindow.collapsedYOffset))
         log("FloatingControlBarWindow: centered at (\(x), \(y)) on screen \(visibleFrame)")
     }
 
@@ -765,8 +759,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let x = visibleFrame.midX - frame.width / 2
         let y = visibleFrame.minY + 20
         isResizingProgrammatically = true
-        setFrameOrigin(NSPoint(x: x, y: y))
         canonicalBottomY = y
+        setFrameOrigin(NSPoint(x: x, y: y + FloatingControlBarWindow.collapsedYOffset))
         isResizingProgrammatically = false
         log("FloatingControlBarWindow: moved to active screen at (\(x), \(y))")
     }
@@ -835,7 +829,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // Programmatic moves (resize animations, chat open/close) should not
         // overwrite the saved position — that causes silent drift.
         guard isUserDragging else { return }
-        canonicalBottomY = self.frame.origin.y
+        // When dragging the collapsed pill, frame.origin.y includes collapsedYOffset.
+        // Strip it so canonicalBottomY stays the true base position.
+        let isCollapsedSize = (frame.size == FloatingControlBarWindow.minBarSize)
+        canonicalBottomY = self.frame.origin.y - (isCollapsedSize ? FloatingControlBarWindow.collapsedYOffset : 0)
         UserDefaults.standard.set(
             NSStringFromPoint(self.frame.origin), forKey: FloatingControlBarWindow.positionKey
         )
