@@ -449,7 +449,13 @@ class ChatProvider: ObservableObject {
 
     /// Switch bridge mode, tearing down old bridge and setting up new one
     func switchBridgeMode(to newMode: String) async {
-        log("ChatProvider: switching bridge mode to \(newMode) (current stored: \(bridgeMode))")
+        let oldMode = bridgeMode
+        log("ChatProvider: switching bridge mode to \(newMode) (current stored: \(oldMode))")
+
+        // Track the mode switch in analytics
+        if oldMode != newMode {
+            AnalyticsManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
+        }
 
         // Stop current bridge
         await acpBridge.stop()
