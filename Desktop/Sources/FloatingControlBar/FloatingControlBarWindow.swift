@@ -433,7 +433,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         // Anchor from bottom so the control bar stays visually in place, chat grows upward.
         // 146 = default text editor(40) + overhead(106) — matches the inputViewHeight formula.
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 146)
+        let savedWidth = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
+            .map(NSSizeFromString)?.width ?? 0
+        let inputWidth = max(FloatingControlBarWindow.expandedWidth, savedWidth)
+        let inputSize = NSSize(width: inputWidth, height: 146)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true)
 
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -489,7 +492,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // Clear persisted messages and reset ACP session so restart doesn't reload old chat
         onResetSession?()
 
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 146)
+        let savedWidth = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
+            .map(NSSizeFromString)?.width ?? 0
+        let inputWidth = max(FloatingControlBarWindow.expandedWidth, savedWidth)
+        let inputSize = NSSize(width: inputWidth, height: 146)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true)
         state.inputViewHeight = 146
         setupInputHeightObserver()
