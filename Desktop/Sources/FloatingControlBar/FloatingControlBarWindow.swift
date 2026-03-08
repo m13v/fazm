@@ -53,6 +53,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var pendingRestoreOrigin: NSPoint?
     /// Global mouse monitor that detects clicks outside the app to dismiss the chat.
     private var globalClickOutsideMonitor: Any?
+    /// Local monitor for Cmd+N new chat shortcut.
+    private var cmdNMonitor: Any?
     /// When true, clicks outside the app don't dismiss the chat (e.g. browser tool running).
     var suppressClickOutsideDismiss = false
 
@@ -90,6 +92,15 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         setupViews()
 
+        // Cmd+N local monitor — intercepts before text fields consume the event
+        cmdNMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 45 && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+                self?.startNewChat()
+                return nil // consume the event
+            }
+            return event
+        }
+
         if ShortcutSettings.shared.draggableBarEnabled,
            let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
             let origin = NSPointFromString(savedPosition)
@@ -115,11 +126,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             if state.showingAIConversation {
                 closeAIConversation()
             }
-            return
-        }
-        // Cmd+N starts a new chat
-        if event.keyCode == 45 && event.modifierFlags.contains(.command) { // N
-            startNewChat()
             return
         }
         super.keyDown(with: event)
@@ -637,15 +643,16 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
-        // Determine the 2× cap from the user's saved (or default) preferred height.
+        // Use user's saved preferred height if available, otherwise fall back to default.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
             .map(NSSizeFromString)
-        let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
+        let preferredHeight = savedSize?.height ?? Self.defaultBaseResponseHeight
+        let baseHeight = max(preferredHeight, Self.defaultBaseResponseHeight)
         let maxHeight = baseHeight * 2
 
-        // Start at the larger of minResponseHeight or current frame height so we never
-        // shrink the window (e.g. during follow-up exchanges where it's already expanded).
-        let startHeight = max(Self.minResponseHeight, frame.height)
+        // Start at the user's preferred height (or minResponseHeight / current frame,
+        // whichever is larger) so we restore their chosen size.
+        let startHeight = max(Self.minResponseHeight, max(preferredHeight, frame.height))
         let initialSize = NSSize(width: Self.expandedWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated)
         setupResponseHeightObserver(maxHeight: maxHeight)
