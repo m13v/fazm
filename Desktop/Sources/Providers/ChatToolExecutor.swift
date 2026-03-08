@@ -989,8 +989,8 @@ class ChatToolExecutor {
     /// Active gws login process — kept alive while the AI completes OAuth via Playwright
     private static var activeLoginProcess: Process?
 
-    /// Run `gws auth login` — extracts the OAuth URL and returns it for the AI to handle via Playwright.
-    /// The gws process stays alive in the background waiting for the OAuth callback on localhost.
+    /// Run `gws auth login` — extracts the OAuth URL, opens it in the user's default browser,
+    /// and returns a message for the AI to inform the user and show quick-reply buttons.
     private static func runGWSLogin(gwsPath: String, account: String? = nil) async -> String {
         // Kill any previous login process
         activeLoginProcess?.terminate()
@@ -1039,12 +1039,22 @@ class ChatToolExecutor {
                     // Keep the process alive — it's listening on localhost for the OAuth callback
                     activeLoginProcess = process
 
-                    // Return the URL to the AI so it can navigate there via Playwright
+                    // Open the OAuth URL in the user's default browser
+                    if let url = URL(string: authURL) {
+                        await MainActor.run {
+                            NSWorkspace.shared.open(url)
+                        }
+                        log("GWS auth login: opened OAuth URL in default browser")
+                    }
+
+                    // Return instructions for the AI to inform the user and show quick-reply buttons
                     return """
-                    {"success": false, "action_required": "oauth", \
-                    "oauth_url": "\(authURL)", \
-                    "message": "Navigate to this OAuth URL using the browser (Playwright), sign in with the user's Google account, and approve the permissions. \
-                    The gws CLI is listening on localhost for the callback. Once you complete the OAuth flow in the browser, call google_workspace with action 'auth_callback' to check if login succeeded."}
+                    {"success": false, "action_required": "user_oauth", \
+                    "message": "A Google sign-in page has been opened in the user's browser. \
+                    Tell the user they need to sign in with their Google account and approve permissions so Fazm can access their Gmail, Calendar, and Drive. \
+                    Do NOT use Playwright or try to automate this — the user must complete it themselves. \
+                    After telling the user, call ask_followup with options like [\"I've signed in\", \"Cancel\"]. \
+                    When the user confirms, call google_workspace with action 'auth_callback' to verify."}
                     """
                 }
             }
@@ -1068,7 +1078,7 @@ class ChatToolExecutor {
         }
     }
 
-    /// Check if the background gws login process completed (called after Playwright finishes OAuth)
+    /// Check if the background gws login process completed (called after user finishes OAuth in browser)
     private static func checkGWSAuthCallback() async -> String {
         guard let process = activeLoginProcess else {
             // No active login — check if we're already authenticated
