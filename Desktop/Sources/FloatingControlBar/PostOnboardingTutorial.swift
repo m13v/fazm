@@ -367,7 +367,7 @@ class TutorialChatGuide {
                     + "- **Browser automation** — control apps with your voice\n"
                     + "- **Screen awareness** — the AI sees what you see\n"
                     + "- **Text generation** — draft content hands-free\n\n"
-                    + "Press and hold **Right \u{2318}** anytime to talk to Fazm. Have fun!",
+                    + "Press and hold **Left \u{2303}** (Control) anytime to talk to Fazm. Have fun!",
                 sender: .ai
             )
             injectTutorialMessage(completionMessage, barState: barState)
@@ -616,7 +616,7 @@ struct PostOnboardingTutorialView: View {
         case .pressKey:
             VStack(spacing: 8) {
                 KeyboardBottomRowView(pulseScale: viewModel.pulseScale)
-                Text("Press and hold Right ⌘ to talk")
+                Text("Press and hold Left ⌃ to talk")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(FazmColors.textPrimary)
                     .multilineTextAlignment(.center)
@@ -642,7 +642,7 @@ struct PostOnboardingTutorialView: View {
                     SpeakingPromptText(text: "Google fazm.ai, click the first result, read through the website, then go to my Twitter and draft a post about it")
                 }
 
-                Text("Then release ⌘ to send")
+                Text("Then release ⌃ to send")
                     .font(.system(size: 12))
                     .foregroundColor(FazmColors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -658,7 +658,7 @@ struct PostOnboardingTutorialView: View {
                 Text("You're ready!")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(FazmColors.textPrimary)
-                Text("Right ⌘ → speak → release, anytime")
+                Text("Left ⌃ → speak → release, anytime")
                     .font(.system(size: 12))
                     .foregroundColor(FazmColors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -707,7 +707,7 @@ struct SpeakingPromptText: View {
 
 // MARK: - KeyboardBottomRowView
 
-/// Full Mac keyboard layout with the Right ⌘ key highlighted and animated.
+/// Full Mac keyboard layout with the Left ⌃ key highlighted and animated.
 struct KeyboardBottomRowView: View {
     var pulseScale: CGFloat
 
@@ -770,11 +770,11 @@ struct KeyboardBottomRowView: View {
             // Row 6: Bottom modifier row
             HStack(spacing: gap) {
                 key("fn", w: 28)
-                key("⌃", w: 28)
+                leftControlKey   // Left ⌃ — highlighted
                 key("⌥", w: 34)
                 key("⌘", w: 38)
                 key("", w: 130)  // space bar
-                rightCommandKey   // Right ⌘ — highlighted
+                key("⌘", w: 38)
                 key("⌥", w: 34)
                 // Arrow cluster
                 HStack(spacing: 1) {
@@ -815,11 +815,11 @@ struct KeyboardBottomRowView: View {
         }
     }
 
-    private var rightCommandKey: some View {
-        Text("⌘")
+    private var leftControlKey: some View {
+        Text("⌃")
             .font(.system(size: 12, weight: .semibold))
             .foregroundColor(.white)
-            .frame(width: 38, height: kh)
+            .frame(width: 28, height: kh)
             .background(
                 RoundedRectangle(cornerRadius: 4)
                     .fill(FazmColors.purplePrimary.opacity(isPressed ? 0.6 : 0.25))
