@@ -286,7 +286,7 @@ actor AppDatabase {
             queue = try DatabasePool(path: dbPath, configuration: config)
         } catch {
             // If opening fails (e.g. disk I/O error on WAL), try once more without WAL files
-            log("RewindDatabase: Failed to open database: \(error), cleaning WAL and retrying...")
+            logError("RewindDatabase: Failed to open database, cleaning WAL and retrying", error: error)
             removeWALFiles(at: dbPath)
             do {
                 queue = try DatabasePool(path: dbPath, configuration: config)
@@ -484,7 +484,7 @@ actor AppDatabase {
                     log("RewindDatabase: Migrated \(name)")
                 }
             } catch {
-                log("RewindDatabase: Failed to migrate \(name): \(error.localizedDescription)")
+                logError("RewindDatabase: Failed to migrate \(name)", error: error)
             }
         }
 
