@@ -2136,6 +2136,7 @@ class ChatProvider: ObservableObject {
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
+        var toolResults: [String: String] = [:]  // Track last result per tool for success/failure
         var activeBrowserToolCount = 0
 
         do {
@@ -2170,6 +2171,7 @@ class ChatProvider: ObservableObject {
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(toolCall)
                 log("Fazm tool \(name) executed for callId=\(callId)")
+                await MainActor.run { toolResults[name] = result }
                 return result
             }
             let toolActivityHandler: ACPBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
@@ -2210,7 +2212,14 @@ class ChatProvider: ObservableObject {
                         }
                     } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
                         let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+                        let result = toolResults.removeValue(forKey: name)
+                        let isError = result?.hasPrefix("Error:") == true || result?.hasPrefix("error:") == true
+                        AnalyticsManager.shared.chatToolCallCompleted(
+                            toolName: name,
+                            durationMs: durationMs,
+                            success: !isError,
+                            error: isError ? result : nil
+                        )
                         if (name.contains("browser") || name.contains("playwright")) {
                             activeBrowserToolCount = max(0, activeBrowserToolCount - 1)
                             if activeBrowserToolCount == 0 {
@@ -2389,6 +2398,21 @@ class ChatProvider: ObservableObject {
                 bridgeMode: bridgeMode
             )
 
+            // Track conversation depth (total messages in this session)
+            AnalyticsManager.shared.chatConversationDepth(
+                messageCount: messages.count,
+                sessionId: capturedSessionId
+            )
+
+            // Track floating bar response metrics separately
+            if sessionKey == "floating" {
+                AnalyticsManager.shared.floatingBarResponseReceived(
+                    durationMs: durationMs,
+                    responseLength: responseLength,
+                    toolCount: toolNames.count
+                )
+            }
+
             let r = queryResult
             Task.detached(priority: .background) {
                 await APIClient.shared.recordLlmUsage(
@@ -2464,6 +2488,7 @@ class ChatProvider: ObservableObject {
             } else if let bridgeError = error as? BridgeError, case .creditExhausted = bridgeError {
                 // Built-in credits exhausted — auto-switch to personal mode
                 log("ChatProvider: credit exhausted, auto-switching to personal mode")
+                AnalyticsManager.shared.creditExhausted(previousMode: bridgeMode)
                 if bridgeMode == "builtin" {
                     await switchBridgeMode(to: "personal")
                 }
