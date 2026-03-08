@@ -2381,7 +2381,8 @@ class ChatProvider: ObservableObject {
                 toolCallCount: toolNames.count,
                 toolNames: toolNames,
                 costUsd: queryResult.costUsd,
-                messageLength: responseLength
+                messageLength: responseLength,
+                bridgeMode: bridgeMode
             )
 
             let r = queryResult
