@@ -1353,6 +1353,16 @@ class FloatingControlBarManager {
             }
         }
 
+        // Wire up auto-follow-up callback (e.g. after OAuth completes in browser)
+        ChatToolExecutor.onSendFollowUp = { [weak self, weak barWindow, weak chatProvider] message in
+            guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
+            Task { @MainActor in
+                log("Auto-sending follow-up: \(message)")
+                barWindow.state.suggestedReplies = []
+                await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+            }
+        }
+
         // Observe messages for streaming response
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
