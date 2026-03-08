@@ -128,18 +128,17 @@ struct FloatingControlBarView: View {
                     .frame(height: 50)
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
-                HStack(spacing: 6) {
+                VStack(spacing: 4) {
                     compactButton(title: "Push to talk", keys: [shortcutSettings.pttKey.symbol]) {
                         onAskAI()
                     }
-                    compactLabel("Ask Fazm", keys: shortcutSettings.askFazmKey.hintKeys)
+                    compactLabel("Open chat", keys: shortcutSettings.askFazmKey.hintKeys)
                     if state.hasLastConversation && !state.showingAIConversation {
                         compactButton(title: "New chat", keys: ["⌘", "N"], action: onNewChat)
                     }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .frame(height: 50)
                 .transition(.opacity)
             } else {
                 compactCircleView
