@@ -15,6 +15,7 @@ struct AIResponseView: View {
     let chatHistory: [FloatingChatExchange]
     @Binding var isVoiceFollowUp: Bool
     @Binding var voiceFollowUpTranscript: String
+    @Binding var suggestedReplies: [String]
 
     var onClose: (() -> Void)?
     var onNewChat: (() -> Void)?
@@ -104,6 +105,10 @@ struct AIResponseView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if !isLoading && !suggestedReplies.isEmpty {
+                suggestedRepliesView
+            }
 
             if !isVoiceFollowUp {
                 followUpInputView
@@ -370,6 +375,34 @@ struct AIResponseView: View {
         .padding(.vertical, 8)
         .background(Color.red.opacity(0.15))
         .cornerRadius(8)
+    }
+
+    // MARK: - Suggested Replies
+
+    private var suggestedRepliesView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(suggestedReplies, id: \.self) { reply in
+                    Button(action: {
+                        suggestedReplies = []
+                        onSendFollowUp?(reply)
+                    }) {
+                        Text(reply)
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(16)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     // MARK: - Follow-Up Input
