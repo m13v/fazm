@@ -1,5 +1,4 @@
 import SwiftUI
-import AuthenticationServices
 
 struct SignInView: View {
     @ObservedObject var authState: AuthState
@@ -53,7 +52,7 @@ struct SignInView: View {
                 VStack(spacing: 12) {
                     // Apple Sign In
                     Button(action: {
-                        signInWithApple()
+                        performAppleSignIn()
                     }) {
                         HStack(spacing: 10) {
                             Image(systemName: "apple.logo")
@@ -81,7 +80,7 @@ struct SignInView: View {
 
                     // Google Sign In
                     Button(action: {
-                        signInWithGoogle()
+                        performGoogleSignIn()
                     }) {
                         HStack(spacing: 10) {
                             Image(systemName: "globe")
@@ -132,70 +131,39 @@ struct SignInView: View {
 
     // MARK: - Sign In Methods
 
-    private func signInWithApple() {
+    private func performAppleSignIn() {
         authState.isLoading = true
         authState.error = nil
 
-        let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
-
-        let controller = ASAuthorizationController(authorizationRequests: [request])
-        let delegate = AppleSignInDelegate(authState: authState)
-        controller.delegate = delegate
-        // Keep a strong reference to the delegate
-        AppleSignInDelegate.current = delegate
-        controller.performRequests()
-    }
-
-    private func signInWithGoogle() {
-        authState.isLoading = true
-        authState.error = nil
-
-        // Google sign-in placeholder — requires GoogleSignIn SDK integration
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            authState.isLoading = false
-            authState.error = "Google Sign-In is not yet configured."
-        }
-    }
-}
-
-// MARK: - Apple Sign In Delegate
-
-class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
-    static var current: AppleSignInDelegate?
-
-    private let authState: AuthState
-
-    init(authState: AuthState) {
-        self.authState = authState
-    }
-
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        Task { @MainActor in
-            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                let email = credential.email
-                let userId = credential.user
-                authState.update(isSignedIn: true, userEmail: email)
-                NSLog("SignInView: Apple sign-in succeeded, userId=%@, email=%@", userId, email ?? "nil")
-            }
-            authState.isLoading = false
-            AppleSignInDelegate.current = nil
-        }
-    }
-
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        Task { @MainActor in
-            let nsError = error as NSError
-            if nsError.domain == ASAuthorizationError.errorDomain,
-               nsError.code == ASAuthorizationError.canceled.rawValue {
-                // User cancelled — don't show error
-                NSLog("SignInView: Apple sign-in cancelled by user")
-            } else {
+        Task {
+            do {
+                try await AuthService.shared.signInWithApple()
+                authState.update(isSignedIn: true, userEmail: AuthService.shared.userEmail)
+                authState.isLoading = false
+            } catch AuthError.cancelled {
+                authState.isLoading = false
+            } catch {
                 authState.error = "Apple Sign-In failed: \(error.localizedDescription)"
-                NSLog("SignInView: Apple sign-in failed: %@", error.localizedDescription)
+                authState.isLoading = false
             }
-            authState.isLoading = false
-            AppleSignInDelegate.current = nil
+        }
+    }
+
+    private func performGoogleSignIn() {
+        authState.isLoading = true
+        authState.error = nil
+
+        Task {
+            do {
+                try await AuthService.shared.signInWithGoogle()
+                authState.update(isSignedIn: true, userEmail: AuthService.shared.userEmail)
+                authState.isLoading = false
+            } catch AuthError.cancelled {
+                authState.isLoading = false
+            } catch {
+                authState.error = "Google Sign-In failed: \(error.localizedDescription)"
+                authState.isLoading = false
+            }
         }
     }
 }
