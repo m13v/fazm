@@ -71,6 +71,12 @@ class PostHogManager {
         PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: [key: value])
     }
 
+    /// Register super properties that are sent with every event
+    func register(properties: [String: Any]) {
+        guard isInitialized else { return }
+        PostHogSDK.shared.register(properties)
+    }
+
     // MARK: - Event Tracking
 
     /// Track an event with optional properties
