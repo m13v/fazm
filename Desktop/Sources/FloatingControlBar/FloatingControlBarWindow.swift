@@ -1291,6 +1291,14 @@ class FloatingControlBarManager {
         // in a shared provider that may already have many messages
         let messageCountBefore = provider.messages.count
 
+        // Wire up suggested replies callback before sending
+        barWindow.state.suggestedReplies = []
+        ChatToolExecutor.onQuickReplyOptions = { [weak barWindow] options in
+            Task { @MainActor in
+                barWindow?.state.suggestedReplies = options
+            }
+        }
+
         // Observe messages for streaming response
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
