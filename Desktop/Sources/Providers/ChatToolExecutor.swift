@@ -1047,14 +1047,18 @@ class ChatToolExecutor {
                         log("GWS auth login: opened OAuth URL in default browser")
                     }
 
-                    // Return instructions for the AI to inform the user and show quick-reply buttons
+                    // Show quick-reply buttons directly from Swift (don't rely on the AI to call ask_followup)
+                    onQuickReplyOptions?(["I've signed in", "Cancel"])
+
+                    // Return instructions for the AI to inform the user
                     return """
                     {"success": false, "action_required": "user_oauth", \
                     "message": "A Google sign-in page has been opened in the user's browser. \
-                    Tell the user they need to sign in with their Google account and approve permissions so Fazm can access their Gmail, Calendar, and Drive. \
-                    Do NOT use Playwright or try to automate this — the user must complete it themselves. \
-                    After telling the user, call ask_followup with options like [\"I've signed in\", \"Cancel\"]. \
-                    When the user confirms, call google_workspace with action 'auth_callback' to verify."}
+                    Tell the user briefly that they need to sign in with their Google account and approve permissions for Fazm. \
+                    Quick-reply buttons are already shown. Do NOT call ask_followup — it's already done. \
+                    Do NOT use Playwright or try to automate this. \
+                    When the user says they've signed in, call google_workspace with action 'auth_callback' to verify, \
+                    then retry the original request."}
                     """
                 }
             }
@@ -1109,7 +1113,7 @@ class ChatToolExecutor {
         activeLoginProcess = nil
 
         if exitCode == 0 {
-            log("GWS auth login completed successfully via Playwright")
+            log("GWS auth login completed successfully")
             return """
             {"success": true, "message": "Google Workspace connected successfully! You can now access Gmail, Calendar, Drive, Sheets, and Docs."}
             """
