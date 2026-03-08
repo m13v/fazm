@@ -643,17 +643,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
-        // Use user's saved preferred height if available, otherwise fall back to default.
+        // Use user's saved preferred size if available, otherwise fall back to defaults.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
             .map(NSSizeFromString)
         let preferredHeight = savedSize?.height ?? Self.defaultBaseResponseHeight
+        let preferredWidth = savedSize?.width ?? Self.expandedWidth
         let baseHeight = max(preferredHeight, Self.defaultBaseResponseHeight)
         let maxHeight = baseHeight * 2
 
-        // Start at the user's preferred height (or minResponseHeight / current frame,
+        // Start at the user's preferred size (or minResponseHeight / current frame,
         // whichever is larger) so we restore their chosen size.
         let startHeight = max(Self.minResponseHeight, max(preferredHeight, frame.height))
-        let initialSize = NSSize(width: Self.expandedWidth, height: startHeight)
+        let startWidth = max(Self.expandedWidth, preferredWidth)
+        let initialSize = NSSize(width: startWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated)
         setupResponseHeightObserver(maxHeight: maxHeight)
     }
@@ -676,7 +678,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 // Only expand, never auto-shrink.
                 guard clampedHeight > self.frame.height + 2 else { return }
                 self.resizeAnchored(
-                    to: NSSize(width: Self.expandedWidth, height: clampedHeight),
+                    to: NSSize(width: self.frame.width, height: clampedHeight),
                     makeResizable: true,
                     animated: true
                 )
