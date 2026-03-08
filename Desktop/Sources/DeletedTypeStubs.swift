@@ -220,10 +220,7 @@ struct InstalledApp: Identifiable, Codable, Equatable {
 
 // MARK: - API Client
 
-enum AuthError: Error {
-    case notSignedIn
-    case unauthorized
-}
+// AuthError moved to AuthService.swift
 
 struct ChatMessageResponse: Codable {
     var id: String
@@ -856,20 +853,7 @@ class AppProvider: ObservableObject {
 
 // MARK: - Views (Deleted Pages)
 
-struct SignInView: View {
-    var authState: AuthState
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Sign In")
-                .font(.title)
-                .foregroundColor(.white)
-            Text("Authentication has been removed in this build.")
-                .foregroundColor(.gray)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-    }
-}
+// SignInView moved to SignInView.swift
 
 struct DashboardPage: View {
     var viewModel: DashboardViewModel
