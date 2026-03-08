@@ -711,6 +711,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
   let fullPrompt = "";
   let isNewSession = false;
   let retryingWithHint = false;
+  let sessionRetryCount = 0;
   const pendingTools: string[] = [];
   lastTextContentBlockIndex = -1;
   pendingBoundary = false;
@@ -897,13 +898,16 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         return;
       }
       // If session/prompt failed while reusing an existing session, retry once with a fresh one.
-      // Do NOT retry if we already started fresh (isNewSession) — that would infinite-loop.
-      if (!isNewSession && sessionId) {
+      // Guard: isNewSession check prevents retry after a fresh session, and sessionRetryCount
+      // caps retries to 1 as a safety net against infinite loops (e.g. if session/resume
+      // causes isNewSession to stay false).
+      if (!isNewSession && sessionId && sessionRetryCount === 0) {
+        sessionRetryCount++;
         logErr(`session/prompt failed with existing session, retrying with fresh session: ${err}`);
         sessions.delete(sessionKey);
         activeSessionId = "";
         // Clear msg.resume so the retry creates a truly fresh session
-        // instead of resuming the same broken session (which would infinite-loop).
+        // instead of resuming the same broken session.
         msg.resume = undefined;
         return handleQuery(msg);
       }
