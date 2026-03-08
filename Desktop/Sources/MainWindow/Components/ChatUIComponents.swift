@@ -215,7 +215,7 @@ struct DiscoveryCard: View {
 // MARK: - Typing Indicator
 
 struct TypingIndicator: View {
-    @State private var phase = 0.0
+    @State private var animating = false
 
     var body: some View {
         HStack(spacing: 4) {
@@ -223,20 +223,19 @@ struct TypingIndicator: View {
                 Circle()
                     .fill(Color.secondary)
                     .frame(width: 6, height: 6)
-                    .opacity(dotOpacity(for: index))
+                    .offset(y: animating ? -4 : 0)
+                    .opacity(animating ? 1.0 : 0.4)
+                    .animation(
+                        .easeInOut(duration: 0.4)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.15),
+                        value: animating
+                    )
             }
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                phase = 1.0
-            }
+            animating = true
         }
-    }
-
-    private func dotOpacity(for index: Int) -> Double {
-        let offset = Double(index) * 0.3
-        let adjusted = (phase + offset).truncatingRemainder(dividingBy: 1.0)
-        return 0.3 + adjusted * 0.7
     }
 }
 
