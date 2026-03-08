@@ -221,7 +221,6 @@ class PushToTalkManager: ObservableObject {
     // Track whether PTT actually opened the chat (vs it was already open)
     chatWasOpenBeforePTT = barState?.showingAIConversation == true
     pttOpenedChat = true
-    preVoiceInputText = barState?.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
     if !chatWasOpenBeforePTT {
       FloatingControlBarManager.shared.moveToActiveScreen()
       FloatingControlBarManager.shared.openAIInput()
@@ -230,6 +229,8 @@ class PushToTalkManager: ObservableObject {
       FloatingControlBarManager.shared.moveToActiveScreen()
       FloatingControlBarManager.shared.expandFromCollapsed(instant: true)
     }
+    // Capture existing input AFTER opening the chat so any restored draft is included
+    preVoiceInputText = barState?.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
 
     AnalyticsManager.shared.floatingBarPTTStarted(mode: "hold")
     updateBarState()
@@ -254,7 +255,6 @@ class PushToTalkManager: ObservableObject {
     // Track whether PTT actually opened the chat (vs it was already open)
     chatWasOpenBeforePTT = barState?.showingAIConversation == true
     pttOpenedChat = true
-    preVoiceInputText = barState?.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
     if !chatWasOpenBeforePTT {
       FloatingControlBarManager.shared.moveToActiveScreen()
       FloatingControlBarManager.shared.openAIInput()
@@ -263,6 +263,8 @@ class PushToTalkManager: ObservableObject {
       FloatingControlBarManager.shared.moveToActiveScreen()
       FloatingControlBarManager.shared.expandFromCollapsed(instant: true)
     }
+    // Capture existing input AFTER opening the chat so any restored draft is included
+    preVoiceInputText = barState?.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
 
     AnalyticsManager.shared.floatingBarPTTStarted(mode: "locked")
 
