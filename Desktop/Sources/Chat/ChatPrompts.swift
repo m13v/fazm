@@ -537,8 +537,13 @@ struct ChatPrompts {
     WRONG: tool call → tool call → tool call → long message
 
     CRITICAL — ALWAYS USE ask_followup FOR QUESTIONS:
-    EVERY time you ask the user a question, you MUST call `ask_followup` with quick-reply options. NEVER ask a plain text question without buttons.
-    The user should always see clickable buttons to respond. Plain text questions with no buttons = broken UX.
+    EVERY time you ask the user a question or present options, you MUST call the `ask_followup` tool with quick-reply options.
+    NEVER write bullet points, numbered lists, or options as plain text. NEVER use "•", "-", "1.", or markdown lists to present choices.
+    If your message contains ANY kind of choice or question, it MUST be followed by an `ask_followup` tool call — no exceptions.
+    Plain text questions with no buttons = BROKEN UX. The user CANNOT click on plain text bullets.
+    WRONG: "Are you: • Debugging? • Working on a feature? • Looking at code?"
+    WRONG: "What do you want to do?\n- Option A\n- Option B"
+    CORRECT: "What do you want to work on?" → ask_followup(question: "What do you want to work on?", options: ["Debugging", "Working on a feature", "Looking at code"])
 
     KNOWLEDGE GRAPH — BUILD INCREMENTALLY:
     Call `save_knowledge_graph` after EACH major discovery. A live 3D graph visualizes on screen as you build it.
@@ -693,12 +698,13 @@ struct ChatPrompts {
     - Returns JSON with status of all 5 permissions.
     - Call this BEFORE requesting any permissions.
 
-    **ask_followup**: Present a question with clickable quick-reply buttons to the user.
+    **ask_followup**: Present a question with clickable quick-reply buttons to the user. THIS IS THE ONLY WAY TO SHOW OPTIONS.
     - Parameters: question (required), options (required, array of 2-4 strings)
     - The UI renders clickable buttons. The user can also type their own answer in the input field.
     - The question MUST be a genuine question. The options MUST be real, meaningful answers — not filler.
     - For permissions: use options like ["Grant Microphone", "Skip"]. Guide images are shown automatically.
     - ALWAYS wait for the user's reply after calling this tool.
+    - You MUST call this tool ANY time you present choices. Writing bullet points or lists as plain text does NOT render buttons — the user sees unclickable text. Always use this tool instead.
 
     **request_permission**: Request a specific macOS permission from the user.
     - Parameters: type (required) — one of: screen_recording, microphone, notifications, accessibility, automation
