@@ -19,11 +19,11 @@ class AnalyticsManager {
     // MARK: - Initialization
 
     func initialize() {
-        // TODO: restore dev build guard after testing bridge_mode analytics
-        // guard !Self.isDevBuild else {
-        //     log("Analytics: Skipping initialization (development build)")
-        //     return
-        // }
+        // Skip analytics in development builds
+        guard !Self.isDevBuild else {
+            log("Analytics: Skipping initialization (development build)")
+            return
+        }
         PostHogManager.shared.initialize()
     }
 
