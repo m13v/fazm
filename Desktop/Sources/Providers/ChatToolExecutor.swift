@@ -21,6 +21,8 @@ class ChatToolExecutor {
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
     /// Called when AI invokes setup_browser_extension — opens the setup wizard, calls back on completion/skip
     static var onSetupBrowserExtension: ((_ onDone: @escaping (_ completed: Bool) -> Void) -> Void)?
+    /// Called to programmatically send a follow-up message (e.g. after OAuth completes)
+    static var onSendFollowUp: ((_ message: String) -> Void)?
 
     private static var fileScanFileCount = 0
 
@@ -1047,16 +1049,35 @@ class ChatToolExecutor {
                         log("GWS auth login: opened OAuth URL in default browser")
                     }
 
-                    // Show quick-reply buttons directly from Swift (don't rely on the AI to call ask_followup)
-                    onQuickReplyOptions?(["I've signed in", "Cancel"])
+                    // Monitor the gws process in the background — when it exits (OAuth callback received),
+                    // automatically continue the conversation
+                    let monitoredProcess = process
+                    Task.detached {
+                        // Poll until the process finishes (OAuth redirect hits localhost)
+                        while monitoredProcess.isRunning {
+                            try? await Task.sleep(nanoseconds: 500_000_000)
+                        }
+                        let exitCode = monitoredProcess.terminationStatus
+                        if exitCode == 0 {
+                            log("GWS OAuth completed in browser — auto-continuing conversation")
+                            await MainActor.run {
+                                onSendFollowUp?("I've signed in to Google")
+                            }
+                        } else {
+                            log("GWS OAuth process exited with code \(exitCode)")
+                            await MainActor.run {
+                                onQuickReplyOptions?(["Try again", "Cancel"])
+                            }
+                        }
+                    }
 
                     // Return instructions for the AI to inform the user
                     return """
                     {"success": false, "action_required": "user_oauth", \
                     "message": "A Google sign-in page has been opened in the user's browser. \
                     Tell the user briefly that they need to sign in with their Google account and approve permissions for Fazm. \
-                    Quick-reply buttons are already shown. Do NOT call ask_followup — it's already done. \
-                    Do NOT use Playwright or try to automate this. \
+                    The conversation will continue automatically once sign-in completes. \
+                    Do NOT call ask_followup. Do NOT use Playwright or try to automate this. \
                     When the user says they've signed in, call google_workspace with action 'auth_callback' to verify, \
                     then retry the original request."}
                     """
@@ -1259,6 +1280,7 @@ class ChatToolExecutor {
         onKnowledgeGraphUpdated = nil
         onScanFilesCompleted = nil
         onSetupBrowserExtension = nil
+        onSendFollowUp = nil
         fileScanFileCount = 0
 
         return "Onboarding completed successfully! The app is now set up."
