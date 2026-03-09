@@ -367,7 +367,8 @@ class TutorialChatGuide {
                     + "- **Browser automation** — control apps with your voice\n"
                     + "- **Screen awareness** — the AI sees what you see\n"
                     + "- **Text generation** — draft content hands-free\n\n"
-                    + "Press and hold **Left \u{2303}** (Control) anytime to talk to Fazm. Have fun!",
+                    + "Press and hold **Left \u{2303}** (Control) anytime to talk to Fazm. "
+                    + "You can change this shortcut later in Settings. Have fun!",
                 sender: .ai
             )
             injectTutorialMessage(completionMessage, barState: barState)
@@ -388,11 +389,11 @@ class TutorialChatGuide {
                 + "Let's try a few more things to see what Fazm can do. "
                 + "**Test \(stepNumber)/\(totalSteps)** — \(prompt.description):\n\n"
                 + "> \"\(prompt.instruction)\"\n\n"
-                + "Press **Right \u{2318}**, say the command above, then release to send."
+                + "Press and hold **Left \u{2303}** (Control), say the command above, then release to send."
         } else {
             guideText = "Great! **Test \(stepNumber)/\(totalSteps)** — \(prompt.description):\n\n"
                 + "> \"\(prompt.instruction)\"\n\n"
-                + "Press **Right \u{2318}**, say it, then release."
+                + "Press and hold **Left \u{2303}** (Control), say it, then release."
         }
 
         let guideMessage = ChatMessage(text: guideText, sender: .ai)
