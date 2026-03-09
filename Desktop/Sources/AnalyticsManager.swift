@@ -818,6 +818,10 @@ class AnalyticsManager {
         PostHogManager.shared.track("credit_exhausted", properties: props)
     }
 
+    func claudeDisconnected() {
+        PostHogManager.shared.track("claude_disconnected")
+    }
+
     // MARK: - Display Info
 
     func trackDisplayInfo() {
