@@ -3,6 +3,9 @@
 ## Project Overview
 Fazm — a macOS desktop app (Swift). Open source at github.com/m13v/fazm.
 
+## Session Recording
+See `scripts/SESSION-RECORDING.md` for full guide — toggle per-user recording, view chunks, architecture.
+
 ## Logs & Debugging
 
 ### Local App Logs
