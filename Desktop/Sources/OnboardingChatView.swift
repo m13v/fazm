@@ -608,7 +608,7 @@ struct OnboardingChatView: View {
                 if conversationContext.isEmpty {
                     resumeSystemPrompt = systemPrompt + stepsNote
                 } else {
-                    resumeSystemPrompt = systemPrompt + "\n\n<conversation_so_far>\n" + conversationContext + "\n</conversation_so_far>" + stepsNote + "\n\nThe user's app just restarted after granting a macOS permission. Continue the onboarding from where you left off — do NOT re-ask questions the user already answered above."
+                    resumeSystemPrompt = systemPrompt + "\n\n<conversation_so_far>\n" + conversationContext + "\n</conversation_so_far>" + stepsNote + "\n\nThe user's app just restarted after granting a macOS permission. Continue the onboarding from where you left off. CRITICAL: Do NOT re-ask for the user's name or any other information already visible in the conversation above. If you previously addressed the user by name, that name is confirmed. Jump straight to the next incomplete step."
                 }
 
                 // Wait for bridge warmup before sending
