@@ -589,10 +589,17 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
-        let constrainedSize = NSSize(
+        var constrainedSize = NSSize(
             width: max(size.width, FloatingControlBarWindow.minBarSize.width),
             height: max(size.height, FloatingControlBarWindow.minBarSize.height)
         )
+
+        // Clamp height to fit within the screen's visible frame so the window
+        // never expands beyond screen bounds.
+        if let screenFrame = (self.screen ?? NSScreen.main)?.visibleFrame {
+            constrainedSize.height = min(constrainedSize.height, screenFrame.height)
+        }
+
         let newOrigin = originForBottomCenterAnchor(newSize: constrainedSize)
 
         log("FloatingControlBar: resizeAnchored to \(constrainedSize) origin=\(newOrigin) resizable=\(makeResizable) animated=\(animated) from=\(frame.size) fromOrigin=\(frame.origin) canonicalY=\(canonicalBottomY)")
@@ -616,7 +623,14 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
         NSAnimationContext.endGrouping()
 
-        self.isResizingProgrammatically = false
+        if animated {
+            // Reset flag after animation duration to prevent overlapping resizes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.isResizingProgrammatically = false
+            }
+        } else {
+            self.isResizingProgrammatically = false
+        }
     }
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
@@ -840,10 +854,15 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        NSSize(
+        var clamped = NSSize(
             width: max(frameSize.width, FloatingControlBarWindow.minBarSize.width),
             height: max(frameSize.height, FloatingControlBarWindow.minBarSize.height)
         )
+        // Prevent resizing beyond screen bounds.
+        if let screenFrame = (sender.screen ?? NSScreen.main)?.visibleFrame {
+            clamped.height = min(clamped.height, screenFrame.height)
+        }
+        return clamped
     }
 
     func windowDidResize(_ notification: Notification) {
@@ -1390,7 +1409,7 @@ class FloatingControlBarManager {
                                 barWindow.state.showingAIResponse = true
                             }
                         }
-                        barWindow.resizeToResponseHeightPublic(animated: true)
+                        barWindow.resizeToResponseHeightPublic(animated: false)
                     }
                 } else {
                     barWindow?.state.isAILoading = false
