@@ -24,9 +24,10 @@ enum SkillInstaller {
         "Documents", "Creation", "Research & Planning", "Google Workspace", "Social Media", "Discovery"
     ]
 
-    /// Auto-discovered skill names from all *.skill.md files in the app bundle.
+    /// Auto-discovered skill names from all *.skill.md files in the app bundle's BundledSkills directory.
     static var bundledSkillNames: [String] {
-        guard let bundleURL = Bundle.resourceBundle.resourceURL else { return [] }
+        guard let bundleURL = Bundle.resourceBundle.resourceURL?
+            .appendingPathComponent("BundledSkills") else { return [] }
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: bundleURL, includingPropertiesForKeys: nil
         )) ?? []
@@ -38,7 +39,7 @@ enum SkillInstaller {
 
     /// Parse the `description:` field from a skill's YAML frontmatter.
     private static func skillDescription(for name: String) -> String {
-        guard let url = Bundle.resourceBundle.url(forResource: "\(name).skill", withExtension: "md"),
+        guard let url = Bundle.resourceBundle.url(forResource: "\(name).skill", withExtension: "md", subdirectory: "BundledSkills"),
               let content = try? String(contentsOf: url) else { return name }
         for line in content.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -82,10 +83,11 @@ enum SkillInstaller {
                 continue
             }
 
-            // Find the bundled skill file (stored as {name}.skill.md, flattened by SPM)
+            // Find the bundled skill file in BundledSkills subdirectory
             guard let bundledURL = Bundle.resourceBundle.url(
                 forResource: "\(name).skill",
-                withExtension: "md"
+                withExtension: "md",
+                subdirectory: "BundledSkills"
             ) else {
                 failed.append(name)
                 continue
