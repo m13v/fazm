@@ -12,6 +12,7 @@ class ShortcutSettings: ObservableObject {
     /// Available modifier keys for push-to-talk.
     enum PTTKey: String, CaseIterable {
         case leftControl = "Left Control (⌃)"
+        case leftCommand = "Left Command (⌘)"
         case option = "Option (⌥)"
         case rightCommand = "Right Command (⌘)"
         case fn = "Fn / Globe"
@@ -19,6 +20,7 @@ class ShortcutSettings: ObservableObject {
         var symbol: String {
             switch self {
             case .leftControl: return "\u{2303}"
+            case .leftCommand: return "\u{2318}"
             case .option: return "\u{2325}"
             case .rightCommand: return "Right \u{2318}"
             case .fn: return "\u{1F310}"
