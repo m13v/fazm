@@ -324,7 +324,14 @@ struct FloatingControlBarView: View {
                 if isStillGenerating {
                     // AI is still working — archive partial exchange and interrupt
                     let currentQuery = state.displayedQuery
-                    if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty {
+                    if var currentMessage = state.currentAIMessage, !currentQuery.isEmpty {
+                        // Complete any still-running tool calls before archiving so spinners don't freeze in history
+                        currentMessage.contentBlocks = currentMessage.contentBlocks.map { block in
+                            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = block {
+                                return .toolCall(id: id, name: name, status: .completed, toolUseId: toolUseId, input: input, output: output)
+                            }
+                            return block
+                        }
                         state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                     }
                     state.displayedQuery = message
