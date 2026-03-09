@@ -963,6 +963,18 @@ class ChatToolExecutor {
                 {"success": false, "message": "Google Workspace CLI (gws) is not installed."}
                 """
             }
+            // Skip login if already authenticated with the requested account
+            if isGWSAuthenticated, let account = account {
+                let (accounts, _) = listGWSAccounts()
+                let hasAccount = accounts.contains { $0["email"] == account }
+                if hasAccount {
+                    log("GWS login skipped — already authenticated with \(account)")
+                    return """
+                    {"success": true, "already_connected": true, \
+                    "message": "Already connected to Google Workspace as \(account). Ready to use Gmail, Calendar, Drive, Sheets, and Docs."}
+                    """
+                }
+            }
             return await runGWSLogin(gwsPath: gwsPath, account: account)
 
         case "auth_callback":
@@ -1236,7 +1248,7 @@ class ChatToolExecutor {
                 return stdout
             } else {
                 let errMsg = stderr.isEmpty ? stdout : stderr
-                log("GWS command failed: \(command) exit=\(exitCode)")
+                log("GWS command failed: \(command) exit=\(exitCode) error=\(errMsg.prefix(500))")
                 return "Error: \(errMsg.prefix(1000))"
             }
         } catch {
