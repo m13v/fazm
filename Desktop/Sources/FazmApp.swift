@@ -56,6 +56,7 @@ class AuthState: ObservableObject {
 
     func update(isSignedIn: Bool, userEmail: String? = nil) {
         self.isSignedIn = isSignedIn
+        UserDefaults.standard.set(isSignedIn, forKey: Self.kAuthIsSignedIn)
         if let email = userEmail {
             self.userEmail = email
         }
@@ -612,6 +613,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Create menu
         let menu = NSMenu()
+
+        // Version item (non-clickable header)
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let versionItem = NSMenuItem(title: "Fazm v\(version)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         // Open app item
         let openItem = NSMenuItem(title: "Open Settings", action: #selector(openFazmFromMenu), keyEquivalent: "o")
