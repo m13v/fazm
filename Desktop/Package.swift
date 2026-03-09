@@ -36,7 +36,7 @@ let package = Package(
             ],
             path: "Sources",
             resources: [
-                .copy("Resources/BundledSkills"),
+                .copy("BundledSkills"),
                 .process("Resources"),
             ]
         )
