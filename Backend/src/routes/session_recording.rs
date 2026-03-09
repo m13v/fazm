@@ -139,9 +139,9 @@ async fn iam_sign_blob(sa_email: &str, data: &[u8]) -> Result<Vec<u8>, String> {
     // Get access token from metadata server (available on Cloud Run)
     let token = get_access_token().await?;
 
-    let payload_b64 = base64::engine::general_purpose::STANDARD.encode(data);
+    let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(data);
     let body = serde_json::json!({
-        "payload": payload_b64
+        "bytesToSign": bytes_b64
     });
 
     let url = format!(
@@ -166,8 +166,8 @@ async fn iam_sign_blob(sa_email: &str, data: &[u8]) -> Result<Vec<u8>, String> {
 
     #[derive(serde::Deserialize)]
     struct SignBlobResponse {
-        #[serde(rename = "signedBlob")]
-        signed_blob: String,
+        #[serde(rename = "signedBytes")]
+        signed_bytes: String,
     }
 
     let sign_resp: SignBlobResponse = resp
@@ -176,7 +176,7 @@ async fn iam_sign_blob(sa_email: &str, data: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("IAM signBlob response parse: {}", e))?;
 
     base64::engine::general_purpose::STANDARD
-        .decode(&sign_resp.signed_blob)
+        .decode(&sign_resp.signed_bytes)
         .map_err(|e| format!("IAM signBlob base64 decode: {}", e))
 }
 
