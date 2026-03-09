@@ -330,6 +330,13 @@ actor ACPBridge {
     let key: String
     let model: String
     let systemPrompt: String?
+    let resume: String?
+    init(key: String, model: String, systemPrompt: String? = nil, resume: String? = nil) {
+      self.key = key
+      self.model = model
+      self.systemPrompt = systemPrompt
+      self.resume = resume
+    }
   }
 
   func warmupSession(cwd: String? = nil, sessions: [WarmupSessionConfig]) {
@@ -339,6 +346,7 @@ actor ACPBridge {
     dict["sessions"] = sessions.map { s -> [String: Any] in
       var entry: [String: Any] = ["key": s.key, "model": s.model]
       if let sp = s.systemPrompt { entry["systemPrompt"] = sp }
+      if let r = s.resume { entry["resume"] = r }
       return entry
     }
     if let data = try? JSONSerialization.data(withJSONObject: dict),
