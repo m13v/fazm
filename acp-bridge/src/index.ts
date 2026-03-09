@@ -635,6 +635,7 @@ interface WarmupSessionConfig {
   key: string;
   model: string;
   systemPrompt?: string;
+  resume?: string;  // if set, resume this session ID instead of creating a new one
 }
 
 async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig[], models?: string[]): Promise<void> {
@@ -666,19 +667,39 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
             ...(cfg.systemPrompt ? { _meta: { systemPrompt: cfg.systemPrompt } } : {}),
           };
 
-          // Retry once after a short delay if session/new fails
-          let result: { sessionId: string };
-          try {
-            result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
-          } catch (firstErr) {
-            logErr(`Pre-warm session/new failed for ${cfg.key}, retrying in 2s: ${firstErr}`);
-            await new Promise((r) => setTimeout(r, 2000));
-            result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+          // Resume existing session if ID provided, otherwise create a new one
+          let sessionId: string;
+          if (cfg.resume) {
+            try {
+              await acpRequest("session/resume", {
+                sessionId: cfg.resume,
+                cwd: warmCwd,
+                mcpServers: buildMcpServers("act", warmCwd, cfg.key),
+              });
+              sessionId = cfg.resume;
+              logErr(`Pre-warm resumed session: ${sessionId} (key=${cfg.key}, model=${cfg.model})`);
+            } catch (resumeErr) {
+              logErr(`Pre-warm session/resume failed for ${cfg.key}, falling back to session/new: ${resumeErr}`);
+              const result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+              sessionId = result.sessionId;
+              logErr(`Pre-warmed new session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
+            }
+          } else {
+            // Retry once after a short delay if session/new fails
+            let result: { sessionId: string };
+            try {
+              result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+            } catch (firstErr) {
+              logErr(`Pre-warm session/new failed for ${cfg.key}, retrying in 2s: ${firstErr}`);
+              await new Promise((r) => setTimeout(r, 2000));
+              result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+            }
+            sessionId = result.sessionId;
+            logErr(`Pre-warmed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
           }
 
-          sessions.set(cfg.key, { sessionId: result.sessionId, cwd: warmCwd, model: cfg.model });
-          await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: cfg.model });
-          logErr(`Pre-warmed session: ${result.sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
+          sessions.set(cfg.key, { sessionId, cwd: warmCwd, model: cfg.model });
+          await acpRequest("session/set_model", { sessionId, modelId: cfg.model });
         } catch (err) {
           if (err instanceof AcpError && err.code === -32000) {
             logErr(`Pre-warm failed with auth error (code=${err.code}), starting OAuth flow`);
