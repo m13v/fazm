@@ -767,14 +767,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
         guard let urlString = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
-              let _ = URL(string: urlString) else {
+              let url = URL(string: urlString) else {
             return
         }
 
-        NSLog("FazmApp AppDelegate: Received URL event: %@", urlString)
-
         log("FazmApp AppDelegate: URL event received: \(urlString)")
 
+        switch url.host {
+        case "auth-success":
+            // Bring the app to front after successful browser sign-in
+            NSApp.activate(ignoringOtherApps: true)
+        case "auth-failed":
+            // Bring the app to front so user can retry
+            NSApp.activate(ignoringOtherApps: true)
+        default:
+            log("FazmApp AppDelegate: Unhandled URL path: \(url.host ?? "nil")")
+        }
     }
 
     /// One-time migration: switch bridgeMode from "personal" to "builtin" (Vertex AI)
