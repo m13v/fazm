@@ -46,11 +46,19 @@ struct DesktopHomeView: View {
                             PushToTalkManager.shared.setup(barState: barState)
                         }
 
-                        // After onboarding, close the main window — just show floating bar + tutorial
-                        if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
-                            UserDefaults.standard.set(false, forKey: "onboardingJustCompleted")
-                            log("DesktopHomeView: Post-onboarding — closing main window, showing floating bar only")
-                            // Ensure floating bar is visible post-onboarding
+                        // After onboarding or sign-in, close the main window — just show floating bar
+                        let justOnboarded = UserDefaults.standard.bool(forKey: "onboardingJustCompleted")
+                        let justSignedIn = UserDefaults.standard.bool(forKey: "signInJustCompleted")
+                        if justOnboarded || justSignedIn {
+                            if justOnboarded {
+                                UserDefaults.standard.set(false, forKey: "onboardingJustCompleted")
+                                log("DesktopHomeView: Post-onboarding — closing main window, showing floating bar only")
+                            }
+                            if justSignedIn {
+                                UserDefaults.standard.set(false, forKey: "signInJustCompleted")
+                                log("DesktopHomeView: Post-sign-in — closing main window, showing floating bar only")
+                            }
+                            // Ensure floating bar is visible
                             if !FloatingControlBarManager.shared.isEnabled {
                                 FloatingControlBarManager.shared.show()
                             }
