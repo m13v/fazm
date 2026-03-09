@@ -1400,7 +1400,11 @@ class FloatingControlBarManager {
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
 
-        if provider.showCreditExhaustedAlert {
+        if provider.isClaudeAuthRequired {
+            // Auth needed — the main window's auth sheet will appear via the observer.
+            // Show a helpful message in the floating bar instead of "Something went wrong."
+            barWindow.state.currentAIMessage = ChatMessage(text: "Please sign in to your Claude account in the window that appeared.", sender: .ai)
+        } else if provider.showCreditExhaustedAlert {
             provider.showCreditExhaustedAlert = false
             let creditMsg = "Your free built-in credits have run out. Please connect your personal Claude account to continue.\n\nGo to Settings → Claude Account to sign in."
             barWindow.state.currentAIMessage = ChatMessage(text: creditMsg, sender: .ai)
