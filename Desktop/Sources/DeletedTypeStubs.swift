@@ -311,6 +311,7 @@ class APIClient {
     /// Record LLM usage to Firestore using atomic field transforms (server-side increments).
     /// Uses the Firebase ID token from AuthService for authentication.
     func recordLlmUsage(inputTokens: Int = 0, outputTokens: Int = 0, cacheReadTokens: Int = 0, cacheWriteTokens: Int = 0, totalTokens: Int = 0, costUsd: Double = 0, account: String = "") async {
+        log("APIClient: recordLlmUsage called (account=\(account), cost=$\(String(format: "%.4f", costUsd)), tokens=\(totalTokens))")
         guard let uid = AuthService.shared.userId else {
             log("APIClient: recordLlmUsage skipped — not signed in")
             return
@@ -371,9 +372,14 @@ class APIClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = jsonData
 
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                log("APIClient: recordLlmUsage failed (status \(httpResponse.statusCode))")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                if (200...299).contains(httpResponse.statusCode) {
+                    log("APIClient: recordLlmUsage success (account=\(account), cost=$\(String(format: "%.4f", costUsd)))")
+                } else {
+                    let body = String(data: data, encoding: .utf8) ?? ""
+                    log("APIClient: recordLlmUsage failed (status \(httpResponse.statusCode)): \(body.prefix(200))")
+                }
             }
         } catch {
             log("APIClient: recordLlmUsage failed: \(error.localizedDescription)")
