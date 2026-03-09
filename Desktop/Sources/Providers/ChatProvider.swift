@@ -923,6 +923,7 @@ class ChatProvider: ObservableObject {
         isClaudeConnected = false
 
         // 5. Switch back to builtin mode and recreate bridge
+        AnalyticsManager.shared.claudeDisconnected()
         await switchBridgeMode(to: "builtin")
         log("ChatProvider: Claude account disconnected, switched to builtin mode")
     }
