@@ -15,8 +15,20 @@ class SessionRecordingManager {
     private init() {}
 
     /// Check the feature flag and start recording if enabled.
-    /// Call this after PostHog is initialized and feature flags are loaded.
+    /// Call this after PostHog is initialized. Reloads flags from server first
+    /// to avoid using stale cached values from a previous session.
     func startIfEnabled() {
+        guard !isStarted else { return }
+
+        // Force reload flags from server, then check after a short delay
+        // to ensure we get the latest remote state, not a stale cached value.
+        PostHogManager.shared.reloadFeatureFlags()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.checkFlagAndStart()
+        }
+    }
+
+    private func checkFlagAndStart() {
         guard !isStarted else { return }
 
         let enabled = PostHogManager.shared.isFeatureEnabled("session-recording-enabled")
