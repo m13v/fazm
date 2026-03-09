@@ -165,6 +165,16 @@ class ChatToolExecutor {
             return "Error: multi-statement queries are not allowed. Send one statement at a time."
         }
 
+        // Fix bare `now` → `datetime('now')` in SQL values.
+        // Matches `now` as a standalone value (e.g. VALUES(..., now, ...) or SET col = now)
+        // but not inside strings, function calls like datetime('now'), or as part of other words.
+        sanitized = sanitized.replacingOccurrences(
+            of: #"(?<!')(?<!\w)now(?!\w)(?!')"#,
+            with: "datetime('now')",
+            options: .regularExpression
+        )
+        upper = sanitized.uppercased()
+
         // Auto-convert INSERTs into knowledge graph / profile tables to use OR REPLACE
         // to avoid UNIQUE constraint failures when the AI re-inserts existing data
         if upper.hasPrefix("INSERT") && !upper.hasPrefix("INSERT OR") {
