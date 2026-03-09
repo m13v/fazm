@@ -893,6 +893,10 @@ class AppState: ObservableObject {
         UserDefaults.standard.synchronize()
         log("Cleared onboarding UserDefaults keys")
 
+        // Clear mid-onboarding chat persistence (session ID, completed steps, messages)
+        OnboardingChatPersistence.clear()
+        log("Cleared onboarding chat persistence")
+
         // Also clear UserDefaults for both bundle IDs
         if let prodDefaults = UserDefaults(suiteName: "com.fazm.app") {
             for key in onboardingKeys {
