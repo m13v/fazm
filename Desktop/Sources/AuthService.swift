@@ -758,20 +758,31 @@ class AuthService: NSObject {
                 let responseHTML: String
                 if code != nil {
                     responseHTML = """
-                    <html><body style="font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: white;">
-                    <div style="text-align: center;">
-                    <h1>Sign-in successful!</h1>
-                    <p>You can close this window and return to Fazm.</p>
-                    <script>window.close();</script>
+                    <html>
+                    <head><meta charset="utf-8"><title>Fazm — Signed In</title></head>
+                    <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0F0F0F; color: white;">
+                    <div style="text-align: center; max-width: 400px; padding: 40px;">
+                    <div style="width: 64px; height: 64px; margin: 0 auto 24px; background: linear-gradient(135deg, #8B5CF6, #7C3AED); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px;">&#10003;</div>
+                    <h1 style="margin: 0 0 8px; font-size: 24px; font-weight: 700;">You're in!</h1>
+                    <p style="margin: 0 0 32px; color: #888; font-size: 15px; line-height: 1.5;">Sign-in successful. Returning you to Fazm&hellip;</p>
+                    <a href="fazm://auth-success" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #8B5CF6, #7C3AED); color: white; text-decoration: none; border-radius: 10px; font-size: 15px; font-weight: 600;">Open Fazm</a>
+                    <p style="margin-top: 16px; color: #555; font-size: 12px;">This tab will close automatically.</p>
+                    <script>
+                    setTimeout(function() { window.location.href = 'fazm://auth-success'; }, 1500);
+                    setTimeout(function() { window.close(); }, 3000);
+                    </script>
                     </div></body></html>
                     """
                 } else {
                     responseHTML = """
-                    <html><body style="font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: white;">
-                    <div style="text-align: center;">
-                    <h1>Sign-in failed</h1>
-                    <p>\(errorMessage ?? "Unknown error")</p>
-                    <p>Please close this window and try again.</p>
+                    <html>
+                    <head><meta charset="utf-8"><title>Fazm — Sign-In Failed</title></head>
+                    <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0F0F0F; color: white;">
+                    <div style="text-align: center; max-width: 400px; padding: 40px;">
+                    <div style="width: 64px; height: 64px; margin: 0 auto 24px; background: #2A2A2A; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px;">&#10007;</div>
+                    <h1 style="margin: 0 0 8px; font-size: 24px; font-weight: 700;">Sign-in failed</h1>
+                    <p style="margin: 0 0 32px; color: #888; font-size: 15px; line-height: 1.5;">\(errorMessage ?? "Something went wrong. Please try again.")</p>
+                    <a href="fazm://auth-failed" style="display: inline-block; padding: 12px 32px; background: #2A2A2A; color: white; text-decoration: none; border-radius: 10px; font-size: 15px; font-weight: 600; border: 1px solid #333;">Back to Fazm</a>
                     </div></body></html>
                     """
                 }
