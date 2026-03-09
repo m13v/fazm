@@ -128,7 +128,14 @@ struct AIResponseView: View {
 
     private var headerView: some View {
         HStack(spacing: 12) {
-            if isLoading {
+            if state.isCompacting {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 16, height: 16)
+                Text("compacting context…")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.orange)
+            } else if isLoading {
                 ProgressView()
                     .scaleEffect(0.6)
                     .frame(width: 16, height: 16)
