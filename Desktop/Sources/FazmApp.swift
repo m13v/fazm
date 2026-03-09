@@ -632,6 +632,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         openItem.target = self
         menu.addItem(openItem)
 
+        // Sign Out item (shown when signed in; updated dynamically in menuWillOpen)
+        let signOutItem = NSMenuItem(title: "Sign Out", action: #selector(signOutFromMenu), keyEquivalent: "")
+        signOutItem.target = self
+        signOutItem.tag = 1001 // tag for dynamic updates
+        signOutItem.isHidden = !AuthState.shared.isSignedIn
+        menu.addItem(signOutItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Check for Updates
@@ -708,10 +715,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    @MainActor @objc private func signOutFromMenu() {
+        AnalyticsManager.shared.menuBarActionClicked(action: "sign_out")
+        AuthService.shared.signOut()
+    }
+
     // MARK: - NSMenuDelegate
     func menuWillOpen(_ menu: NSMenu) {
         log("AppDelegate: [MENUBAR] Menu opened by user")
         AnalyticsManager.shared.menuBarOpened()
+
+        // Update sign-out item visibility and title
+        if let signOutItem = menu.item(withTag: 1001) {
+            let isSignedIn = AuthState.shared.isSignedIn
+            signOutItem.isHidden = !isSignedIn
+            if let email = AuthState.shared.userEmail, !email.isEmpty {
+                signOutItem.title = "Sign Out (\(email))"
+            } else {
+                signOutItem.title = "Sign Out"
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
