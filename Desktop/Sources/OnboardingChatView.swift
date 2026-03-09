@@ -550,8 +550,7 @@ struct OnboardingChatView: View {
 
         // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
         if OnboardingChatPersistence.isMidOnboarding {
-            let savedSessionId = OnboardingChatPersistence.loadSessionId()
-            log("OnboardingChatView: Resuming mid-onboarding, ACP session: \(savedSessionId ?? "none")")
+            log("OnboardingChatView: Resuming mid-onboarding")
 
             // If complete_onboarding was already called before restart, show the button immediately
             if OnboardingChatPersistence.isToolCompleted {
@@ -575,8 +574,8 @@ struct OnboardingChatView: View {
 
                 // If no conversation happened yet (e.g. quit during OAuth before any AI response),
                 // treat as fresh start instead of sending confusing "I'm back" message
-                if savedMessages.isEmpty && savedSessionId == nil {
-                    log("OnboardingChatView: No messages and no session — treating as fresh start")
+                if savedMessages.isEmpty {
+                    log("OnboardingChatView: No messages — treating as fresh start")
                     await bridgeWarmup
                     await chatProvider.sendMessage(
                         "Hi, I just installed Fazm!",
@@ -586,9 +585,7 @@ struct OnboardingChatView: View {
                     return
                 }
 
-                if !savedMessages.isEmpty {
-                    chatProvider.messages = savedMessages
-                }
+                chatProvider.messages = savedMessages
 
                 // Restore the knowledge graph from local storage (saved before restart)
                 if let vm = graphViewModel {
@@ -598,28 +595,26 @@ struct OnboardingChatView: View {
                 // If files are already indexed from prior run, kick off exploration immediately
                 await checkAndStartExploration(graphViewModel: graphViewModel)
 
-                // Build a conversation summary so the AI has context even if session/resume fails
+                // Build a conversation summary so the AI has context in a fresh session
+                // (we intentionally do NOT resume the ACP session — stale/corrupted sessions
+                // cause the AI to go off-rails and stop following the onboarding flow)
                 let conversationContext = buildConversationContext(from: chatProvider.messages)
                 let completedSteps = OnboardingChatPersistence.completedSteps
                 let stepsNote = completedSteps.isEmpty
                     ? "\n\nNo onboarding steps were completed before the restart — you must do all steps."
                     : "\n\n<completed_steps_before_restart>\n\(completedSteps.sorted().joined(separator: ", "))\n</completed_steps_before_restart>\nSkip only these completed steps. Do all other steps that are NOT listed here."
-                let resumeSystemPrompt: String
-                if conversationContext.isEmpty {
-                    resumeSystemPrompt = systemPrompt + stepsNote
-                } else {
-                    resumeSystemPrompt = systemPrompt + "\n\n<conversation_so_far>\n" + conversationContext + "\n</conversation_so_far>" + stepsNote + "\n\nThe user's app just restarted after granting a macOS permission. Continue the onboarding from where you left off. CRITICAL: Do NOT re-ask for the user's name or any other information already visible in the conversation above. If you previously addressed the user by name, that name is confirmed. Jump straight to the next incomplete step."
-                }
+                let resumeSystemPrompt = systemPrompt + "\n\n<conversation_so_far>\n" + conversationContext + "\n</conversation_so_far>" + stepsNote + "\n\nThe user's app just restarted after granting a macOS permission. Continue the onboarding from where you left off. CRITICAL: Do NOT re-ask for the user's name or any other information already visible in the conversation above. If you previously addressed the user by name, that name is confirmed. Jump straight to the next incomplete step."
 
                 // Wait for bridge warmup before sending
                 await bridgeWarmup
 
-                // Resume the conversation — tell the AI the app was restarted
+                // Start a fresh ACP session with conversation context in the system prompt.
+                // Do NOT resume the old ACP session — it may be corrupted from prior failed
+                // restarts, causing the AI to ignore onboarding tools and respond generically.
                 await chatProvider.sendMessage(
                     "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
                     model: "claude-sonnet-4-6",
-                    systemPromptPrefix: resumeSystemPrompt,
-                    resume: savedSessionId
+                    systemPromptPrefix: resumeSystemPrompt
                 )
             }
         } else {
