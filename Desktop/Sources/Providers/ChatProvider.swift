@@ -928,6 +928,15 @@ class ChatProvider: ObservableObject {
         log("ChatProvider: Claude account disconnected, switched to builtin mode")
     }
 
+    /// Check if an error message from the ACP bridge indicates an auth/OAuth failure
+    /// (e.g. "OAuth callback timed out", "unauthorized", etc.)
+    static func isAuthRelatedError(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("oauth") || lower.contains("auth")
+            || lower.contains("unauthorized") || lower.contains("sign in")
+            || lower.contains("login") || lower.contains("credential")
+    }
+
     // MARK: - Session Management
 
     /// Fetch all chat sessions for the current app (retries up to 3 times on failure)
@@ -2562,6 +2571,15 @@ class ChatProvider: ObservableObject {
                 }
                 showCreditExhaustedAlert = true
                 errorMessage = bridgeError.errorDescription
+            } else if bridgeMode == "personal",
+                      let bridgeError = error as? BridgeError,
+                      case .agentError(let msg) = bridgeError,
+                      Self.isAuthRelatedError(msg) {
+                // Personal OAuth failed — re-trigger sign-in instead of "Something went wrong"
+                log("ChatProvider: auth-related error in personal mode, re-triggering sign-in: \(msg)")
+                isClaudeAuthRequired = true
+                // Keep pendingRetryMessage so the query retries after auth
+                errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
             }
