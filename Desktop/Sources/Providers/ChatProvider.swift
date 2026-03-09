@@ -921,6 +921,10 @@ class ChatProvider: ObservableObject {
 
         // 4. Update state
         isClaudeConnected = false
+
+        // 5. Switch back to builtin mode and recreate bridge
+        await switchBridgeMode(to: "builtin")
+        log("ChatProvider: Claude account disconnected, switched to builtin mode")
     }
 
     // MARK: - Session Management
