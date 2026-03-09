@@ -701,30 +701,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setupAppMenus() {
         guard let mainMenu = NSApp.mainMenu else { return }
 
-        // -- Format menu: replace SwiftUI's default text formatting with font size controls --
-        if let formatMenu = mainMenu.item(withTitle: "Format")?.submenu {
-            formatMenu.removeAllItems()
+        // -- Format menu: add font size controls (replacing SwiftUI's default text formatting) --
+        // Create from scratch since SwiftUI no longer generates this menu.
+        let formatMenu = NSMenu(title: "Format")
 
-            let increaseItem = NSMenuItem(title: "Increase Font Size", action: #selector(increaseFontSize), keyEquivalent: "+")
-            increaseItem.keyEquivalentModifierMask = .command
-            increaseItem.target = self
-            formatMenu.addItem(increaseItem)
+        let increaseItem = NSMenuItem(title: "Increase Font Size", action: #selector(increaseFontSize), keyEquivalent: "+")
+        increaseItem.keyEquivalentModifierMask = .command
+        increaseItem.target = self
+        formatMenu.addItem(increaseItem)
 
-            let decreaseItem = NSMenuItem(title: "Decrease Font Size", action: #selector(decreaseFontSize), keyEquivalent: "-")
-            decreaseItem.keyEquivalentModifierMask = .command
-            decreaseItem.target = self
-            formatMenu.addItem(decreaseItem)
+        let decreaseItem = NSMenuItem(title: "Decrease Font Size", action: #selector(decreaseFontSize), keyEquivalent: "-")
+        decreaseItem.keyEquivalentModifierMask = .command
+        decreaseItem.target = self
+        formatMenu.addItem(decreaseItem)
 
-            let resetItem = NSMenuItem(title: "Reset Font Size", action: #selector(resetFontSize), keyEquivalent: "0")
-            resetItem.keyEquivalentModifierMask = .command
-            resetItem.target = self
-            formatMenu.addItem(resetItem)
+        let resetItem = NSMenuItem(title: "Reset Font Size", action: #selector(resetFontSize), keyEquivalent: "0")
+        resetItem.keyEquivalentModifierMask = .command
+        resetItem.target = self
+        formatMenu.addItem(resetItem)
 
-            formatMenu.addItem(NSMenuItem.separator())
+        formatMenu.addItem(NSMenuItem.separator())
 
-            let resetWindowItem = NSMenuItem(title: "Reset Window Size", action: #selector(resetWindowSize), keyEquivalent: "")
-            resetWindowItem.target = self
-            formatMenu.addItem(resetWindowItem)
+        let resetWindowItem = NSMenuItem(title: "Reset Window Size", action: #selector(resetWindowSize), keyEquivalent: "")
+        resetWindowItem.target = self
+        formatMenu.addItem(resetWindowItem)
+
+        let formatMenuItem = NSMenuItem(title: "Format", action: nil, keyEquivalent: "")
+        formatMenuItem.submenu = formatMenu
+
+        // Insert after Edit (or at end if Edit isn't found)
+        let editIndex = mainMenu.indexOfItem(withTitle: "Edit")
+        if editIndex >= 0 {
+            mainMenu.insertItem(formatMenuItem, at: editIndex + 1)
+        } else {
+            mainMenu.addItem(formatMenuItem)
         }
 
         // -- Help menu: remove it (macOS help search is irrelevant for Fazm) --
