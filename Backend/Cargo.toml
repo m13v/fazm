@@ -28,6 +28,9 @@ hex = "0.4"
 hmac = "0.12"
 url = "2"
 
+# HTTP client (for IAM signBlob API)
+reqwest = { version = "0.12", features = ["json"] }
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
