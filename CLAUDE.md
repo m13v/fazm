@@ -19,6 +19,16 @@ Send a text query to the floating bar (no voice/UI needed):
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "your query here"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 ```
 
+### SQLite Database & Active User
+Messages are stored in `~/Library/Application Support/Fazm/users/<UUID>/fazm.db` (both prod and dev share this directory). To find the active user for the currently running build:
+
+```bash
+defaults read com.fazm.desktop-dev auth_userId  # dev build (Fazm Dev)
+defaults read com.fazm.app auth_userId           # prod build (Fazm)
+```
+
+These return different UUIDs even for the same Apple ID — dev and prod create separate user records. Always use this before querying or polling any SQLite DB; never guess by timestamp.
+
 ### Release Health (Sentry)
 Check errors in the latest (or specific) release using the **sentry-release skill**:
 ```bash
