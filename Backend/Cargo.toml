@@ -25,6 +25,8 @@ chrono = "0.4"
 sha2 = "0.10"
 base64 = "0.21"
 hex = "0.4"
+hmac = "0.12"
+url = "2"
 
 # Logging
 tracing = "0.1"
