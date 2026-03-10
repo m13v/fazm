@@ -120,4 +120,5 @@ class FloatingControlBarState: NSObject, ObservableObject {
         ("claude-opus-4-6", "Opus"),
         ("claude-sonnet-4-6", "Sonnet"),
     ]
+
 }

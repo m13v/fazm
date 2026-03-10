@@ -10,6 +10,9 @@ actor AppDatabase {
     /// Track if we recovered from corruption (for UI notification)
     private(set) var didRecoverFromCorruption = false
 
+    /// Track if the previous session ended with a crash (for UI notification)
+    private(set) var didCrashLastSession = false
+
     /// Track initialization state to prevent concurrent init attempts
     private var initializationTask: Task<Void, Error>?
 
@@ -250,6 +253,11 @@ actor AppDatabase {
         let previousCrashed = FileManager.default.fileExists(atPath: flagPath)
         if previousCrashed {
             log("RewindDatabase: Unclean shutdown detected (running flag exists)")
+            didCrashLastSession = true
+            // Persist for UI pickup — FloatingControlBarState may not exist yet when
+            // ViewModelContainer fires the notification, so we use UserDefaults as a
+            // one-shot flag that survives any initialization ordering.
+            UserDefaults.standard.set(true, forKey: "fazm_didCrashLastSession")
         }
 
         // Clean up stale WAL files that can cause disk I/O errors (SQLite error 10)

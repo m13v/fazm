@@ -35,6 +35,7 @@ class ViewModelContainer: ObservableObject {
             databaseInitFailed = true
         }
 
+
         // Database is ready — dismiss loading
         isInitialLoadComplete = true
         let timeToInteractive = CFAbsoluteTimeGetCurrent() - startupStart

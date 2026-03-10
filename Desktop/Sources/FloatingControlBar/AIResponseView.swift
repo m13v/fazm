@@ -12,6 +12,9 @@ struct AIResponseView: View {
     @State private var followUpTextHeight: CGFloat = 36
     @State private var isHanging = false
     @State private var hangTask: Task<Void, Never>?
+    /// True when the hang state was triggered by a previous crash, not the 30s timer.
+    /// Prevents the isLoading onChange from clearing it when a query completes.
+    @State private var isHangingFromCrash = false
 
     let userInput: String
     let chatHistory: [FloatingChatExchange]
@@ -123,6 +126,14 @@ struct AIResponseView: View {
         .onExitCommand {
             onClose?()
         }
+        .onAppear {
+            let key = "fazm_didCrashLastSession"
+            if UserDefaults.standard.bool(forKey: key) {
+                UserDefaults.standard.removeObject(forKey: key)
+                isHanging = true
+                isHangingFromCrash = true
+            }
+        }
         .onChange(of: isLoading) {
             if isLoading {
                 userHasScrolledUp = false
@@ -135,7 +146,11 @@ struct AIResponseView: View {
             } else {
                 hangTask?.cancel()
                 hangTask = nil
-                isHanging = false
+                // Don't clear isHanging if it was set by a previous crash detection —
+                // only clear it when it was triggered by the 30s timeout timer.
+                if !isHangingFromCrash {
+                    isHanging = false
+                }
             }
         }
     }
@@ -173,21 +188,7 @@ struct AIResponseView: View {
             )
 
             if let onNewChat {
-                Button(action: onNewChat) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11))
-                        Text("⌘N")
-                            .scaledFont(size: 9)
-                            .padding(.horizontal, 3)
-                            .padding(.vertical, 1)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(3)
-                    }
-                    .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("New chat")
+                NewChatButton(action: onNewChat)
             }
         }
     }
@@ -557,6 +558,37 @@ struct MessageWithCopyButton<Content: View>: View {
     }
 }
 
+// MARK: - New Chat Button
+
+struct NewChatButton: View {
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11))
+                if isHovered {
+                    Text("New chat")
+                        .scaledFont(size: 11)
+                        .transition(.opacity)
+                }
+                Text("⌘N")
+                    .scaledFont(size: 9)
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(3)
+            }
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+    }
+}
+
 // MARK: - Copy Conversation Button
 
 /// Button in the header that copies the entire conversation.
@@ -567,14 +599,24 @@ struct CopyConversationButton: View {
 
     @State private var showCopied = false
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: copyAll) {
-            Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                .font(.system(size: 11))
-                .foregroundColor(showCopied ? .green : .secondary)
+            HStack(spacing: 4) {
+                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11))
+                if isHovered {
+                    Text(showCopied ? "Copied!" : "Copy all")
+                        .scaledFont(size: 11)
+                        .transition(.opacity)
+                }
+            }
+            .foregroundColor(showCopied ? .green : .secondary)
         }
         .buttonStyle(.plain)
-        .help(showCopied ? "Copied!" : "Copy all")
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
 
     private func copyAll() {
@@ -610,26 +652,51 @@ struct ReportIssueButton: View {
     let isHanging: Bool
 
     @State private var flashOpacity: Double = 1.0
+    @State private var flashScale: Double = 1.0
+    @State private var showSent = false
+    @State private var isHovered = false
 
     var body: some View {
-        Button(action: { FeedbackWindow.show() }) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 11))
-                .foregroundColor(isHanging ? .orange : .secondary)
-                .opacity(flashOpacity)
+        Button(action: sendReport) {
+            HStack(spacing: 4) {
+                Image(systemName: showSent ? "checkmark" : "exclamationmark.triangle.fill")
+                    .font(.system(size: isHanging ? 13 : 11))
+                    .foregroundColor(showSent ? .green : (isHanging ? .orange : .secondary))
+                    .opacity(flashOpacity)
+                    .scaleEffect(flashScale)
+                    .shadow(color: isHanging ? .orange.opacity(flashOpacity * 0.9) : .clear, radius: 6)
+                if isHovered {
+                    Text(showSent ? "Report sent!" : "Report an issue")
+                        .scaledFont(size: 11)
+                        .foregroundColor(showSent ? .green : (isHanging ? .orange : .secondary))
+                        .transition(.opacity)
+                }
+            }
         }
         .buttonStyle(.plain)
-        .help("Report an issue")
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onChange(of: isHanging) {
             if isHanging {
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    flashOpacity = 0.15
+                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                    flashOpacity = 0.05
+                    flashScale = 1.15
                 }
             } else {
                 withAnimation(.default) {
                     flashOpacity = 1.0
+                    flashScale = 1.0
                 }
             }
+        }
+    }
+
+    private func sendReport() {
+        guard !showSent else { return }
+        FeedbackWindow.sendSilently()
+        withAnimation { showSent = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation { showSent = false }
         }
     }
 }

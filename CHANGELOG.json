@@ -56,6 +56,7 @@
     "Fixed SQLite syntax error when AI generates double-escaped datetime queries",
     "Auto-retry update after granting App Management permission in System Settings",
     "Bundled skills now update automatically when the app ships improvements \u2014 a brief toast notification appears when any skill is refreshed",
-    "Added Report an Issue button to the response header \u2014 icon-only with tooltip; flashes orange if AI is stuck thinking for 30+ seconds"
+    "Added Report an Issue button to the response header \u2014 icon-only with tooltip; flashes orange if AI is stuck thinking for 30+ seconds",
+    "Report issue button now flashes on startup if the previous session crashed unexpectedly"
   ]
 }
