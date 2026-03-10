@@ -173,6 +173,15 @@ class ChatToolExecutor {
             with: "datetime('now')",
             options: .regularExpression
         )
+
+        // Fix double-escaped quotes: datetime(''now'') → datetime('now')
+        // LLMs sometimes produce ''now'' (two single quotes) which SQLite parses as
+        // empty-string || bare-identifier || empty-string → syntax error.
+        sanitized = sanitized.replacingOccurrences(
+            of: #"datetime\(''now''\)"#,
+            with: "datetime('now')",
+            options: .regularExpression
+        )
         upper = sanitized.uppercased()
 
         // Auto-convert INSERTs into knowledge graph / profile tables to use OR REPLACE
