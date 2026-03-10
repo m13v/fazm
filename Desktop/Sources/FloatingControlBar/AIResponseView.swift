@@ -12,6 +12,7 @@ struct AIResponseView: View {
     @State private var followUpTextHeight: CGFloat = 36
     @State private var isHanging = false
     @State private var hangTask: Task<Void, Never>?
+    @State private var isStopping = false
     /// True when the hang state was triggered by a previous crash, not the 30s timer.
     /// Prevents the isLoading onChange from clearing it when a query completes.
     @State private var isHangingFromCrash = false
@@ -146,6 +147,7 @@ struct AIResponseView: View {
             } else {
                 hangTask?.cancel()
                 hangTask = nil
+                isStopping = false
                 // Don't clear isHanging if it was set by a previous crash detection —
                 // only clear it when it was triggered by the 30s timeout timer.
                 if !isHangingFromCrash {
@@ -487,12 +489,16 @@ struct AIResponseView: View {
             .cornerRadius(8)
 
             if (isLoading || currentMessage?.isStreaming == true) && followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button(action: { onStopAgent?() }) {
-                    Image(systemName: "stop.circle.fill")
+                Button(action: {
+                    isStopping = true
+                    onStopAgent?()
+                }) {
+                    Image(systemName: isStopping ? "ellipsis.circle" : "stop.circle.fill")
                         .scaledFont(size: 20)
-                        .foregroundColor(.red)
+                        .foregroundColor(isStopping ? .secondary : .red)
                 }
                 .buttonStyle(.plain)
+                .disabled(isStopping)
                 .help("Stop generating")
             } else {
                 Button(action: { sendFollowUp() }) {
