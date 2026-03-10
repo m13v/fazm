@@ -11,29 +11,44 @@ class SessionRecordingManager {
 
     private var recorder: SessionRecorder?
     private var isStarted = false
+    private var pollTimer: Timer?
 
     private init() {}
 
-    /// Check the feature flag and start recording if enabled.
-    /// Call this after PostHog is initialized. Reloads flags from server first
-    /// to avoid using stale cached values from a previous session.
+    /// Check the feature flag and start/stop recording accordingly.
+    /// Call this after PostHog is initialized. Polls every 5 minutes for flag changes.
     func startIfEnabled() {
-        guard !isStarted else { return }
-
         // Force reload flags from server, then check after a short delay
-        // to ensure we get the latest remote state, not a stale cached value.
         PostHogManager.shared.reloadFeatureFlags()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-            self?.checkFlagAndStart()
+            self?.checkFlagAndUpdate()
+            self?.startPolling()
         }
     }
 
-    private func checkFlagAndStart() {
-        guard !isStarted else { return }
+    private func startPolling() {
+        guard pollTimer == nil else { return }
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            PostHogManager.shared.reloadFeatureFlags()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                self?.checkFlagAndUpdate()
+            }
+        }
+    }
 
+    private func checkFlagAndUpdate() {
         let enabled = PostHogManager.shared.isFeatureEnabled("session-recording-enabled")
         log("SessionRecording: feature flag session-recording-enabled = \(enabled)")
-        guard enabled else { return }
+
+        if enabled && !isStarted {
+            startRecording()
+        } else if !enabled && isStarted {
+            log("SessionRecording: flag turned off remotely, stopping")
+            stop()
+        }
+    }
+
+    private func startRecording() {
 
         guard ScreenCaptureService.checkPermission() else {
             log("SessionRecording: no screen recording permission, skipping")
@@ -87,7 +102,7 @@ class SessionRecordingManager {
         }
     }
 
-    /// Stop recording (call on app termination).
+    /// Stop recording (call on app termination or when flag is turned off).
     func stop() {
         guard isStarted, let recorder = recorder else { return }
         isStarted = false
@@ -96,6 +111,13 @@ class SessionRecordingManager {
             log("SessionRecording: stopped")
         }
         self.recorder = nil
+    }
+
+    /// Stop recording and polling (call on app termination).
+    func shutdown() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+        stop()
     }
 
     // MARK: - Private
