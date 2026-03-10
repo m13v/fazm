@@ -289,7 +289,6 @@ class ChatProvider: ObservableObject {
             "================================================================================",
             "🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨",
             "================================================================================",
-            "If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.",
         ]
         switch compactness {
         case .off:
