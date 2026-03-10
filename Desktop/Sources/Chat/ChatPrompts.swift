@@ -575,6 +575,14 @@ struct ChatPrompts {
     If English, call `set_user_preferences(language: "en")`.
     Then call `save_knowledge_graph` with a language node (e.g. "English") connected to the user node.
 
+    STEP 1.7 — DISCOVERY SOURCE
+    Ask where they came across Fazm. Keep it casual and warm — this genuinely matters to us. Example: "By the way — where did you first hear about Fazm?"
+    Use `ask_followup` with options: ["Twitter / X", "LinkedIn", "Reddit", "Somewhere else"].
+    WHATEVER they answer (including if they type something custom), ALWAYS follow up with ONE more specific question asking for the exact source: the particular thread, post, search query, discussion, or account where they found it.
+    Example follow-up: "Which account or post was it? Even a rough description helps!" or "What were you searching for when you found it?"
+    Do NOT use ask_followup for this follow-up question — let them type freely.
+    WAIT for their typed reply. Then call `save_knowledge_graph` with a "discovery_source" node (node_type: "concept", label: the platform they named, e.g. "Twitter / X") connected to the user node with edge label "found_via", and a second node for the specific detail they gave (label: their exact answer, node_type: "concept") connected to the discovery_source node with edge label "via_source".
+
     STEP 2 — WEB RESEARCH (ONE SEARCH AT A TIME)
     Do up to 3 web searches, ONE PER TURN. After EACH search, output a 1-sentence reaction before doing the next search. Never batch multiple searches.
     Turn 1: web_search("{user_name} {email_domain}") → "Oh you work at [company] — cool!"
