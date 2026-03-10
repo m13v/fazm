@@ -6,6 +6,25 @@ import Sentry
 class FeedbackWindow {
     private static var window: NSWindow?
 
+    static func sendSilently() {
+        AnalyticsManager.shared.feedbackOpened()
+
+        let sentryMessage = "User Report (logs only)"
+
+        SentrySDK.capture(message: sentryMessage) { scope in
+            let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
+            let logPath = isDev ? "/tmp/fazm-dev.log" : "/tmp/fazm.log"
+            let logFilename = isDev ? "fazm-dev.log" : "fazm.log"
+            if FileManager.default.fileExists(atPath: logPath) {
+                let attachment = Attachment(path: logPath, filename: logFilename, contentType: "text/plain")
+                scope.addAttachment(attachment)
+            }
+        }
+
+        AnalyticsManager.shared.feedbackSubmitted(feedbackLength: 0)
+        log("Silent user report submitted to Sentry (logs attached)")
+    }
+
     static func show(userEmail: String? = nil) {
         // Close existing window if any
         window?.close()
