@@ -15,7 +15,7 @@ final class BrowserExtensionSetupWindowController {
         }
 
         let controller = self
-        let setupView = BrowserExtensionSetup(
+        var setupView = BrowserExtensionSetup(
             onComplete: {
                 onComplete()
                 controller.close()
@@ -32,6 +32,16 @@ final class BrowserExtensionSetupWindowController {
             },
             chatProvider: chatProvider
         )
+        setupView.onPhaseChange = { [weak self] newSize in
+            guard let window = self?.window else { return }
+            var frame = window.frame
+            let dx = newSize.width - frame.size.width
+            let dy = newSize.height - frame.size.height
+            frame.origin.x -= dx / 2
+            frame.origin.y -= dy / 2
+            frame.size = newSize
+            window.setFrame(frame, display: true, animate: true)
+        }
 
         let hostingView = NSHostingView(rootView: AnyView(setupView))
         hostingView.setFrameSize(hostingView.fittingSize)
@@ -74,6 +84,10 @@ struct BrowserExtensionSetup: View {
     /// Optional ChatProvider for running the connection test.
     /// When nil, Phase 3 is skipped (token is saved and we go straight to Done).
     var chatProvider: ChatProvider? = nil
+
+    /// Called when the phase changes, with the new desired window size.
+    /// Used by BrowserExtensionSetupWindowController to resize the window.
+    var onPhaseChange: ((NSSize) -> Void)? = nil
 
     enum Phase: Int, CaseIterable {
         case welcome = 0
@@ -608,6 +622,12 @@ struct BrowserExtensionSetup: View {
         }
     }
 
+    // MARK: - Window Size
+
+    private func windowSize(for p: Phase) -> NSSize {
+        p == .connect ? NSSize(width: 880, height: 520) : NSSize(width: 480, height: 420)
+    }
+
     // MARK: - Button Logic
 
     private var primaryButtonTitle: String {
@@ -645,9 +665,11 @@ struct BrowserExtensionSetup: View {
     private func handlePrimaryAction() {
         switch phase {
         case .welcome:
+            let next = Phase.connect
             withAnimation(.easeInOut(duration: 0.2)) {
-                phase = .connect
+                phase = next
             }
+            onPhaseChange?(windowSize(for: next))
 
         case .connect:
             let token = Self.parseToken(tokenInput)
@@ -659,22 +681,28 @@ struct BrowserExtensionSetup: View {
             log("BrowserExtensionSetup: Token saved (\(token.prefix(8))...)")
 
             if chatProvider != nil {
+                let next = Phase.verify
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    phase = .verify
+                    phase = next
                 }
+                onPhaseChange?(windowSize(for: next))
                 runConnectionTest()
             } else {
                 // No provider available — skip verification, go to done
+                let next = Phase.done
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    phase = .done
+                    phase = next
                 }
+                onPhaseChange?(windowSize(for: next))
             }
 
         case .verify:
             if verifySuccess {
+                let next = Phase.done
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    phase = .done
+                    phase = next
                 }
+                onPhaseChange?(windowSize(for: next))
             } else {
                 // Try again
                 runConnectionTest()
