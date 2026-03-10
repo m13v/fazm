@@ -432,6 +432,7 @@ workflows:
           echo "App stapled"
 
       - name: Upload dSYMs to Sentry
+        ignore_failure: true
         script: |
           set -e
           # Install sentry-cli if not available
