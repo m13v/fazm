@@ -140,7 +140,7 @@ struct AIResponseView: View {
                 userHasScrolledUp = false
                 hangTask?.cancel()
                 hangTask = Task {
-                    try? await Task.sleep(for: .seconds(30))
+                    try? await Task.sleep(for: .seconds(120))
                     guard !Task.isCancelled else { return }
                     isHanging = true
                 }
