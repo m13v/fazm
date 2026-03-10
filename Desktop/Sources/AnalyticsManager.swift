@@ -713,6 +713,10 @@ class AnalyticsManager {
         // -- Update Channel --
         props["update_channel"] = ud.string(forKey: "update_channel") ?? "beta"
 
+        // -- Skills --
+        let skillProps = SkillInstaller.analyticsProperties()
+        props.merge(skillProps) { _, new in new }
+
         return props
     }
 
