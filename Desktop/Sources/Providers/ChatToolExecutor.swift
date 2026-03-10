@@ -342,19 +342,17 @@ class ChatToolExecutor {
 
                 out += "## Chat Messages (\(messages.count))\n"
                 if messages.isEmpty {
-                    out += "No tasks created.\n"
+                    out += "No chat messages found.\n"
                 } else {
-                    for task in tasks {
-                        let desc = task["description"] as? String ?? ""
-                        let completed = (task["completed"] as? Int ?? 0) == 1
-                        let priority = task["priority"] as? String ?? ""
-                        let check = completed ? "[x]" : "[ ]"
-                        let pri = priority.isEmpty ? "" : " (\(priority))"
-                        out += "- \(check) \(desc)\(pri)\n"
+                    for msg in messages {
+                        let role = msg["role"] as? String ?? "unknown"
+                        let text = msg["text"] as? String ?? ""
+                        let preview = text.count > 120 ? String(text.prefix(120)) + "..." : text
+                        out += "- **\(role)**: \(preview)\n"
                     }
                 }
 
-                log("Tool get_daily_recap: \(convos.count) convos, \(tasks.count) tasks")
+                log("Tool get_daily_recap: \(messages.count) messages")
                 return out
             }
         } catch {
