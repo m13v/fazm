@@ -355,13 +355,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Start a timer that sends Sentry session snapshots every 5 minutes
     /// This ensures we have breadcrumbs captured even without errors
     private func startSentryHeartbeat() {
-        // Now runs in dev builds too since Sentry is always initialized
+        // Now runs in dev builds too since Sentry is always initialized.
+        // Only add breadcrumbs (no event) — sending events every 5 min wastes Sentry quota
+        // and drowns out real issues (was 3500+ events/week).
         sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-            // Capture a session heartbeat event with current breadcrumbs
-            SentrySDK.capture(message: "Session Heartbeat") { scope in
-                scope.setLevel(.info)
-                scope.setTag(value: "heartbeat", key: "event_type")
-            }
+            let crumb = Breadcrumb(level: .info, category: "heartbeat")
+            crumb.message = "Session Heartbeat"
+            SentrySDK.addBreadcrumb(crumb)
             log("Sentry: Session heartbeat captured")
         }
     }
