@@ -75,7 +75,10 @@ for app in "${CONFLICTING_APPS[@]}"; do
 done
 # Kill stale "Fazm Dev.app" bundles from other repo clones
 # These confuse LaunchServices and get launched instead of /Applications/Fazm Dev.app
-find "$HOME" -maxdepth 4 -name "Fazm Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+find "$HOME" -maxdepth 4 -name "Fazm Dev.app" -type d \
+    -not -path "$APP_BUNDLE" -not -path "$APP_PATH" \
+    -not -path "*/Library/*" -not -path "*/node_modules/*" -not -path "*/.Trash/*" \
+    2>/dev/null | while read stale; do
     substep "Removing stale clone: $stale"
     rm -rf "$stale"
 done
