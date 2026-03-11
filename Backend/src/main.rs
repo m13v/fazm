@@ -35,6 +35,10 @@ async fn main() {
             "/api/session-recording/get-upload-url",
             axum::routing::post(routes::session_recording::get_upload_url),
         )
+        .route(
+            "/api/session-recording/auto-enroll",
+            axum::routing::post(routes::session_recording::auto_enroll),
+        )
         .layer(middleware::from_fn(auth::auth_middleware));
 
     // Public routes
