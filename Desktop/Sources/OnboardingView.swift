@@ -93,9 +93,7 @@ struct OnboardingView: View {
                         .onHover { hovering in
                             hintsHovered = hovering
                         }
-                        .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.3), value: showGraphHints)
-                        .animation(.easeInOut(duration: 0.3), value: hintsHovered)
+                        .opacity(graphHasData ? 1 : 0)
                         .animation(.easeInOut(duration: 0.3), value: graphHasData)
                     }
                     .onAppear {
