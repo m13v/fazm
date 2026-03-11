@@ -59,6 +59,7 @@
     "Added Report an Issue button to the response header \u2014 icon-only with tooltip; flashes orange if AI is stuck thinking for 30+ seconds",
     "Report issue button now flashes on startup if the previous session crashed unexpectedly",
     "Fixed \"AI service temporarily unavailable\" errors caused by oversized screenshots accumulating in long sessions",
-    "Fixed Playwright screenshots exceeding API dimension limits on Retina displays"
+    "Fixed Playwright screenshots exceeding API dimension limits on Retina displays",
+    "Fixed 401 auth errors not triggering re-authentication, causing users to get stuck with \"AI service temporarily unavailable\" errors"
   ]
 }
