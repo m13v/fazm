@@ -115,6 +115,7 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "scan_files",
   "set_user_preferences",
   "ask_followup",
+  "setup_browser_extension",
   "complete_onboarding",
   "save_knowledge_graph",
 ]);
@@ -356,6 +357,15 @@ The user can click a button OR type their own reply. Wait for their response bef
         },
       },
       required: ["question", "options"],
+    },
+  },
+  {
+    name: "setup_browser_extension",
+    description: `Open the browser extension setup wizard. Opens a guided window to install and connect the Chrome Playwright extension for browser automation. The user can complete the setup or skip it. Returns whether they completed or skipped. Call this when the user wants to set up browser access.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
     },
   },
   {
