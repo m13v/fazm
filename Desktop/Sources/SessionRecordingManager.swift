@@ -27,8 +27,13 @@ class SessionRecordingManager {
     }
 
     /// Re-check the feature flag after sign-in (distinct_id changes to Firebase UID).
+    /// Also attempts auto-enrollment for beta channel users.
     func recheckAfterSignIn() {
         log("SessionRecording: re-checking flag after sign-in")
+
+        // Try auto-enrollment first, then reload flags
+        requestAutoEnroll()
+
         PostHogManager.shared.reloadFeatureFlags()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
             self?.checkFlagAndUpdate()
@@ -138,6 +143,42 @@ class SessionRecordingManager {
         pollTimer?.invalidate()
         pollTimer = nil
         stop()
+    }
+
+    // MARK: - Auto-enrollment
+
+    /// Ask the backend to auto-enroll this device for session recording.
+    /// Only enrolls beta channel users, up to a server-side cap.
+    private func requestAutoEnroll() {
+        let backendURL = env("FAZM_BACKEND_URL")
+        let backendSecret = env("FAZM_BACKEND_SECRET")
+        guard !backendURL.isEmpty, !backendSecret.isEmpty else { return }
+        guard let deviceId = getDeviceId() else { return }
+
+        let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "beta"
+
+        guard let url = URL(string: "\(backendURL)/api/session-recording/auto-enroll") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(backendSecret)", forHTTPHeaderField: "Authorization")
+        request.setValue(deviceId, forHTTPHeaderField: "X-Device-ID")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: String] = ["update_channel": channel]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let error = error {
+                log("SessionRecording: auto-enroll request failed: \(error.localizedDescription)")
+                return
+            }
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+            let enrolled = json["enrolled"] as? Bool ?? false
+            let reason = json["reason"] as? String ?? "unknown"
+            log("SessionRecording: auto-enroll result: enrolled=\(enrolled) reason=\(reason)")
+        }.resume()
     }
 
     // MARK: - Private
