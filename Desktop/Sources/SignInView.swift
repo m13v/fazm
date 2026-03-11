@@ -109,6 +109,7 @@ struct SignInView: View {
                         .scaledFont(size: 11, weight: .regular)
                         .foregroundColor(FazmColors.textQuaternary)
                     Button(action: {
+                        PostHogManager.shared.track("terms_of_service_clicked", properties: ["source": "sign_in"])
                         if let url = URL(string: "https://fazm.ai/terms") {
                             NSWorkspace.shared.open(url)
                         }
@@ -121,7 +122,10 @@ struct SignInView: View {
                     Text(" and ")
                         .scaledFont(size: 11, weight: .regular)
                         .foregroundColor(FazmColors.textQuaternary)
-                    Button(action: { showPrivacySheet = true }) {
+                    Button(action: {
+                        PostHogManager.shared.track("privacy_policy_clicked", properties: ["source": "sign_in"])
+                        showPrivacySheet = true
+                    }) {
                         Text("Privacy Policy")
                             .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(FazmColors.purplePrimary)
