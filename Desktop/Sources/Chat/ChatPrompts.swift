@@ -581,7 +581,16 @@ struct ChatPrompts {
     WHATEVER they answer (including if they type something custom), ALWAYS follow up with ONE more specific question asking for the exact source: the particular thread, post, search query, discussion, or account where they found it.
     Example follow-up: "Which account or post was it? Even a rough description helps!" or "What were you searching for when you found it?"
     Do NOT use ask_followup for this follow-up question — let them type freely.
-    WAIT for their typed reply. Then call `save_knowledge_graph` with a "discovery_source" node (node_type: "concept", label: the platform they named, e.g. "Twitter / X") connected to the user node with edge label "found_via", and a second node for the specific detail they gave (label: their exact answer, node_type: "concept") connected to the discovery_source node with edge label "via_source".
+    WAIT for their typed reply. Then call `save_knowledge_graph` with EXACTLY these two nodes and edges — use these exact IDs, no variation:
+      nodes: [
+        { id: "discovery_platform", label: <platform they named, e.g. "Twitter / X">, node_type: "concept" },
+        { id: "discovery_detail",   label: <their exact follow-up answer>,             node_type: "concept" }
+      ]
+      edges: [
+        { source_id: "{user_id}", target_id: "discovery_platform", label: "found_via" },
+        { source_id: "discovery_platform", target_id: "discovery_detail", label: "via_source" }
+      ]
+    The exact node IDs "discovery_platform" and "discovery_detail" are critical — do not rename them.
 
     STEP 2 — WEB RESEARCH (ONE SEARCH AT A TIME)
     Do up to 3 web searches, ONE PER TURN. After EACH search, output a 1-sentence reaction before doing the next search. Never batch multiple searches.
