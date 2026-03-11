@@ -33,6 +33,24 @@ class PostHogManager {
 
         PostHogSDK.shared.setup(config)
 
+        // One-time migration: clear the isIdentified flag that was incorrectly set by
+        // older versions (≤0.5.2) which called PostHogSDK.identify() from setUserProperty().
+        // Without this, the SDK silently ignores identifyAuthUser()'s identify() call.
+        // PostHog stores this as a file: ~/Library/Application Support/{bundleId}/{apiKey}/posthog.isIdentified
+        let migrationKey = "posthog_identity_migrated_v2"
+        if !UserDefaults.standard.bool(forKey: migrationKey) {
+            if let bundleId = Bundle.main.bundleIdentifier,
+               let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                let isIdentifiedFile = appSupport
+                    .appendingPathComponent(bundleId)
+                    .appendingPathComponent(apiKey)
+                    .appendingPathComponent("posthog.isIdentified")
+                try? FileManager.default.removeItem(at: isIdentifiedFile)
+            }
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            log("PostHog: Cleared stale isIdentified flag (one-time migration)")
+        }
+
         isInitialized = true
         log("PostHog: Initialized successfully")
     }
