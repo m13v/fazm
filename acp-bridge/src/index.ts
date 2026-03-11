@@ -929,12 +929,6 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         prompt: promptBlocks,
       };
 
-      // DEBUG: Simulate 401 wrapped as -32603 (remove after testing)
-      if (process.env.SIMULATE_401 === "true") {
-        delete process.env.SIMULATE_401; // only once
-        throw new AcpError("Internal error: Failed to authenticate. API Error: 401 terminated", -32603);
-      }
-
       const promptResult = (await acpRequest("session/prompt", sessionPromptPayload)) as {
         stopReason: string;
         // Populated by patched-acp-entry.mjs intercepting SDKResultSuccess
