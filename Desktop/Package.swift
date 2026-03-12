@@ -13,7 +13,7 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
         .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "11.0.0"),
-        .package(url: "https://github.com/m13v/macos-session-replay.git", from: "0.2.0"),
+        .package(url: "https://github.com/m13v/macos-session-replay.git", from: "0.3.0"),
     ],
     targets: [
         .target(
