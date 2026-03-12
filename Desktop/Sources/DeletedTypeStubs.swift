@@ -354,6 +354,7 @@ class APIClient {
             intIncrement("\(acctPrefix).total_tokens", totalTokens),
             dblIncrement("\(acctPrefix).cost_usd", costUsd),
             intIncrement("\(acctPrefix).call_count", 1),
+            ["fieldPath": "last_updated_at", "setToServerValue": "REQUEST_TIME"],
         ]
 
         let write: [String: Any] = [
