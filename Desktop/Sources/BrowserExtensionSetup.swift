@@ -59,7 +59,7 @@ final class BrowserExtensionSetupWindowController {
         window.isMovableByWindowBackground = true
         window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
-        window.level = .floating
+        window.level = .normal
         window.appearance = NSAppearance(named: .darkAqua)
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -295,7 +295,7 @@ struct BrowserExtensionSetup: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Open the extension and copy the auth token")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(tokenStepDone ? FazmColors.textTertiary : FazmColors.textPrimary)
+                            .foregroundColor(!extensionStepDone ? FazmColors.textTertiary.opacity(0.5) : tokenStepDone ? FazmColors.textTertiary : FazmColors.textPrimary)
 
                         Button(action: {
                             Self.openExtensionInChrome()
@@ -312,7 +312,7 @@ struct BrowserExtensionSetup: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(!chromeInstalled)
+                        .disabled(!chromeInstalled || !extensionStepDone)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -324,7 +324,7 @@ struct BrowserExtensionSetup: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Paste it here")
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(isTokenValid ? FazmColors.textTertiary : FazmColors.textPrimary)
+                            .foregroundColor(!tokenStepDone ? FazmColors.textTertiary.opacity(0.5) : isTokenValid ? FazmColors.textTertiary : FazmColors.textPrimary)
 
                         TextField("Paste token here...", text: $tokenInput)
                             .textFieldStyle(.plain)
@@ -344,7 +344,7 @@ struct BrowserExtensionSetup: View {
                                             )
                                     )
                             )
-                            .disabled(!chromeInstalled)
+                            .disabled(!chromeInstalled || !tokenStepDone)
                             .onChange(of: tokenInput) { _, _ in
                                 tokenError = nil
                             }
