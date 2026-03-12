@@ -148,11 +148,10 @@ struct AIResponseView: View {
                 hangTask?.cancel()
                 hangTask = nil
                 isStopping = false
-                // Don't clear isHanging if it was set by a previous crash detection —
-                // only clear it when it was triggered by the 30s timeout timer.
-                if !isHangingFromCrash {
-                    isHanging = false
-                }
+                // Clear hanging state after any successful response, including crash-triggered hangs.
+                // Once the user gets a response, the previous crash is no longer worth flagging.
+                isHanging = false
+                isHangingFromCrash = false
             }
         }
     }
