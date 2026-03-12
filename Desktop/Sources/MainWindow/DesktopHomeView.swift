@@ -89,7 +89,8 @@ struct DesktopHomeView: View {
                     chatProvider: viewModelContainer.chatProvider,
                     onComplete: {
                         FloatingControlBarManager.shared.retryPendingQuery()
-                    }
+                    },
+                    source: "chat_interception"
                 )
             }
         }
