@@ -1024,13 +1024,11 @@ class ChatToolExecutor {
                     // Keep the process alive — it's listening on localhost for the OAuth callback
                     activeLoginProcess = process
 
-                    // Open the OAuth URL in the user's default browser
-                    if let url = URL(string: authURL) {
-                        await MainActor.run {
-                            NSWorkspace.shared.open(url)
-                        }
-                        log("GWS auth login: opened OAuth URL in default browser")
+                    // Open the OAuth URL in Chrome (where the user's sessions live)
+                    await MainActor.run {
+                        BrowserExtensionSetup.openURLInChrome(authURL)
                     }
+                    log("GWS auth login: opened OAuth URL in Chrome")
 
                     // Monitor the gws process in the background — when it exits (OAuth callback received),
                     // automatically continue the conversation
