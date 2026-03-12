@@ -25,6 +25,10 @@ class SessionRecordingManager {
     private var isMainWindowActive = false
     /// Tracks whether the AI agent is actively processing a query.
     private var isAgentWorking = false
+    /// Delayed pause: keep recording for 30s after last interaction so we capture
+    /// the user reading the response / reacting before pausing.
+    private var pauseWorkItem: DispatchWorkItem?
+    private let pauseDelay: TimeInterval = 30
 
     private init() {}
 
@@ -216,6 +220,10 @@ class SessionRecordingManager {
 
     /// Resume recording if currently paused.
     private func resumeRecording(reason: String) {
+        // Cancel any pending delayed pause
+        pauseWorkItem?.cancel()
+        pauseWorkItem = nil
+
         guard let recorder else { return }
         Task {
             let paused = await recorder.isPaused
@@ -225,25 +233,33 @@ class SessionRecordingManager {
         }
     }
 
-    /// Check if recording should be paused. Only pause when no interaction signals are active.
+    /// Schedule a pause after `pauseDelay` seconds. If any interaction happens before
+    /// the delay expires, the pause is cancelled by `resumeRecording`.
     private func evaluatePauseState() {
-        guard let recorder else { return }
-
-        // Don't pause if agent is working — it may be using browser, opening files, etc.
-        guard !isAgentWorking else { return }
-
-        // Don't pause if the main window (settings/onboarding) is active
-        guard !isMainWindowActive else { return }
-
-        // Don't pause if the floating bar state still indicates active interaction
-        // (checked via the Combine publishers above — if we got here, none are active)
-
-        Task {
-            let paused = await recorder.isPaused
-            guard !paused else { return }
-            await recorder.pause()
-            log("SessionRecording: paused (no active interaction)")
+        // Don't even schedule if agent is working or main window is active
+        guard !isAgentWorking, !isMainWindowActive else {
+            pauseWorkItem?.cancel()
+            pauseWorkItem = nil
+            return
         }
+
+        // Already have a pending pause scheduled — let it run
+        guard pauseWorkItem == nil else { return }
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let recorder = self.recorder else { return }
+            self.pauseWorkItem = nil
+            // Re-check: conditions may have changed during the delay
+            guard !self.isAgentWorking, !self.isMainWindowActive else { return }
+            Task {
+                let paused = await recorder.isPaused
+                guard !paused else { return }
+                await recorder.pause()
+                log("SessionRecording: paused (no interaction for \(Int(self.pauseDelay))s)")
+            }
+        }
+        pauseWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + pauseDelay, execute: work)
     }
 
     /// Stop recording (call on app termination or when flag is turned off).
@@ -261,6 +277,8 @@ class SessionRecordingManager {
     func shutdown() {
         pollTimer?.invalidate()
         pollTimer = nil
+        pauseWorkItem?.cancel()
+        pauseWorkItem = nil
         activityCancellables.removeAll()
         if let obs = appActiveObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = appResignObserver { NotificationCenter.default.removeObserver(obs) }
