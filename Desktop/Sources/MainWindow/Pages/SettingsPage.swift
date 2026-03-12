@@ -914,7 +914,8 @@ struct SettingsContentView: View {
                     chatProvider: chatProvider,
                     onComplete: {
                         playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
-                    }
+                    },
+                    source: "settings"
                 )
             }
         }
