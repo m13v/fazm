@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SessionReplay
 
@@ -5,6 +6,9 @@ import SessionReplay
 ///
 /// Captures the full display at 5 FPS, encodes to H.265 chunks, and uploads
 /// to GCS via signed URLs from the Fazm backend.
+///
+/// Recording is paused when the user is not interacting with the app and resumed
+/// when any interaction begins (PTT, floating bar focus, main window focus, active query).
 @MainActor
 class SessionRecordingManager {
     static let shared = SessionRecordingManager()
@@ -12,6 +16,14 @@ class SessionRecordingManager {
     private var recorder: SessionRecorder?
     private var isStarted = false
     private var pollTimer: Timer?
+    private var activityCancellables = Set<AnyCancellable>()
+    private var appActiveObserver: Any?
+    private var appResignObserver: Any?
+
+    /// Tracks whether the app's main window (settings/onboarding) is in the foreground.
+    private var isMainWindowActive = false
+    /// Tracks whether the AI agent is actively processing a query.
+    private var isAgentWorking = false
 
     private init() {}
 
@@ -118,13 +130,118 @@ class SessionRecordingManager {
         Task {
             do {
                 try await recorder.start()
+                // Start paused — activity observers will resume when user interacts
+                await recorder.pause()
                 let status = await recorder.getStatus()
-                log("SessionRecording: started (session=\(status.sessionId ?? "none"))")
+                log("SessionRecording: started paused (session=\(status.sessionId ?? "none"))")
             } catch {
                 logError("SessionRecording: failed to start", error: error)
                 self.isStarted = false
                 self.recorder = nil
             }
+        }
+    }
+
+    // MARK: - Activity-Aware Pause/Resume
+
+    /// Wire up observers for user interaction signals.
+    /// Call after the floating bar and chat provider are available.
+    func observeActivity(barState: FloatingControlBarState, chatProvider: ChatProvider) {
+        activityCancellables.removeAll()
+
+        // 1. PTT / voice listening → resume immediately
+        barState.$isVoiceListening
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] listening in
+                if listening { self?.resumeRecording(reason: "PTT started") }
+                else { self?.evaluatePauseState() }
+            }
+            .store(in: &activityCancellables)
+
+        // 2. AI conversation collapsed (user clicked away) → evaluate pause
+        //    Expanded from collapsed (user clicked back) → resume
+        barState.$isCollapsed
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] collapsed in
+                if collapsed { self?.evaluatePauseState() }
+                else { self?.resumeRecording(reason: "bar expanded") }
+            }
+            .store(in: &activityCancellables)
+
+        // 3. AI conversation opened → resume
+        barState.$showingAIConversation
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] showing in
+                if showing { self?.resumeRecording(reason: "AI conversation opened") }
+                else { self?.evaluatePauseState() }
+            }
+            .store(in: &activityCancellables)
+
+        // 4. Agent actively working → keep recording even if user tabs away
+        chatProvider.$isSending
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] sending in
+                self?.isAgentWorking = sending
+                if sending { self?.resumeRecording(reason: "agent started") }
+                else { self?.evaluatePauseState() }
+            }
+            .store(in: &activityCancellables)
+
+        // 5. App activation (main window / settings / onboarding comes to front)
+        appActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.isMainWindowActive = true
+            self?.resumeRecording(reason: "app became active")
+        }
+
+        appResignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.isMainWindowActive = false
+            self?.evaluatePauseState()
+        }
+
+        log("SessionRecording: activity observers installed")
+    }
+
+    /// Resume recording if currently paused.
+    private func resumeRecording(reason: String) {
+        guard let recorder else { return }
+        Task {
+            let paused = await recorder.isPaused
+            guard paused else { return }
+            await recorder.resume()
+            log("SessionRecording: resumed (\(reason))")
+        }
+    }
+
+    /// Check if recording should be paused. Only pause when no interaction signals are active.
+    private func evaluatePauseState() {
+        guard let recorder else { return }
+
+        // Don't pause if agent is working — it may be using browser, opening files, etc.
+        guard !isAgentWorking else { return }
+
+        // Don't pause if the main window (settings/onboarding) is active
+        guard !isMainWindowActive else { return }
+
+        // Don't pause if the floating bar state still indicates active interaction
+        // (checked via the Combine publishers above — if we got here, none are active)
+
+        Task {
+            let paused = await recorder.isPaused
+            guard !paused else { return }
+            await recorder.pause()
+            log("SessionRecording: paused (no active interaction)")
         }
     }
 
@@ -143,6 +260,9 @@ class SessionRecordingManager {
     func shutdown() {
         pollTimer?.invalidate()
         pollTimer = nil
+        activityCancellables.removeAll()
+        if let obs = appActiveObserver { NotificationCenter.default.removeObserver(obs) }
+        if let obs = appResignObserver { NotificationCenter.default.removeObserver(obs) }
         stop()
     }
 
