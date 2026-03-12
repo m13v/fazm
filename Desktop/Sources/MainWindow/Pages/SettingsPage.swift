@@ -125,6 +125,7 @@ struct SettingsContentView: View {
     @State private var showSignOutAlert = false
 
     enum SettingsSection: String, CaseIterable {
+        case home = "Home"
         case general = "General"
         case shortcuts = "Shortcuts"
         case dictionary = "Dictionary"
@@ -169,6 +170,8 @@ struct SettingsContentView: View {
             // Section content
             Group {
                 switch selectedSection {
+                case .home:
+                    HomeSection()
                 case .general:
                     generalSection
                 case .shortcuts:
