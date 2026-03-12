@@ -6,7 +6,7 @@ struct DesktopHomeView: View {
     @ObservedObject private var authState = AuthState.shared
 
     // Settings sidebar state
-    @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
+    @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .home
     @State private var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection? = nil
     @State private var highlightedSettingId: String? = nil
 
