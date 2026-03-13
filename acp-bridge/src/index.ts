@@ -1,10 +1,8 @@
 /**
- * ACP Bridge — translates between OMI's JSON-lines protocol and the
+ * ACP Bridge — translates between Fazm's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
  *
- * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM/agent-cloud flow
- * (agent-cloud/agent.mjs), which runs Claude Code SDK on a remote VM for
- * the Omi Agent feature. This bridge runs locally on the user's Mac.
+ * THIS IS THE DESKTOP APP FLOW. This bridge runs locally on the user's Mac.
  *
  * Session lifecycle:
  * 1. warmup  → session/new (system prompt applied here, once)
@@ -19,7 +17,7 @@
  * the AGGREGATE across all those rounds. There are no separate sub-agents.
  *
  * Implementation flow:
- * 1. Create Unix socket server for omi-tools relay
+ * 1. Create Unix socket server for fazm-tools relay
  * 2. Spawn claude-code-acp as subprocess (JSON-RPC over stdio)
  * 3. Initialize ACP connection
  * 4. Handle auth if required (forward to Swift, wait for user action)
@@ -55,7 +53,7 @@ const playwrightCli = join(
   "cli.js"
 );
 
-const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
+const fazmToolsStdioScript = join(__dirname, "fazm-tools-stdio.js");
 
 // mcp-server-macos-use binary lives in Contents/MacOS/ alongside the main app binary.
 // Node runs from Contents/Resources/Fazm_Fazm.bundle/node, so navigate up to Contents/.
@@ -83,8 +81,8 @@ function logErr(msg: string): void {
 
 // --- OMI tools relay via Unix socket ---
 
-let omiToolsPipePath = "";
-let omiToolsClients: Socket[] = [];
+let fazmToolsPipePath = "";
+let fazmToolsClients: Socket[] = [];
 
 // Pending tool call promises — resolved when Swift sends back results
 const pendingToolCalls = new Map<
@@ -105,9 +103,9 @@ function resolveToolCall(msg: { callId: string; result: string }): void {
   }
 }
 
-/** Start Unix socket server for omi-tools stdio processes to connect to */
-function startOmiToolsRelay(): Promise<string> {
-  const pipePath = join(tmpdir(), `omi-tools-${process.pid}.sock`);
+/** Start Unix socket server for fazm-tools stdio processes to connect to */
+function startFazmToolsRelay(): Promise<string> {
+  const pipePath = join(tmpdir(), `fazm-tools-${process.pid}.sock`);
 
   // Clean up any stale socket
   try {
@@ -118,7 +116,7 @@ function startOmiToolsRelay(): Promise<string> {
 
   return new Promise((resolve, reject) => {
     const server = createNetServer((client: Socket) => {
-      omiToolsClients.push(client);
+      fazmToolsClients.push(client);
       let buffer = "";
 
       client.on("data", (data: Buffer) => {
@@ -150,7 +148,7 @@ function startOmiToolsRelay(): Promise<string> {
               const callId = msg.callId;
               pendingToolCalls.set(callId, {
                 resolve: (result: string) => {
-                  // Send result back to the omi-tools stdio process
+                  // Send result back to the fazm-tools stdio process
                   try {
                     client.write(
                       JSON.stringify({
@@ -160,28 +158,28 @@ function startOmiToolsRelay(): Promise<string> {
                       }) + "\n"
                     );
                   } catch (err) {
-                    logErr(`Failed to send tool result to omi-tools: ${err}`);
+                    logErr(`Failed to send tool result to fazm-tools: ${err}`);
                   }
                 },
               });
             }
           } catch {
-            logErr(`Failed to parse omi-tools message: ${line.slice(0, 200)}`);
+            logErr(`Failed to parse fazm-tools message: ${line.slice(0, 200)}`);
           }
         }
       });
 
       client.on("close", () => {
-        omiToolsClients = omiToolsClients.filter((c) => c !== client);
+        fazmToolsClients = fazmToolsClients.filter((c) => c !== client);
       });
 
       client.on("error", (err) => {
-        logErr(`omi-tools client error: ${err.message}`);
+        logErr(`fazm-tools client error: ${err.message}`);
       });
     });
 
     server.listen(pipePath, () => {
-      logErr(`omi-tools relay socket: ${pipePath}`);
+      logErr(`fazm-tools relay socket: ${pipePath}`);
       resolve(pipePath);
     });
 
@@ -655,22 +653,22 @@ type McpServerConfig = {
 function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
-  // omi-tools (stdio, connects back via Unix socket)
-  const omiToolsEnv: Array<{ name: string; value: string }> = [
-    { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
-    { name: "OMI_QUERY_MODE", value: mode },
+  // fazm-tools (stdio, connects back via Unix socket)
+  const fazmToolsEnv: Array<{ name: string; value: string }> = [
+    { name: "FAZM_BRIDGE_PIPE", value: fazmToolsPipePath },
+    { name: "FAZM_QUERY_MODE", value: mode },
   ];
   if (cwd) {
-    omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
+    fazmToolsEnv.push({ name: "FAZM_WORKSPACE", value: cwd });
   }
   if (sessionKey === "onboarding") {
-    omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
+    fazmToolsEnv.push({ name: "FAZM_ONBOARDING", value: "true" });
   }
   servers.push({
-    name: "omi-tools",
+    name: "fazm-tools",
     command: process.execPath,
-    args: [omiToolsStdioScript],
-    env: omiToolsEnv,
+    args: [fazmToolsStdioScript],
+    env: fazmToolsEnv,
   });
 
   // Playwright MCP server
@@ -1492,9 +1490,9 @@ async function main(): Promise<void> {
   // 0. Start screenshot resize watcher (prevents 2000px API limit errors)
   startScreenshotResizeWatcher();
 
-  // 1. Start Unix socket for omi-tools relay
-  omiToolsPipePath = await startOmiToolsRelay();
-  logErr("omi-tools relay started");
+  // 1. Start Unix socket for fazm-tools relay
+  fazmToolsPipePath = await startFazmToolsRelay();
+  logErr("fazm-tools relay started");
 
   // 2. Start the ACP subprocess
   startAcpProcess();
