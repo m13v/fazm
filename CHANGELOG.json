@@ -68,6 +68,7 @@
     "API keys are now fetched from the backend instead of being bundled in the app binary",
     "Renamed internal MCP server from omi-tools to fazm-tools and added diagnostic logging for tool calls",
     "Claude account now connects immediately when switching to Your Claude Account in Settings",
-    "Added loading spinner when viewing CLAUDE.md and skill files in settings"
+    "Added loading spinner when viewing CLAUDE.md and skill files in settings",
+    "Fixed noisy Sentry reports when no microphone is available, added retry logic and \"No microphone detected\" hint in Settings"
   ]
 }
