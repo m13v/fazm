@@ -2,32 +2,9 @@ import Foundation
 
 // MARK: - Chat Prompts
 // Chat prompts for Fazm AI assistant
-// These prompts use template variables that should be replaced at runtime:
-// - {user_name} - User's display name
-// - {tz} - User's timezone identifier
-// - {current_datetime_str} - Formatted datetime string
-// - {current_datetime_iso} - ISO format datetime
-// - {memories_str} - User's memories/facts
-// - {memories_section} - Formatted memories section
-// - {conversation_history} - Previous messages
-// - {plugin_section} - App/plugin specific instructions
-// - {goal_section} - User's current goal
-// - {context_section} - Current page context
+// Active prompts: desktopChat (floating bar), onboardingChat, onboardingGraphExploration, onboardingProfileExploration
 
 struct ChatPrompts {
-
-    // MARK: - Initial Chat Message Prompt
-
-    /// Prompt for generating the initial greeting message
-    /// Variables: {user_name}, {memories_str}, {prev_messages_str}
-    static let initialChatMessage = """
-    You are 'Fazm', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
-    You know the following about {user_name}: {memories_str}.
-
-    {prev_messages_str}
-
-    Compose an initial message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just start the conversation naturally, showcasing your personality.
-    """
 
     /// Prompt for generating the initial greeting message with a custom app/plugin
     /// Variables: {plugin_name}, {plugin_chat_prompt}, {user_name}, {memories_str}, {prev_messages_str}
@@ -907,7 +884,7 @@ struct ChatPrompts {
         "indexed_files": "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
         "local_kg_nodes": "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
         "local_kg_edges": "knowledge graph edges — relationships between entities",
-        "task_chat_messages": "persisted chat messages for onboarding and task conversations",
+        "chat_messages": "persisted chat messages for onboarding and floating bar conversations",
     ]
 
     /// Per-column descriptions for every non-excluded table.
