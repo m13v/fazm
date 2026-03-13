@@ -217,13 +217,15 @@ final class ClaudeAuthWindowController {
         window.isReleasedWhenClosed = false
         window.level = .floating
         window.appearance = NSAppearance(named: .darkAqua)
-        // Center on the main screen (not the last-used screen, which may be off-screen)
-        if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let windowSize = window.frame.size
-            let x = screenFrame.midX - windowSize.width / 2
-            let y = screenFrame.midY - windowSize.height / 2
-            window.setFrameOrigin(NSPoint(x: x, y: y))
+        // Center on the screen that contains the mouse pointer
+        // (avoids placing on a secondary display the user isn't looking at)
+        let mouseScreen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
+            ?? NSScreen.main ?? NSScreen.screens.first
+        if let screen = mouseScreen {
+            let sf = screen.visibleFrame
+            let x = sf.origin.x + (sf.width - 400) / 2
+            let y = sf.origin.y + (sf.height - 380) / 2
+            window.setFrame(NSRect(x: x, y: y, width: 400, height: 380), display: true)
         } else {
             window.center()
         }
