@@ -13,8 +13,8 @@ class ChatToolExecutor {
     static var onboardingAppState: AppState?
     /// Called when AI invokes complete_onboarding
     static var onCompleteOnboarding: (() -> Void)?
-    /// Called when AI invokes ask_followup — delivers quick-reply options to the UI
-    static var onQuickReplyOptions: ((_ options: [String]) -> Void)?
+    /// Called when AI invokes ask_followup — delivers question text and quick-reply options to the UI
+    static var onQuickReplyOptions: ((_ question: String, _ options: [String]) -> Void)?
     /// Called when AI invokes save_knowledge_graph — notifies the graph view to update
     static var onKnowledgeGraphUpdated: (() -> Void)?
     /// Called when scan_files completes — used to kick off parallel exploration
@@ -833,8 +833,8 @@ class ChatToolExecutor {
         }
         let options = (args["options"] as? [String]) ?? []
 
-        // Notify the UI to render quick-reply buttons
-        onQuickReplyOptions?(options)
+        // Notify the UI to render question text and quick-reply buttons
+        onQuickReplyOptions?(question, options)
 
         return "Presented to user: \"\(question)\" with options: \(options.joined(separator: ", "))"
     }
