@@ -125,7 +125,7 @@ class AudioDeviceManager: ObservableObject {
                     }
                 )
                 noMicrophoneAvailable = false
-            } catch let error as AudioCaptureService.AudioCaptureError where error == .noInputAvailable {
+            } catch let error as AudioCaptureService.AudioCaptureError where error.isNoInput {
                 // Expected when no mic is connected (e.g. Mac mini) — don't report to Sentry
                 log("AudioDeviceManager: no microphone available for level monitoring")
                 isMonitoringLevel = false
@@ -197,7 +197,7 @@ class AudioDeviceManager: ObservableObject {
                                 }
                             }
                         )
-                    } catch let error as AudioCaptureService.AudioCaptureError where error == .noInputAvailable {
+                    } catch let error as AudioCaptureService.AudioCaptureError where error.isNoInput {
                         log("AudioDeviceManager: no microphone available after restart")
                         self.isMonitoringLevel = false
                         self.noMicrophoneAvailable = true
