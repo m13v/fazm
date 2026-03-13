@@ -1077,7 +1077,7 @@ class ChatToolExecutor {
                         } else {
                             log("GWS OAuth process exited with code \(exitCode)")
                             await MainActor.run {
-                                onQuickReplyOptions?(["Try again", "Cancel"])
+                                onQuickReplyOptions?("Google sign-in failed. Want to try again?", ["Try again", "Cancel"])
                             }
                         }
                     }
