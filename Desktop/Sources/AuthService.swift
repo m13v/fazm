@@ -473,6 +473,9 @@ class AuthService: NSObject {
         setSentryUserContext()
         setPostHogUserContext()
 
+        // Fetch API keys from backend now that user is authenticated
+        Task { await KeyService.shared.fetchKeys() }
+
         // Re-check session recording flag now that distinct_id is the Firebase UID
         SessionRecordingManager.shared.recheckAfterSignIn()
 
@@ -660,6 +663,7 @@ class AuthService: NSObject {
             log("AuthService: Restored auth state (userId: \(userId ?? "nil"), email: \(userEmail ?? "nil"))")
             setSentryUserContext()
             setPostHogUserContext()
+            Task { await KeyService.shared.fetchKeys() }
             // Don't call updateAuthState() here — AuthState.init() already restored
             // isSignedIn from UserDefaults synchronously. Calling updateAuthState() during
             // applicationDidFinishLaunching would mutate @Published properties while
