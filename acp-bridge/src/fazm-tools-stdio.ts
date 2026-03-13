@@ -1,10 +1,10 @@
 /**
- * Stdio-based MCP server for omi tools (execute_sql, semantic_search).
+ * Stdio-based MCP server for Fazm tools (execute_sql, semantic_search).
  * This script is spawned as a subprocess by the ACP agent.
  * It reads JSON-RPC requests from stdin and writes responses to stdout.
  *
  * Tool calls are forwarded to the parent acp-bridge process via a named pipe
- * (passed as OMI_BRIDGE_PIPE env var), which then forwards them to Swift.
+ * (passed as FAZM_BRIDGE_PIPE env var), which then forwards them to Swift.
  */
 
 import { createInterface } from "readline";
@@ -14,10 +14,10 @@ import { join } from "path";
 import { homedir } from "os";
 
 // Current query mode
-let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
+let currentMode: "ask" | "act" = (process.env.FAZM_QUERY_MODE || process.env.OMI_QUERY_MODE) === "ask" ? "ask" : "act";
 
 // Connection to parent bridge for tool forwarding
-const bridgePipePath = process.env.OMI_BRIDGE_PIPE;
+const bridgePipePath = process.env.FAZM_BRIDGE_PIPE || process.env.OMI_BRIDGE_PIPE;
 
 // Pending tool calls — resolved when parent sends back results via pipe
 const pendingToolCalls = new Map<
@@ -28,11 +28,11 @@ const pendingToolCalls = new Map<
 let callIdCounter = 0;
 
 function nextCallId(): string {
-  return `omi-${++callIdCounter}-${Date.now()}`;
+  return `fazm-${++callIdCounter}-${Date.now()}`;
 }
 
 function logErr(msg: string): void {
-  process.stderr.write(`[omi-tools-stdio] ${msg}\n`);
+  process.stderr.write(`[fazm-tools-stdio] ${msg}\n`);
 }
 
 // --- Communication with parent bridge ---
@@ -43,7 +43,7 @@ let pipeBuffer = "";
 function connectToPipe(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!bridgePipePath) {
-      logErr("No OMI_BRIDGE_PIPE set, tool calls will fail");
+      logErr("No FAZM_BRIDGE_PIPE set, tool calls will fail");
       resolve();
       return;
     }
@@ -107,7 +107,7 @@ async function requestSwiftTool(
 
 // --- MCP tool definitions ---
 
-const isOnboarding = process.env.OMI_ONBOARDING === "true";
+const isOnboarding = (process.env.FAZM_ONBOARDING || process.env.OMI_ONBOARDING) === "true";
 
 const ONBOARDING_TOOL_NAMES = new Set([
   "check_permission_status",
@@ -122,7 +122,7 @@ const ONBOARDING_TOOL_NAMES = new Set([
 const ALL_TOOLS = [
   {
     name: "execute_sql",
-    description: `Run SQL on the local omi.db database.
+    description: `Run SQL on the local fazm.db database.
 Supports: SELECT, INSERT, UPDATE, DELETE.
 SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
 Use for: app usage stats, time queries, task management, aggregations, anything structured.`,
@@ -426,6 +426,10 @@ function send(msg: Record<string, unknown>): void {
   }
 }
 
+function sendErrorResponse(id: unknown, code: number, message: string): void {
+  send({ jsonrpc: "2.0", id, error: { code, message } });
+}
+
 async function handleJsonRpc(
   body: Record<string, unknown>
 ): Promise<void> {
@@ -445,7 +449,7 @@ async function handleJsonRpc(
           result: {
             protocolVersion: "2024-11-05",
             capabilities: { tools: {} },
-            serverInfo: { name: "omi-tools", version: "1.0.0" },
+            serverInfo: { name: "fazm-tools", version: "1.0.0" },
           },
         });
       }
@@ -468,6 +472,8 @@ async function handleJsonRpc(
     case "tools/call": {
       const toolName = params.name as string;
       const args = (params.arguments ?? {}) as Record<string, unknown>;
+
+      logErr(`Tool call received: ${toolName} (id=${body.id})`);
 
       if (toolName === "execute_sql") {
         const query = args.query as string;
@@ -581,7 +587,8 @@ async function handleJsonRpc(
         }
       } else if (toolName === "load_skill") {
         const name = (args.name as string || "").trim();
-        const workspace = process.env.OMI_WORKSPACE || "";
+        logErr(`load_skill: resolving '${name}'`);
+        const workspace = process.env.FAZM_WORKSPACE || process.env.OMI_WORKSPACE || "";
         // Resolve app bundle's BundledSkills directory
         // At runtime: __dirname = Contents/Resources/acp-bridge/dist/
         // BundledSkills = Contents/Resources/Fazm_Fazm.bundle/BundledSkills/
@@ -596,11 +603,15 @@ async function handleJsonRpc(
         for (const filePath of candidates) {
           try {
             content = readFileSync(filePath, "utf8");
-            logErr(`load_skill: loaded '${name}' from ${filePath}`);
+            logErr(`load_skill: loaded '${name}' from ${filePath} (${content.length} bytes)`);
             break;
           } catch {
             // not at this path, try next
           }
+        }
+
+        if (!content) {
+          logErr(`load_skill: '${name}' not found in any candidate path`);
         }
 
         // For dev-mode, prepend workspace path so Claude has that context
@@ -609,6 +620,7 @@ async function handleJsonRpc(
         }
 
         if (!isNotification) {
+          logErr(`load_skill: sending response for '${name}'`);
           send({
             jsonrpc: "2.0",
             id,
@@ -645,6 +657,8 @@ async function handleJsonRpc(
           error: { code: -32601, message: `Unknown tool: ${toolName}` },
         });
       }
+
+      logErr(`Tool call done: ${toolName} (id=${body.id})`);
       break;
     }
 
@@ -674,6 +688,11 @@ async function main(): Promise<void> {
       const msg = JSON.parse(line) as Record<string, unknown>;
       handleJsonRpc(msg).catch((err) => {
         logErr(`Error handling request: ${err}`);
+        // Send error response so ACP doesn't hang waiting
+        const id = msg.id;
+        if (id !== undefined && id !== null) {
+          sendErrorResponse(id, -32603, `Internal error: ${err}`);
+        }
       });
     } catch {
       logErr(`Invalid JSON: ${line.slice(0, 200)}`);
@@ -684,7 +703,7 @@ async function main(): Promise<void> {
     process.exit(0);
   });
 
-  logErr("omi-tools stdio MCP server started");
+  logErr("fazm-tools stdio MCP server started");
 }
 
 main().catch((err) => {
