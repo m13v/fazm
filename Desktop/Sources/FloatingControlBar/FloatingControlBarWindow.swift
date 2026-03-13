@@ -1394,7 +1394,7 @@ class FloatingControlBarManager {
 
         // Wire up suggested replies callback before sending
         barWindow.state.suggestedReplies = []
-        ChatToolExecutor.onQuickReplyOptions = { [weak barWindow] options in
+        ChatToolExecutor.onQuickReplyOptions = { [weak barWindow] _, options in
             Task { @MainActor in
                 barWindow?.state.suggestedReplies = options
             }
