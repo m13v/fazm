@@ -51,7 +51,7 @@ struct DraggableAreaView: NSViewRepresentable {
             let currentLocation = event.locationInWindow
             let newOrigin = NSPoint(
                 x: targetWindow.frame.origin.x + (currentLocation.x - initialLocation.x),
-                y: targetWindow.frame.origin.y + (currentLocation.y - initialLocation.y)
+                y: targetWindow.frame.origin.y
             )
 
             NSAnimationContext.beginGrouping()
