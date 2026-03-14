@@ -71,6 +71,7 @@
     "Added loading spinner when viewing CLAUDE.md and skill files in settings",
     "Fixed noisy Sentry reports when no microphone is available, added retry logic and \"No microphone detected\" hint in Settings",
     "Fixed issue where completing Claude sign-in would dismiss the popup without retrying the interrupted query",
-    "Fixed Claude sign-in window appearing off-screen on multi-monitor setups"
+    "Fixed Claude sign-in window appearing off-screen on multi-monitor setups",
+    "Fixed chat messages disappearing and stale error button after browser extension setup"
   ]
 }
