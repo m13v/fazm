@@ -599,6 +599,12 @@ actor ACPBridge {
     sendLine("{\"type\":\"interrupt\"}")
   }
 
+  /// Cancel any active OAuth flow so the next attempt starts fresh.
+  func cancelAuth() {
+    guard isRunning else { return }
+    sendLine("{\"type\":\"cancel_auth\"}")
+  }
+
   // MARK: - Private
 
   private func sendLine(_ line: String) {
