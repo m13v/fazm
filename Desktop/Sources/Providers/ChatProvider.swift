@@ -874,6 +874,16 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Cancel the active Claude OAuth flow so the next attempt starts fresh
+    func cancelClaudeAuth() {
+        log("ChatProvider: Cancelling Claude OAuth")
+        isClaudeAuthRequired = false
+        claudeAuthUrl = nil
+        Task {
+            await acpBridge.cancelAuth()
+        }
+    }
+
     /// Retry Claude OAuth after a timeout by restarting the ACP bridge
     func retryClaudeAuth() {
         log("ChatProvider: Retrying Claude OAuth")
