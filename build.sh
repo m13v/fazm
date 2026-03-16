@@ -118,6 +118,32 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     echo "Copied acp-bridge to bundle"
 fi
 
+# Bundle Google Workspace MCP (Python)
+GWS_MCP_REPO="$HOME/google_workspace_mcp"
+GWS_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
+if [ -d "$GWS_MCP_REPO" ]; then
+    echo "Bundling Google Workspace MCP..."
+    mkdir -p "$GWS_MCP_BUNDLE"
+    rsync -a --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
+        --exclude='*.pyc' --exclude='.ruff_cache' --exclude='tests' \
+        --exclude='docs' --exclude='build' --exclude='dist' --exclude='*.egg-info' \
+        "$GWS_MCP_REPO/" "$GWS_MCP_BUNDLE/"
+    if command -v uv &>/dev/null; then
+        uv venv "$GWS_MCP_BUNDLE/.venv" --python python3.12 --quiet 2>&1 | tail -1 || true
+        GWS_DEPS=$(python3.12 -c "
+import tomllib
+with open('$GWS_MCP_REPO/pyproject.toml', 'rb') as f:
+    print(' '.join(tomllib.load(f)['project']['dependencies']))
+")
+        uv pip install --python "$GWS_MCP_BUNDLE/.venv/bin/python3" $GWS_DEPS --quiet 2>&1 | tail -3 || true
+        echo "Bundled Google Workspace MCP with venv"
+    else
+        echo "Warning: uv not found — Google Workspace MCP will not work without dependencies"
+    fi
+else
+    echo "Warning: Google Workspace MCP not found at $GWS_MCP_REPO — skipping"
+fi
+
 # Copy .env.app file (app runtime secrets only)
 if [ -f ".env.app" ]; then
     cp ".env.app" "$APP_BUNDLE/Contents/Resources/.env"
