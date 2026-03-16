@@ -13,6 +13,7 @@ struct FloatingControlBarView: View {
     var onNewChat: () -> Void
     var onInterruptAndFollowUp: ((String) -> Void)?
     var onStopAgent: (() -> Void)?
+    var onConnectClaude: (() -> Void)?
 
     @State private var isHovering = false
 
@@ -353,7 +354,8 @@ struct FloatingControlBarView: View {
                     onSendQuery(message)
                 }
             },
-            onStopAgent: onStopAgent
+            onStopAgent: onStopAgent,
+            onConnectClaude: onConnectClaude
         )
         .transition(
             .asymmetric(
