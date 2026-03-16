@@ -65,6 +65,17 @@ const macosUseBinary = join(
   "mcp-server-macos-use"
 );
 
+// Google Workspace MCP — Python server bundled under Contents/Resources/google-workspace-mcp/
+const gwsMcpDir = join(
+  dirname(process.execPath),
+  "..",
+  "..",
+  "Resources",
+  "google-workspace-mcp"
+);
+const gwsMcpPython = join(gwsMcpDir, ".venv", "bin", "python3");
+const gwsMcpMain = join(gwsMcpDir, "main.py");
+
 // --- Helpers ---
 
 function send(msg: OutboundMessage): void {
@@ -701,6 +712,16 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
       name: "macos-use",
       command: macosUseBinary,
       args: [],
+      env: [],
+    });
+  }
+
+  // Google Workspace MCP (Python, stdio transport)
+  if (existsSync(gwsMcpPython) && existsSync(gwsMcpMain)) {
+    servers.push({
+      name: "google-workspace",
+      command: gwsMcpPython,
+      args: [gwsMcpMain, "--transport", "stdio"],
       env: [],
     });
   }
@@ -1462,7 +1483,7 @@ async function main(): Promise<void> {
   } catch { /* ignore */ }
 
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
-  logErr(`MCP versions: playwright=${playwrightVersion}, macos-use=${existsSync(macosUseBinary) ? "bundled" : "missing"}`);
+  logErr(`MCP versions: playwright=${playwrightVersion}, macos-use=${existsSync(macosUseBinary) ? "bundled" : "missing"}, google-workspace=${existsSync(gwsMcpPython) ? "bundled" : "missing"}`);
   logErr(`Playwright MCP config: extension=${process.env.PLAYWRIGHT_USE_EXTENSION ?? "false"}, token=${process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN ? "set" : "unset"}, outputMode=file, imageResponses=omit, outputDir=/tmp/playwright-mcp`);
 
   // Log browser diagnostics for debugging Playwright connection issues
