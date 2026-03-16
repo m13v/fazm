@@ -76,6 +76,8 @@
     "Fixed security issue: API keys are no longer bundled in the app. Authentication now uses per-user Firebase tokens",
     "Floating bar is now draggable by default",
     "Show full message text in recent messages instead of truncating, and added copy-to-clipboard button",
-    "Fixed phantom/ghost floating bar window appearing after closing with Esc"
+    "Fixed phantom/ghost floating bar window appearing after closing with Esc",
+    "Fixed floating bar vertical position not restoring correctly in draggable mode",
+    "Fixed blank code blocks in floating bar chat and added syntax highlighting"
   ]
 }
