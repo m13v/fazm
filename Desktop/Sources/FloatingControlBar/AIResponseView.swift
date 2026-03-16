@@ -27,6 +27,7 @@ struct AIResponseView: View {
     var onNewChat: (() -> Void)?
     var onSendFollowUp: ((String) -> Void)?
     var onStopAgent: (() -> Void)?
+    var onConnectClaude: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -158,6 +159,8 @@ struct AIResponseView: View {
         }
     }
 
+    @State private var connectClaudePulse = false
+
     private var headerView: some View {
         HStack(spacing: 12) {
             if state.isCompacting {
@@ -184,6 +187,10 @@ struct AIResponseView: View {
                     .foregroundColor(.secondary)
             }
 
+            if state.showConnectClaudeButton {
+                connectClaudeButton
+            }
+
             Spacer()
 
             ReportIssueButton(isHanging: isHanging)
@@ -198,6 +205,32 @@ struct AIResponseView: View {
                 NewChatButton(action: onNewChat)
             }
         }
+    }
+
+    private var connectClaudeButton: some View {
+        Button(action: { onConnectClaude?() }) {
+            HStack(spacing: 5) {
+                Image(systemName: "person.badge.key")
+                    .font(.system(size: 10))
+                Text("Connect Claude")
+                    .scaledFont(size: 11, weight: .medium)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(FazmColors.purplePrimary)
+                    .shadow(color: FazmColors.purplePrimary.opacity(connectClaudePulse ? 0.6 : 0.2), radius: connectClaudePulse ? 8 : 2)
+            )
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                connectClaudePulse = true
+            }
+        }
+        .transition(.scale.combined(with: .opacity))
     }
 
     // MARK: - Tutorial Banner
