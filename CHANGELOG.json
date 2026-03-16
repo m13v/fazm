@@ -78,6 +78,8 @@
     "Show full message text in recent messages instead of truncating, and added copy-to-clipboard button",
     "Fixed phantom/ghost floating bar window appearing after closing with Esc",
     "Fixed floating bar vertical position not restoring correctly in draggable mode",
-    "Fixed blank code blocks in floating bar chat and added syntax highlighting"
+    "Fixed blank code blocks in floating bar chat and added syntax highlighting",
+    "Made recent messages scrollable with inline timestamps",
+    "Optimized AI response rendering to prevent app hangs during complex responses"
   ]
 }
