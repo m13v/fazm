@@ -567,14 +567,38 @@ class ChatToolExecutor {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? ""
 
+                // Parse browser transparency lines emitted before the interim profile
+                func parseLine(_ prefix: String) -> [String] {
+                    guard let range = output.range(of: prefix),
+                          let end = output[range.upperBound...].firstIndex(of: "\n") else { return [] }
+                    let value = String(output[range.upperBound..<end]).trimmingCharacters(in: .whitespaces)
+                    return value.isEmpty ? [] : value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                }
+                let browsersScanned = parseLine("BROWSERS_SCANNED: ")
+                let browsersDenied = parseLine("BROWSERS_PERMISSION_DENIED: ")
+
+                var browserSummaryPrefix = ""
+                if !browsersScanned.isEmpty {
+                    let scanned = browsersScanned.map { $0.capitalized }.joined(separator: ", ")
+                    browserSummaryPrefix += "Browsers scanned: \(scanned)"
+                    if !browsersDenied.isEmpty {
+                        let denied = browsersDenied.map { $0.capitalized }.joined(separator: ", ")
+                        browserSummaryPrefix += "\nSkipped (needs Full Disk Access): \(denied)"
+                    }
+                    browserSummaryPrefix += "\n\n"
+                }
+
                 // Extract the interim profile from the log output
                 if let profileStart = output.range(of: "Interim profile ready (WhatsApp + embeddings still running):\n") {
                     let afterMarker = output[profileStart.upperBound...]
-                    // Profile ends at the next log line (starts with timestamp like "HH:MM:SS INFO:")
-                    if let nextLogLine = afterMarker.range(of: #"\n\d{2}:\d{2}:\d{2} "#, options: .regularExpression) {
-                        return String(afterMarker[..<nextLogLine.lowerBound])
+                    // Profile ends at the next log line (starts with timestamp like "YYYY-MM-DD HH:MM:SS")
+                    let profileText: String
+                    if let nextLogLine = afterMarker.range(of: #"\n\d{4}-\d{2}-\d{2} "#, options: .regularExpression) {
+                        profileText = String(afterMarker[..<nextLogLine.lowerBound])
+                    } else {
+                        profileText = String(afterMarker)
                     }
-                    return String(afterMarker)
+                    return browserSummaryPrefix + profileText
                 }
 
                 // Fallback: run profile query directly
@@ -595,7 +619,8 @@ class ChatToolExecutor {
                 try profileProcess.run()
                 profileProcess.waitUntilExit()
                 let profileData = profilePipe.fileHandleForReading.readDataToEndOfFile()
-                return String(data: profileData, encoding: .utf8) ?? "Extraction complete but could not read profile."
+                let fallbackProfile = String(data: profileData, encoding: .utf8) ?? "Extraction complete but could not read profile."
+                return browserSummaryPrefix + fallbackProfile
             } catch {
                 return "Failed to run extraction: \(error.localizedDescription)"
             }
