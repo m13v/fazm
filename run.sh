@@ -48,6 +48,9 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Fazm (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 sleep 0.5  # Let cfprefsd flush after process death
+
+# Remove crash-detection flag files so the dev relaunch isn't treated as a crash
+find ~/Library/Application\ Support/Fazm/users -name ".fazm_running" -delete 2>/dev/null || true
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
