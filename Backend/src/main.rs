@@ -62,9 +62,12 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let jwks_cache = auth::new_jwks_cache();
+
     let app = Router::new()
         .merge(authed_routes)
         .merge(public_routes)
+        .layer(Extension(jwks_cache))
         .layer(Extension(config))
         .layer(cors)
         .layer(TraceLayer::new_for_http());
