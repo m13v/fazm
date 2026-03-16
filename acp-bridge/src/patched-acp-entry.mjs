@@ -163,13 +163,18 @@ ClaudeAcpAgent.prototype.prompt = async function (params) {
     // Total = new input + cache writes + cache reads + output
     const totalTokens = inputTokens + cacheWrite + cacheRead + outputTokens;
 
-    const modelKeys = Object.keys(session._lastModelUsage ?? {});
+    const modelUsage = session._lastModelUsage ?? {};
+    const modelKeys = Object.keys(modelUsage);
     console.error(
       `[patched-acp] Usage: model=${modelKeys.join(",") || "unknown"}, cost=$${costUsd}, ` +
       `input=${inputTokens}, output=${outputTokens}, ` +
       `cacheWrite=${cacheWrite}, cacheRead=${cacheRead}, ` +
       `total=${totalTokens}`
     );
+    // Log per-model breakdown
+    for (const [model, usage] of Object.entries(modelUsage)) {
+      console.error(`[patched-acp]   ${model}: input=${usage.input_tokens??0}, output=${usage.output_tokens??0}, cacheRead=${usage.cache_read_input_tokens??0}, cacheWrite=${usage.cache_creation_input_tokens??0}`);
+    }
 
     const augmented = {
       ...result,
