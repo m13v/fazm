@@ -1520,7 +1520,7 @@ struct SettingsContentView: View {
                     appState.resetOnboardingAndRestart()
                 }
             } message: {
-                Text("This will reset all permissions and restart the app. You'll need to grant permissions again during setup.")
+                Text("This will sign out, reset all permissions, disconnect browser extension, Claude account, and Google Workspace, then restart the app. You'll need to set everything up again.")
             }
         }
     }
