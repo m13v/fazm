@@ -499,9 +499,10 @@ class AnalyticsManager {
         inputTokens: Int = 0,
         outputTokens: Int = 0,
         cacheReadTokens: Int = 0,
-        cacheWriteTokens: Int = 0
+        cacheWriteTokens: Int = 0,
+        queryText: String = ""
     ) {
-        let props: [String: Any] = [
+        var props: [String: Any] = [
             "duration_ms": durationMs,
             "tool_call_count": toolCallCount,
             "tool_names": toolNames.joined(separator: ","),
@@ -513,6 +514,9 @@ class AnalyticsManager {
             "cache_read_tokens": cacheReadTokens,
             "cache_write_tokens": cacheWriteTokens
         ]
+        if !queryText.isEmpty {
+            props["query_text"] = String(queryText.prefix(1000))
+        }
         PostHogManager.shared.track("chat_agent_query_completed", properties: props)
     }
 
@@ -776,10 +780,11 @@ class AnalyticsManager {
         PostHogManager.shared.track("floating_bar_ask_fazm_closed")
     }
 
-    func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool) {
+    func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, queryText: String) {
         let props: [String: Any] = [
             "message_length": messageLength,
-            "has_screenshot": hasScreenshot
+            "has_screenshot": hasScreenshot,
+            "query_text": String(queryText.prefix(1000))
         ]
         PostHogManager.shared.track("floating_bar_query_sent", properties: props)
     }
