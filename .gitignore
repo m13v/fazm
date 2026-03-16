@@ -68,6 +68,7 @@ linkedin-*.md
 # Stray screenshots and documents in repo root
 /*.jpeg
 /*.png
+/codemagic-*
 /*.docx
 /*.doc
 /*.pdf
