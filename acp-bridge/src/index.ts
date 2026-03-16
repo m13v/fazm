@@ -918,11 +918,13 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       // After MAX_IMAGE_TURNS images in a session, screenshots are silently dropped.
       const currentImageTurns = imageTurnCounts.get(sessionKey) ?? 0;
       let imageBase64: string | undefined;
-      logErr(`Screenshot path: ${msg.imagePath ?? "none"}`);
+      logErr(`Screenshot path: ${msg.imagePath ?? "none"}, retrying=${retryingWithHint}, imageTurns=${currentImageTurns}/${MAX_IMAGE_TURNS}`);
       if (msg.imagePath && !retryingWithHint && currentImageTurns < MAX_IMAGE_TURNS) {
         try {
           const { readFileSync } = await import("fs");
-          imageBase64 = readFileSync(msg.imagePath).toString("base64");
+          const buf = readFileSync(msg.imagePath);
+          imageBase64 = buf.toString("base64");
+          logErr(`Screenshot read OK: ${buf.length} bytes → ${imageBase64.length} base64 chars`);
         } catch (err) {
           logErr(`Failed to read screenshot from ${msg.imagePath}: ${err}`);
         }
@@ -931,6 +933,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       }
       if (imageBase64) {
         promptBlocks.push({ type: "image", data: imageBase64, mimeType: "image/jpeg" });
+        logErr(`Image block added to prompt (${promptBlocks.length} blocks total)`);
       }
       promptBlocks.push({ type: "text", text: fullPrompt });
 
