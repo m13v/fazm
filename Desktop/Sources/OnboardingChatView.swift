@@ -633,22 +633,6 @@ struct OnboardingChatView: View {
         chatProvider.stopAgent()
     }
 
-    /// Whether the last AI message already contains visible text (so we don't duplicate the question)
-    private var lastAIMessageHasText: Bool {
-        guard let lastAI = chatProvider.messages.last(where: { $0.sender == .ai }) else { return false }
-        // Check contentBlocks for non-empty text blocks
-        if !lastAI.contentBlocks.isEmpty {
-            return lastAI.contentBlocks.contains { block in
-                if case .text(_, let text) = block {
-                    return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                }
-                return false
-            }
-        }
-        // Fallback for messages without contentBlocks
-        return !lastAI.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     private func sendMessage() {
         guard canSend else { return }
 
