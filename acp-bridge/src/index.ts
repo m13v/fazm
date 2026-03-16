@@ -918,6 +918,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       // After MAX_IMAGE_TURNS images in a session, screenshots are silently dropped.
       const currentImageTurns = imageTurnCounts.get(sessionKey) ?? 0;
       let imageBase64: string | undefined;
+      logErr(`Screenshot path: ${msg.imagePath ?? "none"}`);
       if (msg.imagePath && !retryingWithHint && currentImageTurns < MAX_IMAGE_TURNS) {
         try {
           const { readFileSync } = await import("fs");
@@ -1588,7 +1589,18 @@ async function main(): Promise<void> {
         if (key && sessions.has(key)) {
           sessions.delete(key);
           imageTurnCounts.delete(key);
-          logErr(`Session reset: ${key} (will create new on next query)`);
+          logErr(`Session reset: ${key}`);
+
+          // Immediately pre-warm a new session so the first query doesn't wait
+          const savedCfg = lastWarmupConfig?.sessions?.find((s) => s.key === key);
+          if (savedCfg) {
+            // Strip resume — we want a fresh session, not the old one
+            const freshCfg = { ...savedCfg, resume: undefined };
+            logErr(`Pre-warming new session for ${key} after reset...`);
+            preWarmSession(lastWarmupConfig!.cwd, [freshCfg]).catch((err) =>
+              logErr(`Post-reset pre-warm failed for ${key}: ${err}`)
+            );
+          }
         }
         break;
       }
