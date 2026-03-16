@@ -917,11 +917,19 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       // Cap image sends per session to avoid Claude's "many-image" stricter 2000px limit.
       // After MAX_IMAGE_TURNS images in a session, screenshots are silently dropped.
       const currentImageTurns = imageTurnCounts.get(sessionKey) ?? 0;
-      const includeImage = !!(msg.imageBase64 && !retryingWithHint && currentImageTurns < MAX_IMAGE_TURNS);
-      if (includeImage) {
-        promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: "image/jpeg" });
-      } else if (msg.imageBase64 && !retryingWithHint) {
+      let imageBase64: string | undefined;
+      if (msg.imagePath && !retryingWithHint && currentImageTurns < MAX_IMAGE_TURNS) {
+        try {
+          const { readFileSync } = await import("fs");
+          imageBase64 = readFileSync(msg.imagePath).toString("base64");
+        } catch (err) {
+          logErr(`Failed to read screenshot from ${msg.imagePath}: ${err}`);
+        }
+      } else if (msg.imagePath && !retryingWithHint) {
         logErr(`Skipping screenshot — session has ${currentImageTurns} image turns (cap=${MAX_IMAGE_TURNS})`);
+      }
+      if (imageBase64) {
+        promptBlocks.push({ type: "image", data: imageBase64, mimeType: "image/jpeg" });
       }
       promptBlocks.push({ type: "text", text: fullPrompt });
 
@@ -940,7 +948,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       logErr(`Prompt completed: stopReason=${promptResult.stopReason}`);
 
       // Increment image turn counter so we know when to stop including screenshots.
-      if (includeImage) {
+      if (imageBase64) {
         imageTurnCounts.set(sessionKey, currentImageTurns + 1);
       }
 
@@ -1020,7 +1028,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
         // Strip the image and retry with a hint
         retryingWithHint = true;
-        msg.imageBase64 = undefined;
+        msg.imagePath = undefined;
         fullPrompt = `The previous request failed because an image was too large: "${errMsg}". Please continue with a different approach — avoid reading large image files directly. Use smaller outputs or text-based tools instead.`;
         try {
           await sendPrompt();
@@ -1034,7 +1042,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
             imageTurnCounts.delete(sessionKey);
             activeSessionId = "";
             msg.resume = undefined;
-            msg.imageBase64 = undefined;
+            msg.imagePath = undefined;
             fullPrompt = msg.prompt;
             return handleQuery(msg);
           }
