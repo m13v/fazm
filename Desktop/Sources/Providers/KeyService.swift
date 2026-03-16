@@ -41,7 +41,7 @@ final class KeyService {
 
     /// Wait for keys to be available (up to `timeout` seconds).
     /// Call this before using `deepgramAPIKey` or `anthropicAPIKey`.
-    func ensureKeys(timeout: TimeInterval = 10) async {
+    func ensureKeys(timeout: TimeInterval = 3) async {
         if hasFetched { return }
 
         // Await the in-flight fetch, or start one if none exists
