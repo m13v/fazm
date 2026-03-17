@@ -30,6 +30,5 @@ jobs:
           service: fazm-backend
           region: us-east5
           source: Backend/
-          service_account: vertex-ai-sa@fazm-prod.iam.gserviceaccount.com
           env_vars: |
             FAZM_BACKEND_SECRET=${{ secrets.RELEASE_SECRET }}
