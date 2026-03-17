@@ -61,6 +61,10 @@ class PushToTalkManager: ObservableObject {
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
 
+  // Safety: max recording duration to prevent stuck PTT (5 minutes)
+  private let maxPTTDuration: TimeInterval = 300  // 5 minutes
+  private var maxDurationTimer: DispatchWorkItem?
+
   private init() {}
 
   // MARK: - Setup / Teardown
@@ -341,6 +345,7 @@ class PushToTalkManager: ObservableObject {
 
 
     startAudioTranscription()
+    startMaxDurationTimer()
     log("PushToTalkManager: started listening (hold mode, openedChat=\(pttOpenedChat))")
   }
 
@@ -384,6 +389,7 @@ class PushToTalkManager: ObservableObject {
       startAudioTranscription()
     }
 
+    startMaxDurationTimer()
     updateBarState()
     log("PushToTalkManager: entered locked listening mode (openedChat=\(pttOpenedChat))")
   }
@@ -393,6 +399,8 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem = nil
     liveFinalizationTimeout?.cancel()
     liveFinalizationTimeout = nil
+    maxDurationTimer?.cancel()
+    maxDurationTimer = nil
     stopAudioTranscription()
     state = .idle
     transcriptSegments = []
@@ -437,6 +445,8 @@ class PushToTalkManager: ObservableObject {
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
+    maxDurationTimer?.cancel()
+    maxDurationTimer = nil
     updateBarState()
 
     // Stop mic immediately — no more audio capture
@@ -721,6 +731,23 @@ class PushToTalkManager: ObservableObject {
       liveFinalizationTimeout = nil
       sendTranscript()
     }
+  }
+
+  // MARK: - PTT Safety
+
+  /// Start a max-duration safety timer to prevent stuck recordings.
+  /// Auto-finalizes after maxPTTDuration (5 minutes).
+  private func startMaxDurationTimer() {
+    maxDurationTimer?.cancel()
+    let timer = DispatchWorkItem { [weak self] in
+      Task { @MainActor in
+        guard let self, self.state == .listening || self.state == .lockedListening else { return }
+        log("PushToTalkManager: max duration (\(Int(self.maxPTTDuration))s) reached, auto-finalizing")
+        self.finalize()
+      }
+    }
+    maxDurationTimer = timer
+    DispatchQueue.main.asyncAfter(deadline: .now() + maxPTTDuration, execute: timer)
   }
 
   // MARK: - Bar State Sync
