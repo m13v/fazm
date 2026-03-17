@@ -788,7 +788,23 @@ class AudioCaptureService: @unchecked Sendable {
             return
         }
 
+        // Check if new default is virtual — prefer physical device
+        let newTransport = Self.getTransportType(for: newDeviceID)
+        if newTransport == kAudioDeviceTransportTypeVirtual || newTransport == kAudioDeviceTransportTypeAggregate {
+            let devName = Self.getDeviceNameStatic(newDeviceID) ?? "unknown"
+            log("AudioCapture: New default device '\(devName)' is virtual, looking for physical mic...")
+            if let physicalID = Self.findPreferredPhysicalInputDevice(excluding: newDeviceID) {
+                let physName = Self.getDeviceNameStatic(physicalID) ?? "unknown"
+                log("AudioCapture: Reconfigure: using physical device '\(physName)' instead")
+                newDeviceID = physicalID
+            }
+        }
+
         self.deviceID = newDeviceID
+
+        // Log which device we're reconfiguring to
+        let actualName = Self.getDeviceNameStatic(deviceID) ?? "unknown"
+        log("AudioCapture: Reconfigure: using device '\(actualName)' (transport=\(Self.getTransportType(for: deviceID)))")
 
         // Get new format
         guard let streamFormat = getStreamFormat(for: deviceID) else {
