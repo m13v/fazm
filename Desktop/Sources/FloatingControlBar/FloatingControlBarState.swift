@@ -104,10 +104,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     // Claude account connection prompt (shown when auth is needed or credits exhausted)
     @Published var showConnectClaudeButton: Bool = false
 
-    // Browser profile migration state (one-time flow for existing users)
-    @Published var isBrowserMigrationActive: Bool = false
-    var browserMigrationSystemPromptSuffix: String?
-
     // Tutorial chat guide state
     @Published var isTutorialChatActive: Bool = false
     @Published var tutorialChatStep: Int = 0  // 0 = first prompt done (from overlay), 1-3 = guided prompts
