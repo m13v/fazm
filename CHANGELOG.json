@@ -108,6 +108,7 @@
     "Fixed Sparkle auto-update URL so app correctly checks for new versions",
     "Added browser profile import for existing users via floating bar dialog",
     "Fixed crash on launch caused by missing Highlightr syntax highlighting resources",
-    "Added Explore Fazm resource cards on Home page linking to demos, safety, use cases, and comparisons"
+    "Added Explore Fazm resource cards on Home page linking to demos, safety, use cases, and comparisons",
+    "Replaced Talk to Fazm button-like badge with animated keyboard showing the active shortcut key"
   ]
 }
