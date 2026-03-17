@@ -510,6 +510,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             TutorialChatGuide.shared.finish(barState: state)
         }
 
+        state.showingAIConversation = true
         state.chatHistory = []
         state.displayedQuery = ""
         state.currentAIMessage = nil
