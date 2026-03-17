@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import SwiftUI
 
 /// Manages the one-time browser profile extraction flow for existing users
 /// who completed onboarding before the feature was introduced.
