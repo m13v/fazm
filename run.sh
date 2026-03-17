@@ -190,6 +190,13 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
 fi
 
+# Copy Highlightr resource bundle (required — missing bundle causes fatal crash when rendering code blocks)
+HIGHLIGHTR_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Highlightr_Highlightr.bundle"
+if [ -d "$HIGHLIGHTR_BUNDLE" ]; then
+    substep "Copying Highlightr bundle"
+    cp -Rf "$HIGHLIGHTR_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+fi
+
 substep "Copying acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
