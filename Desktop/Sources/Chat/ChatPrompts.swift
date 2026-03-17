@@ -603,6 +603,7 @@ struct ChatPrompts {
         "local_kg_nodes": "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
         "local_kg_edges": "knowledge graph edges — relationships between entities",
         "chat_messages": "persisted chat messages for onboarding and floating bar conversations",
+        "observer_activity": "observer session outputs — insights, cards for user interaction, skill drafts, knowledge graph updates. type: card/insight/skill_created/kg_update/pattern. status: pending/shown/acted/dismissed",
     ]
 
     /// Per-column descriptions for every non-excluded table.
@@ -767,6 +768,16 @@ struct ChatPromptBuilder {
     static func buildOnboardingProfileExploration(userName: String, databaseSchema: String = "") -> String {
         var prompt = build(
             template: ChatPrompts.onboardingProfileExploration,
+            userName: userName
+        )
+        prompt = prompt.replacingOccurrences(of: "{database_schema}", with: databaseSchema)
+        return prompt
+    }
+
+    /// Build the observer session system prompt (parallel background session)
+    static func buildObserverSession(userName: String, databaseSchema: String = "") -> String {
+        var prompt = build(
+            template: ChatPrompts.observerSession,
             userName: userName
         )
         prompt = prompt.replacingOccurrences(of: "{database_schema}", with: databaseSchema)
