@@ -81,42 +81,61 @@ final class KeyService {
             return
         }
 
-        do {
-            let authHeader = try await AuthService.shared.getAuthHeader()
-            let url = URL(string: "\(backendUrl)/v1/keys")!
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-            request.setValue(deviceId, forHTTPHeaderField: "X-Device-Id")
-            request.timeoutInterval = 15
+        // Try up to 2 times: first with current token, then with a force-refreshed token
+        for attempt in 1...2 {
+            do {
+                let forceRefresh = attempt > 1
+                if forceRefresh {
+                    log("KeyService: retrying with force-refreshed token")
+                }
+                let token = try await AuthService.shared.getIdToken(forceRefresh: forceRefresh)
+                let authHeader = "Bearer \(token)"
+                let url = URL(string: "\(backendUrl)/v1/keys")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+                request.setValue(deviceId, forHTTPHeaderField: "X-Device-Id")
+                request.timeoutInterval = 15
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-                let body = String(data: data, encoding: .utf8) ?? ""
-                log("KeyService: fetch failed with status \(status): \(body)")
+
+                if status == 401 && attempt < 2 {
+                    log("KeyService: fetch got 401, will retry with refreshed token")
+                    continue
+                }
+
+                guard status == 200 else {
+                    let body = String(data: data, encoding: .utf8) ?? ""
+                    log("KeyService: fetch failed with status \(status): \(body)")
+                    hasFetched = true
+                    return
+                }
+
+                struct KeysResponse: Decodable {
+                    let anthropic_api_key: String
+                    let deepgram_api_key: String
+                }
+
+                let keys = try JSONDecoder().decode(KeysResponse.self, from: data)
+                if !keys.anthropic_api_key.isEmpty {
+                    anthropicAPIKey = keys.anthropic_api_key
+                }
+                if !keys.deepgram_api_key.isEmpty {
+                    deepgramAPIKey = keys.deepgram_api_key
+                }
                 hasFetched = true
+                log("KeyService: fetched keys (anthropic=\(anthropicAPIKey != nil), deepgram=\(deepgramAPIKey != nil))")
                 return
+            } catch {
+                if attempt < 2 {
+                    log("KeyService: fetch error (attempt \(attempt)): \(error.localizedDescription), retrying...")
+                    continue
+                }
+                log("KeyService: fetch error: \(error.localizedDescription)")
+                hasFetched = true
             }
-
-            struct KeysResponse: Decodable {
-                let anthropic_api_key: String
-                let deepgram_api_key: String
-            }
-
-            let keys = try JSONDecoder().decode(KeysResponse.self, from: data)
-            if !keys.anthropic_api_key.isEmpty {
-                anthropicAPIKey = keys.anthropic_api_key
-            }
-            if !keys.deepgram_api_key.isEmpty {
-                deepgramAPIKey = keys.deepgram_api_key
-            }
-            hasFetched = true
-            log("KeyService: fetched keys (anthropic=\(anthropicAPIKey != nil), deepgram=\(deepgramAPIKey != nil))")
-        } catch {
-            log("KeyService: fetch error: \(error.localizedDescription)")
-            hasFetched = true
         }
     }
 
