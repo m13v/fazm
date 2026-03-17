@@ -29,3 +29,5 @@ jobs:
           service: fazm-backend
           region: us-east5
           source: Backend/
+          env_vars: |
+            FAZM_BACKEND_SECRET=${{ secrets.RELEASE_SECRET }}
