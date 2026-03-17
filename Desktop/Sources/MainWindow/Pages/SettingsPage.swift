@@ -107,6 +107,9 @@ struct SettingsContentView: View {
     @State private var fileViewerContent = ""
     @State private var fileViewerTitle = ""
     @State private var fileViewerLoading = false
+    @State private var fileViewerPath = ""
+    @State private var fileViewerEditable = false
+    @State private var fileViewerSaving = false
     @State private var skillSearchQuery = ""
     @State private var newDictionaryTerm = ""
 
@@ -548,6 +551,8 @@ struct SettingsContentView: View {
                                 Button("View") {
                                     fileViewerTitle = "Global CLAUDE.md"
                                     fileViewerContent = ""
+                                    fileViewerEditable = false
+                                    fileViewerPath = ""
                                     fileViewerLoading = true
                                     showFileViewer = true
                                     DispatchQueue.main.async {
@@ -601,6 +606,8 @@ struct SettingsContentView: View {
                                     Button("View") {
                                         fileViewerTitle = "Project CLAUDE.md"
                                         fileViewerContent = ""
+                                        fileViewerEditable = false
+                                        fileViewerPath = ""
                                         fileViewerLoading = true
                                         showFileViewer = true
                                         DispatchQueue.main.async {
@@ -756,9 +763,11 @@ struct SettingsContentView: View {
 
                                         Spacer()
 
-                                        Button("View") {
+                                        Button("Edit") {
                                             fileViewerTitle = "\(skill.name)/SKILL.md"
                                             fileViewerContent = ""
+                                            fileViewerPath = skill.path
+                                            fileViewerEditable = true
                                             fileViewerLoading = true
                                             showFileViewer = true
                                             let path = skill.path
