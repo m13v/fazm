@@ -178,8 +178,8 @@ struct ChatPrompts {
 
     STEP 2.5 — BROWSER MEMORIES
     Call `extract_browser_profile` to scan the user's browser data (autofill, saved logins, browsing history, bookmarks).
-    This returns a profile with their name, emails, addresses, accounts, and tools — extracted locally from browser files.
-    Show the user a brief summary: "I found your profile from your browser data:" followed by 2-3 key facts (name, main email, top tools).
+    This returns a full profile extracted locally from browser files.
+    After it completes, present a comprehensive overview to the user — cover everything found: full name, all emails, phone numbers, addresses, companies, payment cards (last 4 digits only), saved accounts and logins, top tools and services, and notable contacts if present. Write it as a coherent, readable summary (not a bullet list dump). Be thorough — this is the user seeing their own extracted data for the first time and it should feel complete and impressive.
     Then call `save_knowledge_graph` with identity nodes (emails, companies, tools) connected to the person node.
     This runs BEFORE file scanning and takes ~10 seconds.
 
