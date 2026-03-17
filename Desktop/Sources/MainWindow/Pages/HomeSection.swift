@@ -276,31 +276,85 @@ struct HomeSection: View {
 
 // MARK: - HomeKeyboardView
 
-/// Compact keyboard bottom-row visualization for the homepage, highlighting the active PTT key.
+/// Full Mac keyboard visualization for the homepage, highlighting the active PTT key.
 struct HomeKeyboardView: View {
     let pttKey: ShortcutSettings.PTTKey
 
     @State private var isPressed = false
 
-    private let kh: CGFloat = 24
+    private let kh: CGFloat = 28
+    private let khSmall: CGFloat = 14
     private let gap: CGFloat = 2
     private let keyColor = Color(nsColor: NSColor(white: 0.15, alpha: 1.0))
     private let keyBorder = Color(nsColor: NSColor(white: 0.28, alpha: 1.0))
 
     var body: some View {
-        HStack(spacing: gap) {
-            modKey("fn", for: .fn)
-            modKey("⌃", for: .leftControl)
-            modKey("⌥", for: .option)
-            modKey("⌘", for: .leftCommand)
-            // Space bar
-            Text("")
-                .font(.system(size: 9, weight: .medium))
-                .frame(width: 110, height: kh)
-                .background(RoundedRectangle(cornerRadius: 4).fill(keyColor))
-                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(keyBorder, lineWidth: 0.5))
-            modKey("⌘", for: .rightCommand)
-            modKey("⌥", for: nil) // right option, not a PTT option
+        VStack(spacing: gap) {
+            // Row 1: Esc + F-keys
+            HStack(spacing: gap) {
+                key("esc", w: 30)
+                Spacer().frame(width: 8)
+                key("F1", w: 30); key("F2", w: 30); key("F3", w: 30); key("F4", w: 30)
+                Spacer().frame(width: 4)
+                key("F5", w: 30); key("F6", w: 30); key("F7", w: 30); key("F8", w: 30)
+                Spacer().frame(width: 4)
+                key("F9", w: 30); key("F10", w: 28); key("F11", w: 28); key("F12", w: 28)
+            }
+
+            // Row 2: Number row
+            HStack(spacing: gap) {
+                key("`", w: 28)
+                key("1", w: 28); key("2", w: 28); key("3", w: 28); key("4", w: 28); key("5", w: 28)
+                key("6", w: 28); key("7", w: 28); key("8", w: 28); key("9", w: 28); key("0", w: 28)
+                key("-", w: 28); key("=", w: 28)
+                key("⌫", w: 42)
+            }
+
+            // Row 3: QWERTY
+            HStack(spacing: gap) {
+                key("⇥", w: 38)
+                key("Q", w: 28); key("W", w: 28); key("E", w: 28); key("R", w: 28); key("T", w: 28)
+                key("Y", w: 28); key("U", w: 28); key("I", w: 28); key("O", w: 28); key("P", w: 28)
+                key("[", w: 28); key("]", w: 28)
+                key("\\", w: 38)
+            }
+
+            // Row 4: ASDF
+            HStack(spacing: gap) {
+                key("⇪", w: 46)
+                key("A", w: 28); key("S", w: 28); key("D", w: 28); key("F", w: 28); key("G", w: 28)
+                key("H", w: 28); key("J", w: 28); key("K", w: 28); key("L", w: 28)
+                key(";", w: 28); key("'", w: 28)
+                key("⏎", w: 50)
+            }
+
+            // Row 5: ZXCV
+            HStack(spacing: gap) {
+                key("⇧", w: 62)
+                key("Z", w: 28); key("X", w: 28); key("C", w: 28); key("V", w: 28); key("B", w: 28)
+                key("N", w: 28); key("M", w: 28); key(",", w: 28); key(".", w: 28); key("/", w: 28)
+                key("⇧", w: 62)
+            }
+
+            // Row 6: Bottom modifier row
+            HStack(spacing: gap) {
+                highlightableKey("fn", w: 28, for: .fn)
+                highlightableKey("⌃", w: 28, for: .leftControl)
+                highlightableKey("⌥", w: 34, for: .option)
+                highlightableKey("⌘", w: 38, for: .leftCommand)
+                key("", w: 130) // space bar
+                highlightableKey("⌘", w: 38, for: .rightCommand)
+                key("⌥", w: 34)
+                // Arrow cluster
+                HStack(spacing: 1) {
+                    key("◀", w: 20)
+                    VStack(spacing: 1) {
+                        key("▲", w: 20, h: khSmall)
+                        key("▼", w: 20, h: khSmall)
+                    }
+                    key("▶", w: 20)
+                }
+            }
         }
         .padding(8)
         .background(
@@ -314,12 +368,12 @@ struct HomeKeyboardView: View {
         .onAppear { startPressAnimation() }
     }
 
-    private func modKey(_ label: String, for key: ShortcutSettings.PTTKey?) -> some View {
-        let isHighlighted = key == pttKey
+    private func highlightableKey(_ label: String, w: CGFloat, for pttOption: ShortcutSettings.PTTKey) -> some View {
+        let isHighlighted = pttOption == pttKey
         return Text(label)
-            .font(.system(size: 11, weight: isHighlighted ? .semibold : .medium))
+            .font(.system(size: 12, weight: isHighlighted ? .semibold : .medium))
             .foregroundColor(isHighlighted ? .white : Color.white.opacity(0.4))
-            .frame(width: 30, height: kh)
+            .frame(width: w, height: kh)
             .background(
                 RoundedRectangle(cornerRadius: 4)
                     .fill(isHighlighted ? FazmColors.purplePrimary.opacity(isPressed ? 0.6 : 0.25) : keyColor)
@@ -328,9 +382,24 @@ struct HomeKeyboardView: View {
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(isHighlighted ? FazmColors.purplePrimary.opacity(isPressed ? 1.0 : 0.7) : keyBorder, lineWidth: isHighlighted ? 1.5 : 0.5)
             )
-            .shadow(color: isHighlighted ? FazmColors.purplePrimary.opacity(isPressed ? 0.8 : 0.4) : .clear, radius: isPressed ? 10 : 4, x: 0, y: 0)
+            .shadow(color: isHighlighted ? FazmColors.purplePrimary.opacity(isPressed ? 0.8 : 0.4) : .clear, radius: isPressed ? 12 : 5, x: 0, y: 0)
             .scaleEffect(isHighlighted && isPressed ? 0.92 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: isPressed)
+    }
+
+    private func key(_ label: String, w: CGFloat, h: CGFloat? = nil) -> some View {
+        Text(label)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundColor(Color.white.opacity(0.4))
+            .frame(width: w, height: h ?? kh)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(keyColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(keyBorder, lineWidth: 0.5)
+            )
     }
 
     private func startPressAnimation() {
