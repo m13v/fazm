@@ -39,12 +39,18 @@ class BrowserProfileMigrationManager {
         barState.isBrowserMigrationActive = true
         barState.browserMigrationSystemPromptSuffix = ChatPrompts.browserProfileMigration
 
-        // Inject an initial AI message to kick off the conversation
-        let kickoff = ChatMessage(
-            text: "Hey! I have a quick new feature to show you — I can now learn about you from your browser data (saved logins, autofill, bookmarks). Everything stays on your device.\n\nWant me to scan your browsers?",
-            sender: .ai
-        )
-        injectMessage(kickoff, barState: barState)
+        // First expand the floating bar window (this resets state)
+        FloatingControlBarManager.shared.showAIConversationAndResize()
+
+        // Then inject the message after the window has expanded
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak barState] in
+            guard let barState, barState.isBrowserMigrationActive else { return }
+            let kickoff = ChatMessage(
+                text: "Hey! I have a quick new feature to show you — I can now learn about you from your browser data (saved logins, autofill, bookmarks). Everything stays on your device.\n\nWant me to scan your browsers?",
+                sender: .ai
+            )
+            self.injectMessage(kickoff, barState: barState)
+        }
 
         // Observe responses for the done marker
         observeResponses(barState: barState)
@@ -136,13 +142,11 @@ class BrowserProfileMigrationManager {
         barState.currentAIMessage = message
         barState.isAILoading = false
 
-        if !barState.showingAIResponse {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                barState.showingAIResponse = true
-            }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            barState.showingAIResponse = true
         }
 
-        // Expand the floating bar window to show the conversation and resize
-        FloatingControlBarManager.shared.showAIConversationAndResize()
+        // Resize to fit the response content (window is already expanded)
+        FloatingControlBarManager.shared.resizeToFitResponse()
     }
 }
