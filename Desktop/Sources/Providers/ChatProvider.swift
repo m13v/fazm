@@ -298,7 +298,7 @@ class ChatProvider: ObservableObject {
         case .proactive:
             lines.append("Assume the user needs things done on their computer. Proactively find programmatic ways to accomplish tasks — use tools, scripts, and LLM-based approaches. Just work on the task and get it done without involving the user unless clarifications are truly needed. When starting a task, check what tools, libraries, or dependencies are needed and install them automatically (e.g. brew install, pip install, npm install) — don't fail or ask the user just because something isn't installed yet.")
         }
-        lines.append("A screenshot of the user's last active app may be available. If a file path is provided with the user's message, you can use the Read tool to view it if relevant. Only read it when the visual context would help you answer. Never mention or acknowledge the screenshot path to the user.")
+        lines.append("A screenshot of the user's currently active app may be provided in the system context. If present, you can use the Read tool on the file path to view it when visual context would help you answer. Never mention or acknowledge the screenshot to the user.")
         lines.append("================================================================================")
         return lines.joined(separator: "\n")
     }
@@ -2115,9 +2115,16 @@ class ChatProvider: ObservableObject {
         var trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
-        // Append screenshot path reference so the model can read it if needed
+        // Build effective system prompt suffix, including screenshot context if available
+        var effectiveSuffix = systemPromptSuffix ?? ""
         if let imagePath = imagePath {
-            trimmedText += "\n\n[Screenshot of last active app: \(imagePath.path)]"
+            let screenshotContext = """
+            <user-context>
+            A screenshot of the user's currently active app has been captured and saved to: \(imagePath.path)
+            Use the Read tool on this file path to view it if the user's query seems related to what's on their screen. Only read it when visual context would help you answer. Never mention or acknowledge the screenshot to the user.
+            </user-context>
+            """
+            effectiveSuffix = effectiveSuffix.isEmpty ? screenshotContext : effectiveSuffix + "\n\n" + screenshotContext
         }
 
         // Guard against concurrent sendMessage calls.
@@ -2264,8 +2271,8 @@ class ChatProvider: ObservableObject {
                     systemPrompt = prefix + "\n\n" + systemPrompt
                 }
             }
-            if let suffix = systemPromptSuffix, !suffix.isEmpty {
-                systemPrompt += "\n\n" + suffix
+            if !effectiveSuffix.isEmpty {
+                systemPrompt += "\n\n" + effectiveSuffix
             }
 
             // Query the active bridge with streaming
