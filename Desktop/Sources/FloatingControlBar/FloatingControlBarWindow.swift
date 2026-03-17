@@ -269,6 +269,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             TutorialChatGuide.shared.finish(barState: state)
         }
 
+        // End browser profile migration if active — treat dismiss as skip
+        if state.isBrowserMigrationActive {
+            BrowserProfileMigrationManager.shared.skip()
+            state.isBrowserMigrationActive = false
+            state.browserMigrationSystemPromptSuffix = nil
+        }
+
         // Cancel any in-flight chat streaming to prevent re-expansion
         FloatingControlBarManager.shared.cancelChat()
 
@@ -508,6 +515,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // End tutorial chat guide if active
         if state.isTutorialChatActive {
             TutorialChatGuide.shared.finish(barState: state)
+        }
+
+        // End browser profile migration if active
+        if state.isBrowserMigrationActive {
+            BrowserProfileMigrationManager.shared.skip()
+            state.isBrowserMigrationActive = false
+            state.browserMigrationSystemPromptSuffix = nil
         }
 
         state.showingAIConversation = true
@@ -1119,6 +1133,11 @@ class FloatingControlBarManager {
         // Show post-onboarding tutorial if needed
         if let barState = self.barState {
             PostOnboardingTutorialManager.shared.showIfNeeded(barState: barState)
+
+            // Browser profile migration for existing users (after tutorial)
+            if !barState.isTutorialChatActive {
+                BrowserProfileMigrationManager.shared.startIfNeeded(barState: barState)
+            }
         }
 
         // Auto-focus input if AI conversation is open
@@ -1509,7 +1528,11 @@ class FloatingControlBarManager {
                 barWindow?.state.isCompacting = isCompacting
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating")
+        let sessionKey = barWindow.state.isBrowserMigrationActive ? "browser-migration" : "floating"
+        let promptSuffix = barWindow.state.isBrowserMigrationActive
+            ? barWindow.state.browserMigrationSystemPromptSuffix
+            : barWindow.state.tutorialSystemPromptSuffix
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: promptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: sessionKey)
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
