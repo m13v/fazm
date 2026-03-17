@@ -665,10 +665,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 window.appearance = NSAppearance(named: .darkAqua)
             }
         }
-        // Dock icon is always visible; just activate the app
         NSApp.activate(ignoringOtherApps: true)
         if !foundWindow {
-            log("AppDelegate: [MENUBAR] WARNING - No Fazm window found when opening from menu bar")
+            log("AppDelegate: [MENUBAR] No Fazm window found — posting openSettingsWindow notification")
+            NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
         }
     }
 
@@ -702,8 +702,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Replace SwiftUI-generated Format and Help menus with AppKit equivalents.
     /// SwiftUI's .commands {} shares the scene view graph and can crash with
     /// AG::Graph::value_set if any @Published state mutates during menu rendering.
+    @MainActor @objc private func openSettings() {
+        openFazmFromMenu()
+    }
+
     private func setupAppMenus() {
         guard let mainMenu = NSApp.mainMenu else { return }
+
+        // -- App menu: add "Settings…" (Cmd+,) — standard macOS convention --
+        if let appMenu = mainMenu.items.first?.submenu {
+            let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+            settingsItem.target = self
+            // Insert after "About" (index 0) + separator (index 1)
+            let insertIndex = min(2, appMenu.items.count)
+            appMenu.insertItem(NSMenuItem.separator(), at: insertIndex)
+            appMenu.insertItem(settingsItem, at: insertIndex + 1)
+        }
 
         // -- Format menu: add font size controls (replacing SwiftUI's default text formatting) --
         // Create from scratch since SwiftUI no longer generates this menu.
@@ -799,6 +813,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             log("AppDelegate: Restored Fazm window from dock click (wasVisible=\(flag))")
             return false
         }
+        // Window was deallocated — ask SwiftUI to recreate it
+        log("AppDelegate: No Fazm window found on dock click — posting openSettingsWindow notification")
+        NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
         return true
     }
 
