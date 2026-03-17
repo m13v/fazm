@@ -308,9 +308,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Ensure app always shows in dock as a regular app
         NSApp.setActivationPolicy(.regular)
 
-        // Set up app menus (Format, Help) via AppKit instead of SwiftUI .commands {}
-        // to avoid AttributeGraph crashes during menu rendering
+        // Set up app menus (Format, Help, Settings) via AppKit instead of SwiftUI .commands {}
+        // to avoid AttributeGraph crashes during menu rendering.
+        // Format/Help can be set up now; Settings… must be deferred because SwiftUI
+        // hasn't populated the app menu yet during applicationDidFinishLaunching.
         setupAppMenus()
+        DispatchQueue.main.async { [weak self] in
+            self?.addSettingsMenuItem()
+        }
 
         // Set up menu bar icon with NSStatusBar (more reliable than SwiftUI MenuBarExtra)
         // Called synchronously on main thread to ensure status item is created before app finishes launching
@@ -718,18 +723,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         openFazmFromMenu()
     }
 
+    /// Add "Settings…" (Cmd+,) to the app menu. Called after a short delay so SwiftUI's
+    /// menu bar is populated.
+    @MainActor private func addSettingsMenuItem() {
+        guard let mainMenu = NSApp.mainMenu,
+              let appMenu = mainMenu.items.first?.submenu else {
+            log("AppDelegate: [MENU] WARNING — could not find app menu for Settings item")
+            return
+        }
+        // Avoid duplicates if called more than once
+        guard !appMenu.items.contains(where: { $0.title == "Settings…" }) else { return }
+
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        // Insert after "About" item (index 0) + separator (index 1)
+        let insertIndex = min(2, appMenu.items.count)
+        appMenu.insertItem(NSMenuItem.separator(), at: insertIndex)
+        appMenu.insertItem(settingsItem, at: insertIndex + 1)
+        log("AppDelegate: [MENU] Added Settings… (Cmd+,) to app menu")
+    }
+
     private func setupAppMenus() {
         guard let mainMenu = NSApp.mainMenu else { return }
-
-        // -- App menu: add "Settings…" (Cmd+,) — standard macOS convention --
-        if let appMenu = mainMenu.items.first?.submenu {
-            let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-            settingsItem.target = self
-            // Insert after "About" (index 0) + separator (index 1)
-            let insertIndex = min(2, appMenu.items.count)
-            appMenu.insertItem(NSMenuItem.separator(), at: insertIndex)
-            appMenu.insertItem(settingsItem, at: insertIndex + 1)
-        }
 
         // -- Format menu: add font size controls (replacing SwiftUI's default text formatting) --
         // Create from scratch since SwiftUI no longer generates this menu.
