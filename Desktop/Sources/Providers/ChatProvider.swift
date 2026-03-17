@@ -826,8 +826,9 @@ class ChatProvider: ObservableObject {
             cachedMainSystemPrompt = mainSystemPrompt
             let floatingSystemPrompt = Self.floatingBarSystemPromptPrefixCurrent + "\n\n" + mainSystemPrompt
             let savedFloatingSessionId = UserDefaults.standard.string(forKey: floatingSessionIdKey)
+            let observerUserName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
             let observerSystemPrompt = ChatPromptBuilder.buildObserverSession(
-                userName: userName,
+                userName: observerUserName,
                 databaseSchema: cachedDatabaseSchema
             )
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
