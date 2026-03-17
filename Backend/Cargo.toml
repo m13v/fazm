@@ -34,6 +34,9 @@ reqwest = { version = "0.12", features = ["json"] }
 # Lightweight regex (no_std compatible, for appcast parsing)
 regex-lite = "0.1"
 
+# URL encoding (for Firestore document paths)
+urlencoding = "2"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
