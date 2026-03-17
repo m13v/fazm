@@ -110,22 +110,66 @@ The observer uses `save_knowledge_graph` (existing tool) to add nodes and edges 
 ### 2. Remember — Use Hindsight
 The observer calls `retain` (Hindsight MCP) to store observations that don't fit neatly into a graph — nuanced context, conversation summaries, behavioral patterns. The main session can `recall` these naturally.
 
-### 3. Automate — Create Skills
-When the observer detects a repeated workflow (3+ occurrences), it writes a `.skill.md` file to `~/.claude/skills/` and logs a `skill_created` entry to `observer_activity`. The main session auto-discovers new skills on next prompt.
+### 3. Automate — Create Skills (always confirm first)
+When the observer detects a repeated workflow (3+ occurrences) or a workaround worth preserving, it **drafts** the skill but does NOT write it to disk. Instead, it surfaces a card describing what the skill would do and asks the user to approve.
+
+**Hard rule: The observer never creates a skill without user confirmation.** Skills change what the agent can *do* — the user must consent.
 
 ### 4. Ask — Surface Cards (sparingly)
 When the observer needs user input, it writes a `type = 'card'` row to `observer_activity`. The UI renders it inline in the chat.
+
+## What's Silent vs. What Requires Confirmation
+
+| Action | Silent or Card? | Why |
+|--------|----------------|-----|
+| Write to knowledge graph | **Silent** | Background context, doesn't change behavior |
+| Retain to Hindsight | **Silent** | Background context, doesn't change behavior |
+| Update user profile | **Silent** | Background context, doesn't change behavior |
+| Create a new skill | **Card — always** | Changes what the agent can do |
+| Resolve ambiguity (e.g., which address?) | **Card** | Needs user input to be accurate |
+| Significant behavioral insight | **Card (optional)** | User might want to know / correct it |
+
+The principle: **enriching context is silent, adding capabilities requires consent.**
 
 ## UI: Observer Cards
 
 Cards appear inline in the chat but are visually distinct — different background, "Observer" label, button-only interaction.
 
+### Skill Creation Card (most important card type)
 ```
 ┌─ Observer ─────────────────────────────────────────┐
-│ You've done "export PDF → email to client" 4       │
-│ times. Want me to make it a single command?        │
+│ I've seen you do "export PDF → email to client"    │
+│ 4 times. I can make this a single command.         │
 │                                                    │
-│  [Create skill]    [Not now]    [Never ask]        │
+│ What the skill would do:                           │
+│ 1. Export current doc as PDF                       │
+│ 2. Attach to email to last-used client address     │
+│ 3. Send with your standard sign-off                │
+│                                                    │
+│  [Create skill]    [Edit first]    [Skip]          │
+└────────────────────────────────────────────────────┘
+```
+
+"Edit first" passes the draft skill to the main chat so the user can refine it with the agent before saving.
+
+### Workaround Preservation Card
+```
+┌─ Observer ─────────────────────────────────────────┐
+│ The agent found a workaround when the X API was    │
+│ down — used Playwright to do it via the web UI.    │
+│ Save this as a fallback skill?                     │
+│                                                    │
+│  [Save as skill]    [Skip]                         │
+└────────────────────────────────────────────────────┘
+```
+
+### Clarification Card
+```
+┌─ Observer ─────────────────────────────────────────┐
+│ You've used two shipping addresses recently.       │
+│ Which is your default?                             │
+│                                                    │
+│  [123 Main St, SF]    [456 Oak Ave, LA]            │
 └────────────────────────────────────────────────────┘
 ```
 
@@ -184,9 +228,14 @@ and make their agent more effective over time.
    context. Use retain for new observations. Use reflect periodically
    to synthesize patterns across multiple observations.
 
-3. SKILLS (write to ~/.claude/skills/)
-   When you detect a repeated multi-step workflow (3+ times), create a
-   .skill.md file that automates it. Log the creation to observer_activity.
+3. SKILLS (write to ~/.claude/skills/) — REQUIRES USER CONFIRMATION
+   When you detect a repeated multi-step workflow (3+ times) or a
+   workaround worth preserving, do NOT write the skill file yet.
+   Instead, surface a card describing what the skill would do and
+   include the options: [Create skill], [Edit first], [Skip].
+   Only write the .skill.md AFTER the user taps [Create skill].
+   If they tap [Edit first], pass the draft content to the main
+   session via observer_activity so the user can refine it.
 
 4. OBSERVER CARDS (execute_sql → observer_activity table)
    When you need user input, write a card. Use sparingly — max 2-3 per
@@ -194,6 +243,13 @@ and make their agent more effective over time.
    INSERT INTO observer_activity (id, type, content, status, created_at)
    VALUES ('obs_xxx', 'card', '{"title":"...","body":"...","options":["A","B"]}',
            'pending', datetime('now'));
+
+## What is silent vs. what requires a card
+- SILENT: Knowledge graph updates, Hindsight retains, profile updates.
+  These enrich context — the user doesn't need to approve them.
+- CARD REQUIRED: Skill creation, resolving ambiguity, significant
+  behavioral rules. These change capabilities or need accuracy.
+- RULE: Enriching context = silent. Adding capabilities = confirm first.
 
 ## What you receive
 - Batched conversation turns (every 5-10 messages from the main session)
