@@ -265,6 +265,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // One-time migration: Enable launch at login for existing users who haven't set it
         migrateLaunchAtLoginDefault()
 
+        // Pre-set browser profile flag if user already has extraction data
+        BrowserProfileMigrationManager.shared.markCompleteIfAlreadyExtracted()
+
         // Install any newly-bundled skills that existing users don't have yet.
         // `install()` is a no-op for skills already on disk — safe to call every launch.
         // Skipped for users mid-onboarding; the onboarding flow handles initial install.
