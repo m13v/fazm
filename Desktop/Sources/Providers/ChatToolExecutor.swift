@@ -690,6 +690,8 @@ class ChatToolExecutor {
             }
         }.value
 
+        let isOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        AnalyticsManager.shared.browserProfileExtractionCompleted(source: isOnboarding ? "onboarding" : "migration")
         OnboardingChatPersistence.markStepCompleted("ai_browser_profile")
         log("Browser profile extraction completed")
         return result
