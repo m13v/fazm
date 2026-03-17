@@ -512,7 +512,7 @@ struct AIResponseView: View {
         HStack(alignment: .bottom, spacing: 6) {
             ZStack(alignment: .topLeading) {
                 if followUpText.isEmpty {
-                    Text(isLoading ? "Type next question (queued)..." : "Ask follow up...")
+                    Text(isAgentBusy ? "Type next question (queued)..." : "Ask follow up...")
                         .scaledFont(size: 13)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 8)
@@ -588,13 +588,16 @@ struct AIResponseView: View {
         }
     }
 
+    private var isAgentBusy: Bool {
+        isLoading || currentMessage?.isStreaming == true
+    }
+
     private func sendFollowUp() {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         followUpText = ""
 
-        let isStillGenerating = isLoading || currentMessage?.isStreaming == true
-        if isStillGenerating {
+        if isAgentBusy {
             // Agent is busy — queue the message instead of interrupting
             onEnqueueMessage?(trimmed)
         } else {
