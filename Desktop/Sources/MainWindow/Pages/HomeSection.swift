@@ -17,6 +17,7 @@ struct HomeSection: View {
     var body: some View {
         VStack(spacing: 20) {
             howToUseCard
+            exploreCards
             statsCard
             recentMessagesCard
         }
@@ -55,6 +56,60 @@ struct HomeSection: View {
                         .stroke(FazmColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
                 )
         )
+    }
+
+    // MARK: - Explore Fazm
+
+    private var exploreCards: some View {
+        let cards: [(icon: String, title: String, subtitle: String, url: String)] = [
+            ("play.rectangle.fill", "Watch Demos", "See Fazm in action", "https://fazm.ai#use-cases"),
+            ("shield.checkmark.fill", "Safety & Privacy", "How your data stays safe", "https://fazm.ai/safety"),
+            ("sparkles", "Use Cases", "Ideas and inspiration", "https://fazm.ai/blog"),
+            ("arrow.left.arrow.right", "Compare Features", "See how Fazm stacks up", "https://fazm.ai/compare"),
+        ]
+
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
+                Button(action: {
+                    PostHogManager.shared.track("resource_card_clicked", properties: ["card": card.title])
+                    if let url = URL(string: card.url) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: card.icon)
+                            .scaledFont(size: 16)
+                            .foregroundColor(FazmColors.purplePrimary)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(card.title)
+                                .scaledFont(size: 13, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+                            Text(card.subtitle)
+                                .scaledFont(size: 11)
+                                .foregroundColor(FazmColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "arrow.up.right")
+                            .scaledFont(size: 10)
+                            .foregroundColor(FazmColors.textQuaternary)
+                    }
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(FazmColors.backgroundTertiary.opacity(0.5))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(FazmColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Stats
