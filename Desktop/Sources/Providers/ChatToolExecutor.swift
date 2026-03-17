@@ -715,10 +715,11 @@ class ChatToolExecutor {
         let script: String
         if action == "delete" {
             script = """
-                import sys, os
+                import sys, os, logging
+                logging.disable(logging.CRITICAL)
                 sys.path.insert(0, os.path.expanduser("~/ai-browser-profile"))
                 from ai_browser_profile import MemoryDB
-                mem = MemoryDB(os.path.expanduser("~/ai-browser-profile/memories.db"))
+                mem = MemoryDB(os.path.expanduser("~/ai-browser-profile/memories.db"), defer_embeddings=True)
                 q = \(queryLiteral).lower()
                 rows = mem.conn.execute("SELECT id, key, value FROM memories WHERE lower(value) LIKE ? OR lower(key) LIKE ?", (f'%{q}%', f'%{q}%')).fetchall()
                 if not rows:
@@ -731,10 +732,11 @@ class ChatToolExecutor {
                 """
         } else {
             script = """
-                import sys, os
+                import sys, os, logging
+                logging.disable(logging.CRITICAL)
                 sys.path.insert(0, os.path.expanduser("~/ai-browser-profile"))
                 from ai_browser_profile import MemoryDB
-                mem = MemoryDB(os.path.expanduser("~/ai-browser-profile/memories.db"))
+                mem = MemoryDB(os.path.expanduser("~/ai-browser-profile/memories.db"), defer_embeddings=True)
                 q = \(queryLiteral).lower()
                 rows = mem.conn.execute("SELECT id, key, value FROM memories WHERE lower(value) LIKE ? OR lower(key) LIKE ?", (f'%{q}%', f'%{q}%')).fetchall()
                 if not rows:
@@ -752,14 +754,15 @@ class ChatToolExecutor {
             process.executableURL = URL(fileURLWithPath: python)
             process.arguments = ["-c", script]
             process.currentDirectoryURL = aiBrowserProfileDir
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
             do {
                 try process.run()
                 process.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                return String(data: data, encoding: .utf8) ?? "Done."
+                let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Done."
             } catch {
                 return "Failed to edit browser profile: \(error.localizedDescription)"
             }
