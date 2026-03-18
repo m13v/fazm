@@ -390,6 +390,7 @@ struct ObserverCardView: View {
         case "insight": return "lightbulb"
         case "kg_update": return "brain"
         case "pattern": return "arrow.triangle.branch"
+        case "approval_request": return "checkmark.shield"
         default: return "sparkles"
         }
     }
@@ -398,6 +399,7 @@ struct ObserverCardView: View {
         switch type {
         case "skill_draft": return .orange
         case "insight": return .yellow
+        case "approval_request": return .blue
         default: return FazmColors.purplePrimary
         }
     }
@@ -408,6 +410,7 @@ struct ObserverCardView: View {
         case "insight": return "Insight"
         case "kg_update": return "Updated Knowledge"
         case "pattern": return "Pattern Detected"
+        case "approval_request": return "Needs Approval"
         default: return "Observer"
         }
     }
