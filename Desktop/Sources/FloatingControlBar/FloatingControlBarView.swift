@@ -19,6 +19,7 @@ struct FloatingControlBarView: View {
     var onReorderQueue: ((IndexSet, Int) -> Void)?
     var onStopAgent: (() -> Void)?
     var onConnectClaude: (() -> Void)?
+    var onObserverCardAction: ((Int64, String) -> Void)?
 
     @State private var isHovering = false
 
@@ -380,7 +381,8 @@ struct FloatingControlBarView: View {
                 onReorderQueue?(source, dest)
             },
             onStopAgent: onStopAgent,
-            onConnectClaude: onConnectClaude
+            onConnectClaude: onConnectClaude,
+            onObserverCardAction: onObserverCardAction
         )
         .transition(
             .asymmetric(
