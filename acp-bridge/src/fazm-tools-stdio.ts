@@ -1,5 +1,5 @@
 /**
- * Stdio-based MCP server for Fazm tools (execute_sql, semantic_search).
+ * Stdio-based MCP server for Fazm tools (execute_sql, complete_task, etc.).
  * This script is spawned as a subprocess by the ACP agent.
  * It reads JSON-RPC requests from stdin and writes responses to stdout.
  *
@@ -141,30 +141,6 @@ Use for: app usage stats, time queries, task management, aggregations, anything 
       type: "object" as const,
       properties: {
         query: { type: "string" as const, description: "SQL query to execute" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "semantic_search",
-    description: `Vector similarity search on screen history.
-Use for: fuzzy conceptual queries where exact SQL keywords won't work.
-e.g. "reading about machine learning", "working on design mockups"`,
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        query: {
-          type: "string" as const,
-          description: "Natural language search query",
-        },
-        days: {
-          type: "number" as const,
-          description: "Number of days to search back (default: 7)",
-        },
-        app_filter: {
-          type: "string" as const,
-          description: "Filter results to a specific app name",
-        },
       },
       required: ["query"],
     },
@@ -481,20 +457,6 @@ async function handleJsonRpc(
           }
         }
         const result = await requestSwiftTool("execute_sql", { query });
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "semantic_search") {
-        const input: Record<string, unknown> = {
-          query: args.query,
-          days: args.days ?? 7,
-        };
-        if (args.app_filter) input.app_filter = args.app_filter;
-        const result = await requestSwiftTool("semantic_search", input);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
