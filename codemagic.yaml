@@ -193,6 +193,30 @@ workflows:
           echo "MCP_MACOS_USE_BINARY=/tmp/mcp-server-macos-use-universal" >> $CM_ENV
           echo "mcp-server-macos-use: $(du -h /tmp/mcp-server-macos-use-universal | cut -f1) universal"
 
+      - name: Build whatsapp-mcp (arm64 + x86_64)
+        script: |
+          git clone --depth 1 https://github.com/m13v/whatsapp-mcp-macos.git /tmp/whatsapp-mcp-macos
+          cd /tmp/whatsapp-mcp-macos
+
+          xcrun swift package resolve
+
+          echo "Building arm64..."
+          xcrun swift build -c release --triple arm64-apple-macosx
+          cp .build/arm64-apple-macosx/release/whatsapp-mcp /tmp/whatsapp-mcp-arm64
+
+          echo "Building x86_64..."
+          xcrun swift build -c release --triple x86_64-apple-macosx
+
+          echo "Creating universal binary..."
+          lipo -create /tmp/whatsapp-mcp-arm64 .build/x86_64-apple-macosx/release/whatsapp-mcp \
+            -output /tmp/whatsapp-mcp-universal
+          file /tmp/whatsapp-mcp-universal | grep -q "universal binary" || {
+            echo "ERROR: Failed to create universal whatsapp-mcp binary"
+            exit 1
+          }
+          echo "WHATSAPP_MCP_BINARY=/tmp/whatsapp-mcp-universal" >> $CM_ENV
+          echo "whatsapp-mcp: $(du -h /tmp/whatsapp-mcp-universal | cut -f1) universal"
+
       - name: Clone Google Workspace MCP
         script: |
           git clone --depth 1 https://github.com/taylorwilsdon/google_workspace_mcp.git /tmp/google_workspace_mcp
@@ -303,6 +327,12 @@ workflows:
               echo "Bundled mcp-server-macos-use"
           fi
 
+          # Copy whatsapp-mcp binary
+          if [ -f "$WHATSAPP_MCP_BINARY" ]; then
+              cp "$WHATSAPP_MCP_BINARY" "$APP_BUNDLE/Contents/MacOS/whatsapp-mcp"
+              echo "Bundled whatsapp-mcp"
+          fi
+
           # Bundle Google Workspace MCP (Python)
           GWS_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
           if [ -d "/tmp/google_workspace_mcp" ]; then
@@ -388,6 +418,13 @@ workflows:
                 mv "$MCP_BIN.thin" "$MCP_BIN" || true
             fi
 
+            # Also thin whatsapp-mcp if present
+            WHATSAPP_BIN="$ARCH_APP/$APP_NAME.app/Contents/MacOS/whatsapp-mcp"
+            if [ -f "$WHATSAPP_BIN" ] && lipo -info "$WHATSAPP_BIN" 2>/dev/null | grep -q "Architectures"; then
+              lipo "$WHATSAPP_BIN" -thin "$ARCH" -output "$WHATSAPP_BIN.thin" 2>/dev/null && \
+                mv "$WHATSAPP_BIN.thin" "$WHATSAPP_BIN" || true
+            fi
+
             # Also thin ffmpeg if present
             FFMPEG_BIN="$ARCH_APP/$APP_NAME.app/Contents/Resources/Fazm_Fazm.bundle/ffmpeg"
             if [ -f "$FFMPEG_BIN" ] && lipo -info "$FFMPEG_BIN" 2>/dev/null | grep -q "Architectures"; then
@@ -463,6 +500,13 @@ workflows:
           if [ -f "$MCP_BIN" ]; then
             codesign --force --options runtime --timestamp \
               --sign "$SIGN_IDENTITY" "$MCP_BIN"
+          fi
+
+          # Sign whatsapp-mcp
+          WHATSAPP_BIN="$APP_BUNDLE/Contents/MacOS/whatsapp-mcp"
+          if [ -f "$WHATSAPP_BIN" ]; then
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGN_IDENTITY" "$WHATSAPP_BIN"
           fi
 
           # Sign Google Workspace MCP native binaries (.so/.dylib in venv)
