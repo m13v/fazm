@@ -21,6 +21,7 @@ pub struct Config {
     // API keys served to authenticated clients
     pub anthropic_api_key: String,
     pub deepgram_api_key: String,
+    pub gemini_api_key: String,
 }
 
 impl Config {
@@ -73,6 +74,8 @@ impl Config {
             anthropic_api_key: std::env::var("ANTHROPIC_API_KEY")
                 .unwrap_or_default(),
             deepgram_api_key: std::env::var("DEEPGRAM_API_KEY")
+                .unwrap_or_default(),
+            gemini_api_key: std::env::var("GEMINI_API_KEY")
                 .unwrap_or_default(),
         }
     }
