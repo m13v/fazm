@@ -8,6 +8,7 @@ use crate::config::Config;
 pub struct KeysResponse {
     pub anthropic_api_key: String,
     pub deepgram_api_key: String,
+    pub gemini_api_key: String,
 }
 
 /// POST /v1/keys
@@ -22,5 +23,6 @@ pub async fn get_keys(
     Ok(Json(KeysResponse {
         anthropic_api_key: config.anthropic_api_key.clone(),
         deepgram_api_key: config.deepgram_api_key.clone(),
+        gemini_api_key: config.gemini_api_key.clone(),
     }))
 }
