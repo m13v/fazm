@@ -65,6 +65,15 @@ const macosUseBinary = join(
   "mcp-server-macos-use"
 );
 
+// whatsapp-mcp binary lives in Contents/MacOS/ alongside mcp-server-macos-use.
+const whatsappMcpBinary = join(
+  dirname(process.execPath),
+  "..",
+  "..",
+  "MacOS",
+  "whatsapp-mcp"
+);
+
 // Google Workspace MCP — Python server bundled under Contents/Resources/google-workspace-mcp/
 const gwsMcpDir = join(
   dirname(process.execPath),
@@ -177,13 +186,12 @@ async function startHindsight(): Promise<boolean> {
     HINDSIGHT_API_EMBEDDINGS_PROVIDER: "local",
     HINDSIGHT_API_RERANKER_PROVIDER: "local",
     HINDSIGHT_API_DATABASE_URL: "pg0://fazm",
-    HINDSIGHT_API_SKIP_LLM_VERIFICATION: "true",
   };
   hindsightProcess = spawn(hindsightPython, [
     "-m", "hindsight_api.main",
     "--host", "127.0.0.1",
     "--port", String(HINDSIGHT_PORT),
-    "--log-level", "warning",
+    "--log-level", "debug",
   ], {
     env: hindsightEnv,
     stdio: ["ignore", "pipe", "pipe"],
@@ -896,6 +904,16 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
     servers.push({
       name: "macos-use",
       command: macosUseBinary,
+      args: [],
+      env: [],
+    });
+  }
+
+  // WhatsApp MCP (native macOS, controls WhatsApp Catalyst app via accessibility APIs)
+  if (existsSync(whatsappMcpBinary)) {
+    servers.push({
+      name: "whatsapp",
+      command: whatsappMcpBinary,
       args: [],
       env: [],
     });
@@ -1798,7 +1816,7 @@ async function main(): Promise<void> {
   } catch { /* ignore */ }
 
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
-  logErr(`MCP versions: playwright=${playwrightVersion}, macos-use=${existsSync(macosUseBinary) ? "bundled" : "missing"}, google-workspace=${existsSync(gwsMcpPython) ? "bundled" : "missing"}, hindsight=${existsSync(hindsightPython) ? "bundled" : "missing"}`);
+  logErr(`MCP versions: playwright=${playwrightVersion}, macos-use=${existsSync(macosUseBinary) ? "bundled" : "missing"}, whatsapp=${existsSync(whatsappMcpBinary) ? "bundled" : "missing"}, google-workspace=${existsSync(gwsMcpPython) ? "bundled" : "missing"}, hindsight=${existsSync(hindsightPython) ? "bundled" : "missing"}`);
   logErr(`Playwright MCP config: extension=${process.env.PLAYWRIGHT_USE_EXTENSION ?? "false"}, token=${process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN ? "set" : "unset"}, outputMode=file, imageResponses=omit, outputDir=/tmp/playwright-mcp`);
 
   // Start Hindsight Memory MCP server (HTTP, runs in background)
