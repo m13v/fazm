@@ -372,32 +372,36 @@ struct AIResponseView: View {
 
     private func chatExchangeView(_ exchange: FloatingChatExchange) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Question bubble
-            MessageWithCopyButton(alignment: .topTrailing) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(exchange.question, forType: .string)
-            } content: {
-                Text(exchange.question)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white)
-                    .textSelection(.enabled)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(8)
+            // Question bubble (hidden for observer-only entries with no user question)
+            if !exchange.question.isEmpty {
+                MessageWithCopyButton(alignment: .topTrailing) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(exchange.question, forType: .string)
+                } content: {
+                    Text(exchange.question)
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white)
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                }
             }
 
             // Response with content blocks
-            MessageWithCopyButton(alignment: .topTrailing) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(exchange.aiMessage.text, forType: .string)
-            } content: {
-                VStack(alignment: .leading, spacing: 4) {
-                    contentBlocksView(for: exchange.aiMessage)
+            if !exchange.aiMessage.contentBlocks.isEmpty || !exchange.aiMessage.text.isEmpty {
+                MessageWithCopyButton(alignment: .topTrailing) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(exchange.aiMessage.text, forType: .string)
+                } content: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        contentBlocksView(for: exchange.aiMessage)
+                    }
+                    .padding(.horizontal, 4)
                 }
-                .padding(.horizontal, 4)
             }
 
             Divider()
@@ -756,8 +760,12 @@ struct CopyConversationButton: View {
         var parts: [String] = []
 
         for exchange in chatHistory {
-            parts.append("Q: \(exchange.question)")
-            parts.append("A: \(exchange.aiMessage.text)")
+            if !exchange.question.isEmpty {
+                parts.append("Q: \(exchange.question)")
+            }
+            if !exchange.aiMessage.text.isEmpty {
+                parts.append("A: \(exchange.aiMessage.text)")
+            }
         }
 
         if !userInput.isEmpty {
