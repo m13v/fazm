@@ -156,12 +156,17 @@ async function startHindsight(): Promise<boolean> {
     }
   } catch {}
 
-  // Hindsight uses Vertex AI (Gemini Pro) for LLM — needs ADC credentials
-  const adcPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  // Hindsight uses Vertex AI (Gemini Pro) for LLM — needs fazm-prod service account
+  // Look for the key next to the bridge source first, then fall back to backend/
+  const adcCandidates = [
+    join(__dirname, "..", "vertex-ai-sa-key.json"),
+    join(__dirname, "..", "..", "backend", "vertex-ai-sa-key.json"),
+  ];
+  const adcPath = adcCandidates.find((p) => existsSync(p));
   const vertexProject = process.env.VERTEX_PROJECT_ID || "fazm-prod";
   const vertexRegion = process.env.VERTEX_REGION || "us-east5";
-  if (!adcPath || !existsSync(adcPath)) {
-    logErr(`Hindsight: no GOOGLE_APPLICATION_CREDENTIALS (adcPath=${adcPath}) — skipping`);
+  if (!adcPath) {
+    logErr(`Hindsight: no vertex-ai-sa-key.json found (checked ${adcCandidates.join(", ")}) — skipping`);
     return false;
   }
 
@@ -181,7 +186,6 @@ async function startHindsight(): Promise<boolean> {
     HINDSIGHT_API_EMBEDDINGS_PROVIDER: "local",
     HINDSIGHT_API_RERANKER_PROVIDER: "local",
     HINDSIGHT_API_DATABASE_URL: "pg0://fazm",
-    HINDSIGHT_API_SKIP_LLM_VERIFICATION: "true",
   };
   hindsightProcess = spawn(hindsightPython, [
     "-m", "hindsight_api.main",
