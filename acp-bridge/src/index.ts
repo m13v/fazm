@@ -965,8 +965,8 @@ function buildMeta(systemPrompt?: string, sessionKey?: string): Record<string, u
 
 const observerBuffer: Array<{ role: string; text: string }> = [];
 let observerBatchTimer: ReturnType<typeof setTimeout> | null = null;
-const OBSERVER_BATCH_SIZE = 5;        // Send batch every N turn pairs
-const OBSERVER_IDLE_TIMEOUT_MS = 30000; // Or after 30s of idle
+const OBSERVER_BATCH_SIZE = 3;        // Send batch every N turn pairs
+const OBSERVER_IDLE_TIMEOUT_MS = 5000;  // Or after 5s of idle
 
 function bufferObserverTurn(role: string, text: string): void {
   observerBuffer.push({ role, text });
