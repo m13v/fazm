@@ -3010,7 +3010,7 @@ class ChatProvider: ObservableObject {
 
                     if let jsonData = contentJson.data(using: .utf8),
                        let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                        displayText = (parsed["message"] as? String) ?? (parsed["summary"] as? String) ?? contentJson
+                        displayText = (parsed["body"] as? String) ?? (parsed["message"] as? String) ?? (parsed["summary"] as? String) ?? contentJson
                         if let buttonDefs = parsed["buttons"] as? [[String: String]] {
                             buttons = buttonDefs.compactMap { def in
                                 guard let label = def["label"], let action = def["action"] else { return nil }
@@ -3043,11 +3043,20 @@ class ChatProvider: ObservableObject {
                     )
 
                     await MainActor.run {
-                        // Add to current floating bar message or most recent AI message
-                        if let barState = FloatingControlBarManager.shared.barState,
-                           var msg = barState.currentAIMessage {
-                            msg.contentBlocks.append(block)
-                            barState.currentAIMessage = msg
+                        if let barState = FloatingControlBarManager.shared.barState {
+                            if var msg = barState.currentAIMessage {
+                                // Append to the currently visible AI response
+                                msg.contentBlocks.append(block)
+                                barState.currentAIMessage = msg
+                            } else {
+                                // No active response — create a standalone observer message
+                                var observerMsg = ChatMessage(text: "", sender: .ai)
+                                observerMsg.contentBlocks = [block]
+                                barState.currentAIMessage = observerMsg
+                                barState.showingAIConversation = true
+                                barState.showingAIResponse = true
+                                barState.isAILoading = false
+                            }
                         } else if !self.messages.isEmpty, let lastAI = self.messages.lastIndex(where: { $0.sender == .ai }) {
                             self.messages[lastAI].contentBlocks.append(block)
                         }
