@@ -1101,6 +1101,8 @@ struct OnboardingChatBubble: View {
                 return false
             case .discoveryCard:
                 return true
+            case .observerCard:
+                return true
             }
         }
     }
@@ -1160,6 +1162,8 @@ struct OnboardingChatBubble: View {
                                     EmptyView()
                                 case .discoveryCard(_, let title, let summary, let fullText):
                                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                                case .observerCard:
+                                    EmptyView() // Observer cards don't appear during onboarding
                                 }
                             }
                         }
