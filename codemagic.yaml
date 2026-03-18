@@ -381,7 +381,7 @@ workflows:
           echo "$FAZM_APP_ENV" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
 
           # Verify required env vars are present in the bundle
-          REQUIRED_VARS="FAZM_BACKEND_URL VERTEX_PROJECT_ID GCP_PROJECT_NUMBER GCP_SERVICE_ACCOUNT GOOGLE_CLIENT_ID FIREBASE_API_KEY GEMINI_API_KEY"
+          REQUIRED_VARS="FAZM_BACKEND_URL VERTEX_PROJECT_ID GCP_PROJECT_NUMBER GCP_SERVICE_ACCOUNT GOOGLE_CLIENT_ID FIREBASE_API_KEY"
           for var in $REQUIRED_VARS; do
             if ! grep -q "^${var}=.\+" "$APP_BUNDLE/Contents/Resources/.env"; then
               echo "ERROR: Required env var $var is missing or empty in bundled .env"
