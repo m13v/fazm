@@ -105,14 +105,25 @@ struct ToolCallsGroup: View {
         if call.status == .running {
             return call.input?.summary ?? call.name
         } else if let output = call.output, !output.isEmpty {
-            // Show first meaningful line of output
+            // Show first meaningful line of output, stripping markdown fences
             let firstLine = output
                 .split(separator: "\n", omittingEmptySubsequences: true)
-                .first.map(String.init) ?? output
-            return firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
+                .first(where: { !$0.hasPrefix("```") })
+                .map(String.init) ?? ""
+            if firstLine.isEmpty { return call.input?.summary ?? call.name }
+            return firstLine.count > 100 ? String(firstLine.prefix(100)) + "…" : firstLine
         } else {
             return call.input?.summary ?? call.name
         }
+    }
+
+    /// Strips markdown code fences from tool output for cleaner display
+    private static func cleanOutput(_ output: String) -> String {
+        output
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.hasPrefix("```") }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -186,11 +197,19 @@ struct ToolCallsGroup: View {
                             }
                             // Show tool output inline when available
                             if let output = call.output, !output.isEmpty {
-                                Text(output)
-                                    .scaledFont(size: 11)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(3)
-                                    .padding(.leading, 17)
+                                let cleaned = ToolCallsGroup.cleanOutput(output)
+                                if !cleaned.isEmpty {
+                                    Text(cleaned)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(6)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color.primary.opacity(0.05))
+                                        .cornerRadius(4)
+                                        .padding(.leading, 17)
+                                }
                             }
                         }
                     }
