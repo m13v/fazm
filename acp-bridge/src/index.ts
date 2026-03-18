@@ -156,15 +156,16 @@ async function startHindsight(): Promise<boolean> {
     }
   } catch {}
 
-  // Hindsight needs an LLM API key for fact extraction — skip if not available
-  // (Mode B = user's OAuth, Mode C = Vertex — neither provides ANTHROPIC_API_KEY)
-  const llmApiKey = process.env.ANTHROPIC_API_KEY;
-  if (!llmApiKey) {
-    logErr("Hindsight: no ANTHROPIC_API_KEY in environment (Mode B/C) — skipping");
+  // Hindsight uses Vertex AI (Gemini Pro) for LLM — needs ADC credentials
+  const adcPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const vertexProject = process.env.VERTEX_PROJECT_ID || "fazm-prod";
+  const vertexRegion = process.env.VERTEX_REGION || "us-east5";
+  if (!adcPath || !existsSync(adcPath)) {
+    logErr(`Hindsight: no GOOGLE_APPLICATION_CREDENTIALS (adcPath=${adcPath}) — skipping`);
     return false;
   }
 
-  logErr("Hindsight: starting server...");
+  logErr(`Hindsight: starting server (vertexai, project=${vertexProject}, region=${vertexRegion})...`);
   hindsightProcess = spawn(hindsightPython, [
     "-m", "hindsight_api.main",
     "--host", "127.0.0.1",
@@ -173,9 +174,11 @@ async function startHindsight(): Promise<boolean> {
   ], {
     env: {
       ...process.env,
-      HINDSIGHT_API_LLM_PROVIDER: "anthropic",
-      HINDSIGHT_API_LLM_MODEL: "claude-haiku-4-5-20251001",
-      HINDSIGHT_API_LLM_API_KEY: llmApiKey,
+      HINDSIGHT_API_LLM_PROVIDER: "vertexai",
+      HINDSIGHT_API_LLM_MODEL: "gemini-2.5-pro",
+      HINDSIGHT_API_LLM_VERTEXAI_PROJECT_ID: vertexProject,
+      HINDSIGHT_API_LLM_VERTEXAI_REGION: vertexRegion,
+      GOOGLE_APPLICATION_CREDENTIALS: adcPath,
       HINDSIGHT_API_EMBEDDINGS_PROVIDER: "local",
       HINDSIGHT_API_RERANKER_PROVIDER: "local",
       HINDSIGHT_API_DATABASE_URL: "pg0://fazm",
