@@ -180,7 +180,7 @@ async function startHindsight(): Promise<boolean> {
     LANG: process.env.LANG || "en_US.UTF-8",
     GOOGLE_APPLICATION_CREDENTIALS: adcPath,
     HINDSIGHT_API_LLM_PROVIDER: "vertexai",
-    HINDSIGHT_API_LLM_MODEL: "gemini-2.5-pro-latest",
+    HINDSIGHT_API_LLM_MODEL: "gemini-2.5-pro",
     HINDSIGHT_API_LLM_VERTEXAI_PROJECT_ID: vertexProject,
     HINDSIGHT_API_LLM_VERTEXAI_REGION: vertexRegion,
     HINDSIGHT_API_EMBEDDINGS_PROVIDER: "local",
