@@ -654,6 +654,7 @@ async function handleJsonRpc(
         });
         const insertCard = `INSERT INTO observer_activity (id, type, content, status, createdAt) VALUES (abs(random()), 'approval_request', '${cardContent.replace(/'/g, "''")}', 'pending', datetime('now'))`;
         await requestSwiftTool("execute_sql", { query: insertCard });
+        notifyObserverCardReady();
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
