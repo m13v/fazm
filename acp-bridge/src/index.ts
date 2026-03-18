@@ -676,12 +676,21 @@ async function initializeAcp(): Promise<void> {
 
 // --- MCP server config builder ---
 
-type McpServerConfig = {
+type McpServerConfigStdio = {
   name: string;
   command: string;
   args: string[];
   env: Array<{ name: string; value: string }>;
 };
+
+type McpServerConfigHttp = {
+  name: string;
+  type: "http";
+  url: string;
+  headers?: Array<{ name: string; value: string }>;
+};
+
+type McpServerConfig = McpServerConfigStdio | McpServerConfigHttp;
 
 function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
@@ -747,6 +756,13 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
       env: [],
     });
   }
+
+  // Hindsight memory (HTTP MCP server, runs locally via launchd)
+  servers.push({
+    name: "hindsight",
+    type: "http",
+    url: "http://localhost:8888/mcp/matthew/",
+  });
 
   return servers;
 }
