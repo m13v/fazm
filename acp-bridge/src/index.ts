@@ -156,6 +156,14 @@ async function startHindsight(): Promise<boolean> {
     }
   } catch {}
 
+  // Hindsight needs an LLM API key for fact extraction — skip if not available
+  // (Mode B = user's OAuth, Mode C = Vertex — neither provides ANTHROPIC_API_KEY)
+  const llmApiKey = process.env.ANTHROPIC_API_KEY;
+  if (!llmApiKey) {
+    logErr("Hindsight: no ANTHROPIC_API_KEY in environment (Mode B/C) — skipping");
+    return false;
+  }
+
   logErr("Hindsight: starting server...");
   hindsightProcess = spawn(hindsightPython, [
     "-m", "hindsight_api.main",
@@ -167,7 +175,7 @@ async function startHindsight(): Promise<boolean> {
       ...process.env,
       HINDSIGHT_API_LLM_PROVIDER: "anthropic",
       HINDSIGHT_API_LLM_MODEL: "claude-haiku-4-5-20251001",
-      HINDSIGHT_API_LLM_API_KEY: process.env.ANTHROPIC_API_KEY || "",
+      HINDSIGHT_API_LLM_API_KEY: llmApiKey,
       HINDSIGHT_API_EMBEDDINGS_PROVIDER: "local",
       HINDSIGHT_API_RERANKER_PROVIDER: "local",
       HINDSIGHT_API_DATABASE_URL: "pg0://fazm",
