@@ -3075,6 +3075,10 @@ class ChatProvider: ObservableObject {
                     }
 
                     log("ChatProvider: Observer card shown — id=\(activityId) type=\(type)")
+                    PostHogManager.shared.track("observer_card_shown", properties: [
+                        "activity_id": activityId,
+                        "card_type": type,
+                    ])
                 }
             } catch {
                 log("ChatProvider: Failed to poll observer cards: \(error)")
