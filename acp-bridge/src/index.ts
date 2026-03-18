@@ -914,7 +914,7 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
           const sessionParams: Record<string, unknown> = {
             cwd: warmCwd,
             mcpServers: buildMcpServers("act", warmCwd, cfg.key),
-            ...(cfg.systemPrompt ? { _meta: { systemPrompt: cfg.systemPrompt } } : {}),
+            ...buildMeta(cfg.systemPrompt),
           };
 
           // Resume existing session if ID provided, otherwise create a new one
@@ -1048,7 +1048,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       const sessionParams: Record<string, unknown> = {
         cwd: requestedCwd,
         mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
-        ...(msg.systemPrompt ? { _meta: { systemPrompt: msg.systemPrompt } } : {}),
+        ...buildMeta(msg.systemPrompt),
       };
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
 
