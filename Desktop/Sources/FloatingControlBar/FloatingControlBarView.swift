@@ -327,6 +327,7 @@ struct FloatingControlBarView: View {
                 if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
                     state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                 }
+                state.flushPendingObserverExchanges()
 
                 state.displayedQuery = message
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -358,6 +359,7 @@ struct FloatingControlBarView: View {
                     }
                     state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                 }
+                state.flushPendingObserverExchanges()
                 state.displayedQuery = item.text
                 state.isAILoading = true
                 state.currentAIMessage = nil
