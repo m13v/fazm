@@ -17,7 +17,7 @@ enum ContentBlockGroup: Identifiable {
         case .toolCalls(let id, _): return id
         case .thinking(let id, _): return id
         case .discoveryCard(let id, _, _, _): return id
-        case .observerCard(let id, _, _, _, _): return id
+        case .observerCard(let id, _, _, _, _, _): return id
         }
     }
 
@@ -71,10 +71,10 @@ enum ContentBlockGroup: Identifiable {
                 flushToolCalls()
                 result.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
 
-            case .observerCard(let id, let activityId, let type, let content, let buttons):
+            case .observerCard(let id, let activityId, let type, let content, let buttons, let actedAction):
                 flushText()
                 flushToolCalls()
-                result.append(.observerCard(id: id, activityId: activityId, type: type, content: content, buttons: buttons))
+                result.append(.observerCard(id: id, activityId: activityId, type: type, content: content, buttons: buttons, actedAction: actedAction))
             }
         }
 
