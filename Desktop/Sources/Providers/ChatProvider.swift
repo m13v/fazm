@@ -643,8 +643,10 @@ class ChatProvider: ObservableObject {
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            self.acpBridge.stop()
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.acpBridge.stop()
+            }
         }
     }
 
@@ -860,17 +862,19 @@ class ChatProvider: ObservableObject {
                 proc.waitUntilExit()
                 let hasCredentials = proc.terminationStatus == 0
                 log("ChatProvider: Keychain Claude credentials → \(hasCredentials ? "found" : "not found")")
+                let capturedSelf = self
                 await MainActor.run {
-                    guard let self else { return }
-                    self.isClaudeConnected = hasCredentials
-                    if autoSwitchToPersonal && hasCredentials && self.bridgeMode != "personal" {
+                    guard let capturedSelf else { return }
+                    capturedSelf.isClaudeConnected = hasCredentials
+                    if autoSwitchToPersonal && hasCredentials && capturedSelf.bridgeMode != "personal" {
                         log("ChatProvider: Active Claude CLI session detected, auto-switching to personal mode")
-                        Task { await self.switchBridgeMode(to: "personal") }
+                        Task { await capturedSelf.switchBridgeMode(to: "personal") }
                     }
                 }
             } catch {
                 logError("ChatProvider: Failed to check Keychain for Claude credentials", error: error)
-                await MainActor.run { self?.isClaudeConnected = false }
+                let capturedSelf = self
+                await MainActor.run { capturedSelf?.isClaudeConnected = false }
             }
         }
     }
@@ -1857,7 +1861,6 @@ class ChatProvider: ObservableObject {
         // the whole time — by the time isSending is released the user message
         // save has almost always already completed and its ID has been synced.
         let userMessageId = UUID().uuidString
-        let isFirstMessage = messages.isEmpty
         let capturedAppId = overrideAppId ?? selectedAppId
         if !isFollowUp {
             Task { [weak self] in
