@@ -127,7 +127,6 @@ async function ensureHindsightVenv(): Promise<boolean> {
       logErr(`Hindsight: tarball download failed: ${res.status} ${res.statusText}`);
       return false;
     }
-    const { writeFileSync } = await import("fs");
     const buffer = Buffer.from(await res.arrayBuffer());
     writeFileSync(tarballPath, buffer);
     logErr(`Hindsight: tarball downloaded (${Math.round(buffer.length / 1024 / 1024)} MB)`);
