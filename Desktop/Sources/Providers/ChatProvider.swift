@@ -2639,7 +2639,7 @@ class ChatProvider: ObservableObject {
                     )
 
                     await MainActor.run {
-                        var observerMsg = ChatMessage(text: "", sender: .ai)
+                        var observerMsg = ChatMessage(text: displayText, sender: .ai)
                         observerMsg.contentBlocks = [block]
 
                         if let barState = FloatingControlBarManager.shared.barState {
