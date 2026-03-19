@@ -142,6 +142,7 @@ struct BrowserProfileMigrationView: View {
     @State private var quickReplyQuestion = ""
     @State private var quickReplyOptions: [String] = []
     @State private var doneMarkerSeen = false
+    @State private var doneMarkerTimer: Timer?
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -284,6 +285,11 @@ struct BrowserProfileMigrationView: View {
         }
         .background(FazmColors.backgroundPrimary)
         .onAppear { startChat() }
+        .onDisappear {
+            doneMarkerTimer?.invalidate()
+            doneMarkerTimer = nil
+            ChatToolExecutor.onQuickReplyOptions = nil
+        }
     }
 
     // MARK: - Logic
@@ -355,7 +361,7 @@ struct BrowserProfileMigrationView: View {
 
     private func observeForDoneMarker() {
         // Poll the latest message for the marker (simple approach)
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
             Task { @MainActor in
                 guard let lastMessage = chatProvider.messages.last,
                       lastMessage.sender == .ai else { return }
@@ -373,6 +379,7 @@ struct BrowserProfileMigrationView: View {
                 }
             }
         }
+        doneMarkerTimer = timer
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, delay: TimeInterval = 0.05) {
