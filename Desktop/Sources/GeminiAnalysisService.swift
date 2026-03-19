@@ -3,6 +3,7 @@ import SessionReplay
 
 /// Accumulates session recording chunks and periodically sends them to the Gemini API
 /// for multimodal video analysis to identify tasks an AI agent could help with.
+/// The chunk buffer is persisted to disk so it survives app restarts.
 actor GeminiAnalysisService {
     static let shared = GeminiAnalysisService()
 
@@ -33,11 +34,16 @@ actor GeminiAnalysisService {
     /// Gemini File API: chunks above this size use resumable upload; smaller ones use inline base64.
     private let inlineSizeLimit = 1_500_000 // 1.5 MB
 
-    /// Buffer of chunk file URLs waiting for analysis.
+    /// Buffer of chunk entries waiting for analysis (persisted to disk as JSON).
     private var chunkBuffer: [ChunkEntry] = []
     private var isAnalyzing = false
 
-    struct ChunkEntry: Sendable {
+    /// Stable directory for chunk video files (inside Application Support, survives restarts).
+    private let chunksDir: URL
+    /// JSON file that persists the buffer index across restarts.
+    private let bufferIndexURL: URL
+
+    struct ChunkEntry: Codable, Sendable {
         let localURL: URL
         let chunkIndex: Int
         let startTimestamp: Date
@@ -53,7 +59,6 @@ actor GeminiAnalysisService {
     }
 
     /// Chunk info passed from SessionRecordingManager when a chunk is finalized.
-    /// TODO: Replace with SessionRecorder.ChunkInfo once macos-session-replay exposes it.
     struct ChunkInfo: Sendable {
         let localURL: URL
         let chunkIndex: Int
@@ -61,8 +66,26 @@ actor GeminiAnalysisService {
         let endTimestamp: Date
     }
 
+    init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let baseDir = appSupport.appendingPathComponent("Fazm/gemini-analysis", isDirectory: true)
+        self.chunksDir = baseDir.appendingPathComponent("chunks", isDirectory: true)
+        self.bufferIndexURL = baseDir.appendingPathComponent("buffer-index.json")
+
+        try? FileManager.default.createDirectory(at: chunksDir, withIntermediateDirectories: true)
+
+        // Restore persisted buffer
+        if let data = try? Data(contentsOf: bufferIndexURL),
+           var entries = try? JSONDecoder().decode([ChunkEntry].self, from: data) {
+            // Prune entries whose files no longer exist on disk
+            entries.removeAll { !FileManager.default.fileExists(atPath: $0.localURL.path) }
+            self.chunkBuffer = entries
+            log("GeminiAnalysis: restored \(entries.count) chunks from disk")
+        }
+    }
+
     /// Called by SessionRecordingManager when a chunk is finalized.
-    /// Reads the file into memory immediately (before upload deletes it), then buffers it.
+    /// Copies the file to a stable location and persists the buffer index.
     func handleChunk(_ info: ChunkInfo) {
         // Read file data now, before upload deletes the local file
         guard let data = try? Data(contentsOf: info.localURL) else {
@@ -70,36 +93,41 @@ actor GeminiAnalysisService {
             return
         }
 
-        chunkBuffer.append(ChunkEntry(
-            localURL: info.localURL,
+        // Store in stable Application Support directory
+        let stableFile = chunksDir.appendingPathComponent("chunk_\(info.chunkIndex)_\(Int(info.startTimestamp.timeIntervalSince1970)).mp4")
+        do {
+            try data.write(to: stableFile)
+        } catch {
+            log("GeminiAnalysis: failed to write chunk to \(stableFile.path): \(error)")
+            return
+        }
+
+        let entry = ChunkEntry(
+            localURL: stableFile,
             chunkIndex: info.chunkIndex,
             startTimestamp: info.startTimestamp,
             endTimestamp: info.endTimestamp
-        ))
+        )
+        chunkBuffer.append(entry)
 
-        // Store the data in a temp location so it survives upload deletion
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gemini-analysis", isDirectory: true)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        let tempFile = tempDir.appendingPathComponent("chunk_\(info.chunkIndex).mp4")
-        try? data.write(to: tempFile)
-
-        // Update the buffer entry to point to temp copy
-        if var last = chunkBuffer.last {
-            chunkBuffer[chunkBuffer.count - 1] = ChunkEntry(
-                localURL: tempFile,
-                chunkIndex: last.chunkIndex,
-                startTimestamp: last.startTimestamp,
-                endTimestamp: last.endTimestamp
-            )
+        // Cap at maxChunks — drop oldest if over
+        if chunkBuffer.count > maxChunks {
+            let excess = chunkBuffer.prefix(chunkBuffer.count - maxChunks)
+            for old in excess {
+                try? FileManager.default.removeItem(at: old.localURL)
+            }
+            chunkBuffer.removeFirst(chunkBuffer.count - maxChunks)
         }
+
+        persistBufferIndex()
 
         log("GeminiAnalysis: buffered chunk \(info.chunkIndex) (\(chunkBuffer.count)/\(maxChunks))")
 
         // Trigger analysis when we have enough chunks
         if chunkBuffer.count >= maxChunks && !isAnalyzing {
-            let chunks = Array(chunkBuffer.prefix(maxChunks))
-            chunkBuffer.removeFirst(min(maxChunks, chunkBuffer.count))
+            let chunks = Array(chunkBuffer)
+            chunkBuffer.removeAll()
+            persistBufferIndex()
             Task { await runAnalysis(chunks: chunks) }
         }
     }
@@ -109,10 +137,22 @@ actor GeminiAnalysisService {
         guard !chunkBuffer.isEmpty, !isAnalyzing else { return nil }
         let chunks = chunkBuffer
         chunkBuffer.removeAll()
+        persistBufferIndex()
         return await runAnalysis(chunks: chunks)
     }
 
     var bufferedChunkCount: Int { chunkBuffer.count }
+
+    // MARK: - Persistence
+
+    private func persistBufferIndex() {
+        do {
+            let data = try JSONEncoder().encode(chunkBuffer)
+            try data.write(to: bufferIndexURL, options: .atomic)
+        } catch {
+            log("GeminiAnalysis: failed to persist buffer index: \(error)")
+        }
+    }
 
     // MARK: - Gemini API
 
@@ -167,7 +207,7 @@ actor GeminiAnalysisService {
         // Call generateContent
         let result = await callGenerateContent(parts: parts, apiKey: apiKey)
 
-        // Cleanup: delete uploaded files and temp copies
+        // Cleanup: delete uploaded files from Gemini and local chunk copies
         for fileName in uploadedFileNames {
             Task { await deleteFile(fileName: fileName, apiKey: apiKey) }
         }
