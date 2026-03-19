@@ -87,10 +87,6 @@ struct SettingsContentView: View {
     // Loading states
     @State private var isLoadingSettings: Bool = false
 
-    // Multi-chat mode setting
-    @AppStorage("multiChatEnabled") private var multiChatEnabled = false
-    @AppStorage("conversationsCompactView") private var conversationsCompactView = true
-
     // AI Chat settings
 
     @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
@@ -1325,62 +1321,6 @@ struct SettingsContentView: View {
                     Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
                         .toggleStyle(.switch)
                         .tint(FazmColors.purplePrimary)
-                }
-            }
-
-            // Multiple Chat Sessions toggle
-            settingsCard(settingId: "advanced.preferences.multichat") {
-                HStack(spacing: 16) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .scaledFont(size: 16)
-                        .foregroundColor(FazmColors.textSecondary)
-                        .frame(width: 24, height: 24)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Multiple Chat Sessions")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(FazmColors.textPrimary)
-
-                        Text(multiChatEnabled
-                             ? "Create separate chat threads"
-                             : "Single chat synced with mobile app")
-                            .scaledFont(size: 13)
-                            .foregroundColor(FazmColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    Toggle("", isOn: $multiChatEnabled)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
-            }
-
-            // Conversation View toggle
-            settingsCard(settingId: "advanced.preferences.compact") {
-                HStack(spacing: 16) {
-                    Image(systemName: conversationsCompactView ? "list.bullet" : "list.bullet.rectangle")
-                        .scaledFont(size: 16)
-                        .foregroundColor(FazmColors.textSecondary)
-                        .frame(width: 24, height: 24)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Compact Conversations")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(FazmColors.textPrimary)
-
-                        Text(conversationsCompactView
-                             ? "Showing compact conversation list"
-                             : "Showing expanded conversation list")
-                            .scaledFont(size: 13)
-                            .foregroundColor(FazmColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    Toggle("", isOn: $conversationsCompactView)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
                 }
             }
 
