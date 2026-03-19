@@ -259,6 +259,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Start session recording if feature flag is enabled (PostHog must be initialized first)
         SessionRecordingManager.shared.startIfEnabled()
 
+        // Start the always-on observer recorder for Gemini analysis (local-only, no feature flag)
+        SessionRecordingManager.shared.startObserver()
+
         // One-time migration: Switch existing users from personal OAuth to Vertex built-in
         migrateBridgeModeToBuiltin()
 
