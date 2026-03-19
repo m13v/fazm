@@ -239,9 +239,7 @@ struct InitialMessageResponse {
     var messageId: String
 }
 
-struct SessionTitleResponse {
-    var title: String
-}
+
 
 struct SaveMessageResponse {
     var id: String
@@ -288,12 +286,6 @@ class APIClient {
     func assignSegmentsBulk(conversationId: String, segmentIds: [String], isUser: Bool, personId: String?) async throws {}
 
     // Chat API — signatures match ChatProvider calling patterns
-    func getChatSessions(appId: String? = nil, starred: Bool? = nil) async throws -> [ChatSession] { [] }
-    func createChatSession(title: String? = nil, appId: String? = nil) async throws -> ChatSession { ChatSession() }
-    func updateChatSession(sessionId: String, title: String? = nil, starred: Bool? = nil) async throws -> ChatSession { ChatSession() }
-    func deleteChatSession(sessionId: String) async throws {}
-    func generateSessionTitle(sessionId: String, messages: [(text: String, sender: String)] = []) async throws -> SessionTitleResponse { SessionTitleResponse(title: "Chat") }
-    func getMessages(sessionId: String, limit: Int = 100, offset: Int = 0) async throws -> [ChatMessageDB] { [] }
     func getMessages(appId: String?, limit: Int = 100, offset: Int = 0) async throws -> [ChatMessageDB] { [] }
     func getChatMessageCount(sessionId: String? = nil) async throws -> Int { 0 }
     func saveMessage(text: String, sender: String, appId: String? = nil, sessionId: String? = nil, metadata: String? = nil) async throws -> SaveMessageResponse {
