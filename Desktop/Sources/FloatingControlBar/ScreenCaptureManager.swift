@@ -17,7 +17,12 @@ class ScreenCaptureManager {
         let ownerName = windowInfo[kCGWindowOwnerName as CFString] as? String ?? "unknown"
 
         // Capture just this window (including its shadow for context)
-        guard let image = captureWindowImage(windowID: windowID) else {
+        guard let image = CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            windowID,
+            [.boundsIgnoreFraming, .bestResolution]
+        ) else {
             log("ScreenCaptureManager: Could not capture window for PID \(pid), falling back to full screen")
             return captureScreen()
         }
@@ -70,17 +75,6 @@ class ScreenCaptureManager {
         guard let bounds = info[kCGWindowBounds] as? [String: CGFloat],
               let w = bounds["Width"], let h = bounds["Height"] else { return 0 }
         return w * h
-    }
-
-    // TODO: Migrate to ScreenCaptureKit when dropping macOS 13 support
-    @available(macOS, deprecated: 14.0)
-    private static func captureWindowImage(windowID: CGWindowID) -> CGImage? {
-        CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            windowID,
-            [.boundsIgnoreFraming, .bestResolution]
-        )
     }
 
     /// Capture the entire main display.
