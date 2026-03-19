@@ -221,33 +221,33 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
 fi
 
 # Bundle Google Workspace MCP (Python)
-GWS_MCP_REPO="$HOME/google_workspace_mcp"
-GWS_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
-if [ -d "$GWS_MCP_REPO" ]; then
+WORKSPACE_MCP_REPO="$HOME/google_workspace_mcp"
+WORKSPACE_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
+if [ -d "$WORKSPACE_MCP_REPO" ]; then
     substep "Bundling Google Workspace MCP"
-    mkdir -p "$GWS_MCP_BUNDLE"
+    mkdir -p "$WORKSPACE_MCP_BUNDLE"
     # Copy source (excluding dev artifacts)
     rsync -a --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
         --exclude='*.pyc' --exclude='.ruff_cache' --exclude='tests' \
         --exclude='docs' --exclude='build' --exclude='dist' --exclude='*.egg-info' \
-        "$GWS_MCP_REPO/" "$GWS_MCP_BUNDLE/"
+        "$WORKSPACE_MCP_REPO/" "$WORKSPACE_MCP_BUNDLE/"
     # Create venv and install dependencies using uv
     if command -v uv &>/dev/null; then
         substep "Creating Python venv with uv"
-        uv venv "$GWS_MCP_BUNDLE/.venv" --python python3.12 --quiet 2>&1 | tail -1 || true
+        uv venv "$WORKSPACE_MCP_BUNDLE/.venv" --python python3.12 --quiet 2>&1 | tail -1 || true
         # Install dependencies (extracted from pyproject.toml) into the bundled venv
-        GWS_DEPS=$(python3.12 -c "
+        WORKSPACE_MCP_DEPS=$(python3.12 -c "
 import tomllib
-with open('$GWS_MCP_REPO/pyproject.toml', 'rb') as f:
+with open('$WORKSPACE_MCP_REPO/pyproject.toml', 'rb') as f:
     print(' '.join(tomllib.load(f)['project']['dependencies']))
 ")
-        uv pip install --python "$GWS_MCP_BUNDLE/.venv/bin/python3" $GWS_DEPS --quiet 2>&1 | tail -3 || true
+        uv pip install --python "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3" $WORKSPACE_MCP_DEPS --quiet 2>&1 | tail -3 || true
         substep "Bundled Google Workspace MCP with venv"
     else
         substep "Warning: uv not found — Google Workspace MCP will not work without dependencies"
     fi
 else
-    echo "Warning: Google Workspace MCP not found at $GWS_MCP_REPO — skipping"
+    echo "Warning: Google Workspace MCP not found at $WORKSPACE_MCP_REPO — skipping"
 fi
 
 # Bundle Hindsight Memory MCP (Python)
