@@ -400,13 +400,15 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // if a new PTT query fires while this restore animation is still running.
         pendingRestoreOrigin = restoreOrigin
         NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0.3
+        NSAnimationContext.current.duration = 0.4
         NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
+            controlPoints: 0.2, 0.9, 0.3, 1.0
+        )
         self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
         NSAnimationContext.endGrouping()
         let targetFrame = NSRect(origin: restoreOrigin, size: size)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
             guard let self = self else { return }
             self.isResizingProgrammatically = false
             self.pendingRestoreOrigin = nil
@@ -420,7 +422,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
 
         // Allow hover resizes again after the animation settles.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
             self?.suppressHoverResize = false
         }
     }
@@ -607,7 +609,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         inputHeightCancellable?.cancel()
         inputHeightCancellable = state.$inputViewHeight
             .removeDuplicates()
-            .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] height in
                 guard let self = self,
                       self.state.showingAIConversation,
@@ -699,16 +701,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
         // causing an infinite constraint update loop (OMI-COMPUTER-1J). Disable implicit animations
         // during the resize to prevent the updateAnimatedWindowSize code path.
+        let animDuration: CGFloat = animated ? 0.4 : 0
         NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = animated ? 0.3 : 0
+        NSAnimationContext.current.duration = animDuration
         NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
+            controlPoints: 0.2, 0.9, 0.3, 1.0  // approximates spring(response: 0.4, dampingFraction: 0.8)
+        )
         self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
         NSAnimationContext.endGrouping()
 
         if animated {
             // Reset flag after animation duration to prevent overlapping resizes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + animDuration + 0.05) { [weak self] in
                 self?.isResizingProgrammatically = false
             }
         } else {
@@ -738,21 +743,38 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
 
-        let doResize: () -> Void = { [weak self] in
-            guard let self = self else { return }
-            let newOrigin = self.originForBottomCenterAnchor(newSize: targetSize)
-            self.styleMask.remove(.resizable)
-            self.isResizingProgrammatically = true
-            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
-            self.isResizingProgrammatically = false
-        }
+        let newOrigin = originForBottomCenterAnchor(newSize: targetSize)
+        styleMask.remove(.resizable)
 
         if expanded {
             // Expand synchronously so the window is already large enough when
             // SwiftUI re-evaluates body with isHovering=true.
-            doResize()
+            // Use a short animation so the size change isn't jarring.
+            isResizingProgrammatically = true
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = 0.15
+            NSAnimationContext.current.allowsImplicitAnimation = false
+            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
+            NSAnimationContext.endGrouping()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.isResizingProgrammatically = false
+            }
         } else {
             // Collapse async to avoid blocking SwiftUI body evaluation during unhover.
+            let doResize: () -> Void = { [weak self] in
+                guard let self = self else { return }
+                self.isResizingProgrammatically = true
+                NSAnimationContext.beginGrouping()
+                NSAnimationContext.current.duration = 0.2
+                NSAnimationContext.current.allowsImplicitAnimation = false
+                NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
+                NSAnimationContext.endGrouping()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    self?.isResizingProgrammatically = false
+                }
+            }
             resizeWorkItem = DispatchWorkItem(block: doResize)
             DispatchQueue.main.async(execute: resizeWorkItem!)
         }
