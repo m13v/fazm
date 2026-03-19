@@ -353,16 +353,16 @@ workflows:
           fi
 
           # Bundle Google Workspace MCP (Python)
-          GWS_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
+          WORKSPACE_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
           if [ -d "/tmp/google_workspace_mcp" ]; then
-            mkdir -p "$GWS_MCP_BUNDLE"
+            mkdir -p "$WORKSPACE_MCP_BUNDLE"
             rsync -a --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
               --exclude='*.pyc' --exclude='.ruff_cache' --exclude='tests' \
               --exclude='docs' --exclude='build' --exclude='dist' --exclude='*.egg-info' \
-              /tmp/google_workspace_mcp/ "$GWS_MCP_BUNDLE/"
+              /tmp/google_workspace_mcp/ "$WORKSPACE_MCP_BUNDLE/"
             # Extract dependencies to requirements.txt — venv is created at runtime
             # (bundling a venv with absolute symlinks breaks Gatekeeper)
-            python3 -c 'import tomllib; f=open("/tmp/google_workspace_mcp/pyproject.toml","rb"); deps=tomllib.load(f)["project"]["dependencies"]; [print(d) for d in deps]' > "$GWS_MCP_BUNDLE/requirements.txt" 2>/dev/null || true
+            python3 -c 'import tomllib; f=open("/tmp/google_workspace_mcp/pyproject.toml","rb"); deps=tomllib.load(f)["project"]["dependencies"]; [print(d) for d in deps]' > "$WORKSPACE_MCP_BUNDLE/requirements.txt" 2>/dev/null || true
             echo "Bundled Google Workspace MCP (venv will be created at runtime)"
           else
             echo "WARNING: Google Workspace MCP not cloned — skipping"
@@ -534,17 +534,17 @@ workflows:
           fi
 
           # Sign Google Workspace MCP native binaries (.so/.dylib in venv)
-          GWS_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
-          if [ -d "$GWS_MCP_BUNDLE/.venv" ]; then
-            find "$GWS_MCP_BUNDLE/.venv" -type f \
+          WORKSPACE_MCP_BUNDLE="$APP_BUNDLE/Contents/Resources/google-workspace-mcp"
+          if [ -d "$WORKSPACE_MCP_BUNDLE/.venv" ]; then
+            find "$WORKSPACE_MCP_BUNDLE/.venv" -type f \
               \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | while read native_bin; do
               file "$native_bin" 2>/dev/null | grep -q "Mach-O" && \
                 codesign --force --options runtime --timestamp \
                   --sign "$SIGN_IDENTITY" "$native_bin"
             done
             # Sign the venv Python binary itself
-            if [ -f "$GWS_MCP_BUNDLE/.venv/bin/python3" ]; then
-              REAL_PYTHON=$(readlink -f "$GWS_MCP_BUNDLE/.venv/bin/python3" 2>/dev/null || echo "$GWS_MCP_BUNDLE/.venv/bin/python3")
+            if [ -f "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3" ]; then
+              REAL_PYTHON=$(readlink -f "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3" 2>/dev/null || echo "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3")
               if file "$REAL_PYTHON" 2>/dev/null | grep -q "Mach-O"; then
                 codesign --force --options runtime --timestamp \
                   --sign "$SIGN_IDENTITY" "$REAL_PYTHON"
