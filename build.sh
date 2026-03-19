@@ -115,6 +115,8 @@ cp fazm_icon.icns "$APP_BUNDLE/Contents/Resources/FazmIcon.icns"
 SWIFT_BUILD_DIR=$(swift build -c release --package-path Desktop --show-bin-path)
 if [ -d "$SWIFT_BUILD_DIR/Fazm_Fazm.bundle" ]; then
     cp -R "$SWIFT_BUILD_DIR/Fazm_Fazm.bundle" "$APP_BUNDLE/Contents/Resources/"
+    # Also copy to app root — SPM's resource_bundle_accessor uses Bundle.main.bundleURL
+    cp -R "$SWIFT_BUILD_DIR/Fazm_Fazm.bundle" "$APP_BUNDLE/"
     echo "Copied resource bundle"
 else
     echo "Warning: Resource bundle not found at $SWIFT_BUILD_DIR/Fazm_Fazm.bundle"
