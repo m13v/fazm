@@ -386,12 +386,13 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                case .observerCard(_, let activityId, let type, let content, let buttons):
+                case .observerCard(_, let activityId, let type, let content, let buttons, let actedAction):
                     ObserverCardView(
                         activityId: activityId,
                         type: type,
                         content: content,
                         buttons: buttons,
+                        actedAction: actedAction,
                         onAction: { id, action in
                             handleObserverCardAction(activityId: id, action: action)
                         }
