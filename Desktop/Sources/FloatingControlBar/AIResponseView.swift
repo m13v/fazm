@@ -410,6 +410,28 @@ struct AIResponseView: View {
 
     private func handleObserverCardAction(activityId: Int64, action: String) {
         onObserverCardAction?(activityId, action)
+        // Persist the action in the content block so it survives view recreation
+        if let barState = FloatingControlBarManager.shared.barState {
+            for i in barState.chatHistory.indices {
+                for j in barState.chatHistory[i].aiMessage.contentBlocks.indices {
+                    if case .observerCard(let id, let aId, let type, let content, let buttons, _) = barState.chatHistory[i].aiMessage.contentBlocks[j],
+                       aId == activityId {
+                        barState.chatHistory[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                        return
+                    }
+                }
+            }
+            // Also check pending observer exchanges
+            for i in barState.pendingObserverExchanges.indices {
+                for j in barState.pendingObserverExchanges[i].aiMessage.contentBlocks.indices {
+                    if case .observerCard(let id, let aId, let type, let content, let buttons, _) = barState.pendingObserverExchanges[i].aiMessage.contentBlocks[j],
+                       aId == activityId {
+                        barState.pendingObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                        return
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Chat History
