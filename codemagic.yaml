@@ -791,18 +791,27 @@ workflows:
           fi
 
           # Create release and upload assets with retry (gh can hang on large uploads)
+          RELEASE_CREATED=false
           for attempt in 1 2 3; do
-            timeout 600 gh release create "$CM_TAG" \
+            if timeout 600 gh release create "$CM_TAG" \
               --repo "$GITHUB_REPO" \
               --title "Fazm Desktop v${VERSION}" \
               --notes "$RELEASE_NOTES" \
               $PRERELEASE_FLAG \
               "$SPARKLE_ZIP_PATH" \
-              "$DMG_PATH" && break
+              "$DMG_PATH"; then
+              RELEASE_CREATED=true
+              break
+            fi
             echo "Attempt $attempt failed, retrying..."
             gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
             sleep 10
           done
+
+          if [ "$RELEASE_CREATED" != "true" ]; then
+            echo "ERROR: Failed to create GitHub release after 3 attempts"
+            exit 1
+          fi
 
           echo "GitHub release created: $CM_TAG (staging=$IS_STAGING)"
 
@@ -824,8 +833,8 @@ workflows:
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✓ Release registered: $CM_TAG (channel=staging)"
             else
-              echo "⚠ Release registration returned HTTP $HTTP_CODE: $BODY"
-              echo "Continuing — appcast fallback will use GitHub isPrerelease flag"
+              echo "ERROR: Release registration returned HTTP $HTTP_CODE: $BODY"
+              exit 1
             fi
           fi
 
