@@ -50,7 +50,7 @@ open class Highlightr
     public init?(highlightPath: String? = nil)
     {
         guard let jsContext = JSContext() else { return nil }
-        let window = JSValue(newObjectIn: jsContext)
+        _ = JSValue(newObjectIn: jsContext)
 
         #if SWIFT_PACKAGE
         // SPM's auto-generated Bundle.module uses Bundle.main.bundleURL which resolves
@@ -75,7 +75,7 @@ open class Highlightr
         }
         
         guard let hgJs = try? String.init(contentsOfFile: hgPath) else { return nil }
-        let value = jsContext.evaluateScript(hgJs)
+        _ = jsContext.evaluateScript(hgJs)
         guard let hljs = jsContext.objectForKeyedSubscript("hljs") else { return nil }
 
         self.hljs = hljs
