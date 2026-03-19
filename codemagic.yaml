@@ -886,13 +886,16 @@ workflows:
           "
 
           gcloud storage cp /tmp/fazm-latest.json "gs://$BUCKET/$PREFIX/latest.json"
-          gcloud storage cp /tmp/fazm-latest.json "gs://$BUCKET/desktop/latest.json" \
-              --cache-control="no-cache, max-age=0"
+
+          # NOTE: desktop/latest.json (the global pointer used by the stub installer)
+          # is NOT updated here. It is updated by promote_release.sh when the release
+          # is promoted to beta, to prevent staging builds from reaching end users.
 
           echo "Uploaded arch-specific ZIPs and manifest to GCS"
           echo "  arm64:  $BASE_URL/$PREFIX/Fazm-arm64.zip ($ARM64_SIZE bytes)"
           echo "  x86_64: $BASE_URL/$PREFIX/Fazm-x86_64.zip ($X86_64_SIZE bytes)"
-          echo "  manifest: $BASE_URL/desktop/latest.json"
+          echo "  version manifest: $BASE_URL/$PREFIX/latest.json"
+          echo "  NOTE: desktop/latest.json not updated (staging). Promote to beta to update."
 
       - name: Build stub installer and create DMG
         script: |
