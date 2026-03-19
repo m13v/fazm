@@ -85,6 +85,45 @@ const gwsMcpDir = join(
 const gwsMcpPython = join(gwsMcpDir, ".venv", "bin", "python3");
 const gwsMcpMain = join(gwsMcpDir, "main.py");
 
+async function ensureGwsVenv(): Promise<boolean> {
+  if (existsSync(gwsMcpPython)) return true;
+
+  const requirementsPath = join(gwsMcpDir, "requirements.txt");
+  if (!existsSync(requirementsPath)) {
+    logErr("Google Workspace MCP: requirements.txt not found, skipping venv creation");
+    return false;
+  }
+
+  logErr("Google Workspace MCP: creating venv from requirements.txt (first launch)...");
+  const venvDir = join(gwsMcpDir, ".venv");
+
+  try {
+    // Try uv first (faster)
+    try {
+      execSync(`uv venv "${venvDir}"`, { stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+      execSync(`uv pip install -r "${requirementsPath}" --python "${join(venvDir, "bin", "python3")}"`, {
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 120000,
+      });
+      logErr("Google Workspace MCP: venv created successfully (uv)");
+      return existsSync(gwsMcpPython);
+    } catch {
+      // uv not available, fall back to python3
+    }
+
+    execSync(`python3 -m venv "${venvDir}"`, { stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+    execSync(`"${join(venvDir, "bin", "pip")}" install -r "${requirementsPath}"`, {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120000,
+    });
+    logErr("Google Workspace MCP: venv created successfully (pip)");
+    return existsSync(gwsMcpPython);
+  } catch (err) {
+    logErr(`Google Workspace MCP: venv creation failed: ${err}`);
+    return false;
+  }
+}
+
 // Hindsight Memory MCP — Python HTTP server, venv downloaded on first launch
 // Dev builds: venv in Contents/Resources/hindsight/ (built by run.sh/build.sh)
 // Release builds: venv downloaded from GCS to ~/Library/Application Support/Fazm/hindsight/
@@ -1836,6 +1875,13 @@ async function main(): Promise<void> {
     logErr(`Hindsight: ${ready ? "ready" : "not available"}`);
   }).catch((err) => {
     logErr(`Hindsight: startup failed: ${err}`);
+  });
+
+  // Ensure Google Workspace MCP venv exists (first launch installs from requirements.txt)
+  ensureGwsVenv().then((ready) => {
+    logErr(`Google Workspace MCP: ${ready ? "ready" : "not available"}`);
+  }).catch((err) => {
+    logErr(`Google Workspace MCP: venv setup failed: ${err}`);
   });
 
   // Log browser diagnostics for debugging Playwright connection issues
