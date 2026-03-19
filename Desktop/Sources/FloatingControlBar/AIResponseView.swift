@@ -153,10 +153,7 @@ struct AIResponseView: View {
                     }
                 }
                 .onAppear {
-                    // Scroll to bottom on initial appearance so chat history starts at the latest messages
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .onChange(of: isVoiceFollowUp) {
                     if isVoiceFollowUp {
