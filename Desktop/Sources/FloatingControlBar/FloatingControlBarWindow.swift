@@ -521,28 +521,31 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func showAIConversation() {
-        // Resize window BEFORE changing state so SwiftUI content doesn't render
-        // in the old 28x28 frame (which causes a visible jump).
-
-        // Anchor from bottom so the control bar stays visually in place, chat grows upward.
-        // 146 = default text editor(40) + overhead(106) — matches the inputViewHeight formula.
-        let savedWidth = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
-            .map(NSSizeFromString)?.width ?? 0
-        let inputWidth = max(FloatingControlBarWindow.expandedWidth, savedWidth)
-        let inputSize = NSSize(width: inputWidth, height: 146)
-        resizeAnchored(to: inputSize, makeResizable: false, animated: true)
-
-        // Restore any draft input that was preserved from a previous dismiss
-        let restoredDraft = state.draftInputText
-        state.draftInputText = ""
-
         // Check if we have existing conversation to restore — if so, skip the input-only
         // view and go straight to the response/chat view with history visible.
         let hasLastConversation = state.lastConversation != nil
         let hasHistory = !state.chatHistory.isEmpty
         let shouldShowResponse = hasLastConversation || hasHistory
 
-        // If restoring a conversation, resize to response height instead of input height.
+        // Resize window BEFORE changing state so SwiftUI content doesn't render
+        // in the old 28x28 frame (which causes a visible jump).
+        if !shouldShowResponse {
+            // No history — resize to the small input-only height.
+            // 146 = default text editor(40) + overhead(106) — matches the inputViewHeight formula.
+            let savedWidth = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
+                .map(NSSizeFromString)?.width ?? 0
+            let inputWidth = max(FloatingControlBarWindow.expandedWidth, savedWidth)
+            let inputSize = NSSize(width: inputWidth, height: 146)
+            resizeAnchored(to: inputSize, makeResizable: false, animated: true)
+        }
+        // When shouldShowResponse is true, we skip the small resize and go straight
+        // to response height (done below after restoring state).
+
+        // Restore any draft input that was preserved from a previous dismiss
+        let restoredDraft = state.draftInputText
+        state.draftInputText = ""
+
+        // If restoring a conversation, prepare the state.
         if shouldShowResponse {
             if let last = state.lastConversation {
                 state.chatHistory = last.history
@@ -553,6 +556,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 state.displayedQuery = ""
                 state.currentAIMessage = nil
             }
+        }
+
+        // When restoring a conversation, resize to response height immediately so the
+        // window is already the right size before SwiftUI content renders.
+        if shouldShowResponse {
+            resizeToResponseHeight(animated: true)
         }
 
         // Delay the SwiftUI state change slightly so the window has started expanding
@@ -570,9 +579,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 }
                 // Match the explicit resize height so the observer doesn't immediately override it
                 self.state.inputViewHeight = 146
-            }
-            if shouldShowResponse {
-                self.resizeToResponseHeight(animated: true)
             }
         }
         setupInputHeightObserver()
