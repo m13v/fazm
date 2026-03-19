@@ -536,6 +536,25 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let restoredDraft = state.draftInputText
         state.draftInputText = ""
 
+        // Check if we have existing conversation to restore — if so, skip the input-only
+        // view and go straight to the response/chat view with history visible.
+        let hasLastConversation = state.lastConversation != nil
+        let hasHistory = !state.chatHistory.isEmpty
+        let shouldShowResponse = hasLastConversation || hasHistory
+
+        // If restoring a conversation, resize to response height instead of input height.
+        if shouldShowResponse {
+            if let last = state.lastConversation {
+                state.chatHistory = last.history
+                state.displayedQuery = last.lastQuestion
+                state.currentAIMessage = last.lastMessage
+                state.clearLastConversation()
+            } else {
+                state.displayedQuery = ""
+                state.currentAIMessage = nil
+            }
+        }
+
         // Delay the SwiftUI state change slightly so the window has started expanding
         // before content appears. This prevents the input view from rendering in
         // the still-tiny pill frame and creates a smooth reveal effect.
@@ -543,12 +562,17 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             guard let self = self else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 self.state.showingAIConversation = true
-                self.state.showingAIResponse = false
+                self.state.showingAIResponse = shouldShowResponse
                 self.state.isAILoading = false
                 self.state.aiInputText = restoredDraft
-                self.state.currentAIMessage = nil
+                if !shouldShowResponse {
+                    self.state.currentAIMessage = nil
+                }
                 // Match the explicit resize height so the observer doesn't immediately override it
                 self.state.inputViewHeight = 146
+            }
+            if shouldShowResponse {
+                self.resizeToResponseHeight(animated: true)
             }
         }
         setupInputHeightObserver()
@@ -565,25 +589,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // if the window isn't yet key at that moment.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             self?.focusInputField()
-        }
-
-        // Auto-resume the last conversation if one was saved (click-away preserves chat)
-        if let last = state.lastConversation {
-            state.chatHistory = last.history
-            state.displayedQuery = last.lastQuestion
-            state.currentAIMessage = last.lastMessage
-            state.isAILoading = false
-            state.showingAIResponse = true
-            state.clearLastConversation()
-            resizeToResponseHeight(animated: true)
-        } else if !state.chatHistory.isEmpty {
-            // History was pre-loaded from ChatProvider (fresh app launch) — show response view
-            // with conversation history and follow-up input
-            state.displayedQuery = ""
-            state.currentAIMessage = nil
-            state.isAILoading = false
-            state.showingAIResponse = true
-            resizeToResponseHeight(animated: true)
         }
     }
 
