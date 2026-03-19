@@ -5,7 +5,7 @@ import SwiftUI
 struct FloatingChatExchange: Identifiable {
     let id = UUID()
     let question: String
-    let aiMessage: ChatMessage
+    var aiMessage: ChatMessage
 }
 
 /// A message waiting in the queue to be sent after the current query finishes.
