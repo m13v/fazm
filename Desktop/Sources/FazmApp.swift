@@ -875,6 +875,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Stop ACP bridge and all child processes (MCP servers) to prevent orphans
+        FloatingControlBarManager.shared.chatProvider?.stopBridge()
+
         // Stop session recording
         SessionRecordingManager.shared.shutdown()
 
