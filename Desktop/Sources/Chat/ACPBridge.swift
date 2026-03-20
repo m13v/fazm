@@ -317,15 +317,15 @@ actor ACPBridge {
       """)
     try? stdinPipe?.fileHandleForWriting.close()
 
-    // Kill the entire process group to prevent orphaned child processes.
-    // The bridge spawns ACP which spawns MCP servers (fazm-tools, playwright, macos-use);
-    // terminate() only signals the top process, leaving grandchildren alive.
+    // Kill all descendant processes recursively. The bridge spawns ACP which spawns
+    // MCP servers (playwright, google-workspace, macos-use, whatsapp, hindsight).
+    // The ACP subprocess creates its own process group, so kill(-pid) only reaches
+    // direct children — grandchildren (MCP servers) survive and become orphans.
+    // We must walk the full process tree and kill every descendant.
     if let proc = process, proc.isRunning {
       let pid = proc.processIdentifier
-      log("ACPBridge: killing process group (pid=\(pid))")
-      // Kill the process group (negative PID sends signal to all processes in the group)
-      kill(-pid, SIGTERM)
-      // Also terminate the main process in case it's not in its own group
+      log("ACPBridge: killing process tree (pid=\(pid))")
+      Self.killProcessTree(pid)
       proc.terminate()
     }
     process = nil
