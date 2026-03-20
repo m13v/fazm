@@ -9,7 +9,7 @@
 
 import { createInterface } from "readline";
 import { createConnection } from "net";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -183,6 +183,8 @@ const OBSERVER_TOOL_NAMES = new Set([
   "execute_sql",
   "capture_screenshot",
   "load_skill",
+  "list_skills",
+  "update_skill",
 ]);
 
 const ALL_TOOLS = [
@@ -212,6 +214,32 @@ Use for: app usage stats, time queries, task management, aggregations, anything 
         },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "list_skills",
+    description: `List all available skills with their names and descriptions. Returns skills from bundled (app), user (~/.claude/skills/), and workspace (.claude/skills/) locations.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "update_skill",
+    description: `Update an existing skill's SKILL.md content. Writes to ~/.claude/skills/{name}/SKILL.md. If the skill only exists as a bundled skill, it will be copied to user skills first.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: {
+          type: "string" as const,
+          description: "Skill name",
+        },
+        content: {
+          type: "string" as const,
+          description: "New SKILL.md content",
+        },
+      },
+      required: ["name", "content"],
     },
   },
   {
@@ -602,6 +630,84 @@ async function handleJsonRpc(
               }],
             },
           });
+        }
+      } else if (toolName === "list_skills") {
+        const workspace = process.env.FAZM_WORKSPACE || process.env.OMI_WORKSPACE || "";
+        const bundledSkillsDir = join(__dirname, "..", "..", "Fazm_Fazm.bundle", "BundledSkills");
+        const userSkillsDir = join(homedir(), ".claude", "skills");
+        const workspaceSkillsDir = workspace ? join(workspace, ".claude", "skills") : "";
+
+        const skills: Array<{ name: string; source: string }> = [];
+        const seen = new Set<string>();
+
+        // Workspace skills (highest priority)
+        if (workspaceSkillsDir) {
+          try {
+            for (const entry of readdirSync(workspaceSkillsDir, { withFileTypes: true })) {
+              if (entry.isDirectory() && existsSync(join(workspaceSkillsDir, entry.name, "SKILL.md"))) {
+                skills.push({ name: entry.name, source: "workspace" });
+                seen.add(entry.name);
+              }
+            }
+          } catch { /* dir doesn't exist */ }
+        }
+
+        // User skills
+        try {
+          for (const entry of readdirSync(userSkillsDir, { withFileTypes: true })) {
+            if (entry.isDirectory() && !seen.has(entry.name) && existsSync(join(userSkillsDir, entry.name, "SKILL.md"))) {
+              skills.push({ name: entry.name, source: "user" });
+              seen.add(entry.name);
+            }
+          }
+        } catch { /* dir doesn't exist */ }
+
+        // Bundled skills
+        try {
+          for (const entry of readdirSync(bundledSkillsDir)) {
+            if (entry.endsWith(".skill.md")) {
+              const name = entry.replace(".skill.md", "");
+              if (!seen.has(name)) {
+                skills.push({ name, source: "bundled" });
+                seen.add(name);
+              }
+            }
+          }
+        } catch { /* dir doesn't exist */ }
+
+        const listing = skills.map(s => `${s.name} (${s.source})`).join("\n");
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: listing || "No skills found." }] },
+          });
+        }
+      } else if (toolName === "update_skill") {
+        const name = (args.name as string || "").trim();
+        const newContent = args.content as string || "";
+        if (!name || !newContent) {
+          sendErrorResponse(id, -32602, "Both name and content are required");
+        } else {
+          const userSkillDir = join(homedir(), ".claude", "skills", name);
+          const skillPath = join(userSkillDir, "SKILL.md");
+          try {
+            if (!existsSync(userSkillDir)) {
+              mkdirSync(userSkillDir, { recursive: true });
+            }
+            writeFileSync(skillPath, newContent, "utf8");
+            logErr(`update_skill: wrote ${newContent.length} bytes to ${skillPath}`);
+            if (!isNotification) {
+              send({
+                jsonrpc: "2.0",
+                id,
+                result: { content: [{ type: "text", text: `OK: skill '${name}' updated (${newContent.length} bytes)` }] },
+              });
+            }
+          } catch (err) {
+            logErr(`update_skill: failed to write ${skillPath}: ${err}`);
+            sendErrorResponse(id, -32603, `Failed to write skill: ${err}`);
+          }
         }
       } else if (
         toolName === "check_permission_status" ||
