@@ -1709,7 +1709,6 @@ class ChatProvider: ObservableObject {
     func stopAgent() {
         guard isSending else { return }
         isStopping = true
-        pendingMessages.removeAll()
         Task {
             await acpBridge.interrupt()
         }
@@ -2397,12 +2396,14 @@ class ChatProvider: ObservableObject {
             }
         }
 
+        let wasStopped = isStopping
         isSending = false
         isStopping = false
         await applyPendingBridgeModeSwitch()
 
-        // If messages are queued, chain the next one as a follow-up query
-        if !pendingMessages.isEmpty {
+        // If messages are queued, chain the next one as a follow-up query.
+        // Skip chaining if the user explicitly stopped — queue stays visible for manual use.
+        if !wasStopped, !pendingMessages.isEmpty {
             let next = pendingMessages.removeFirst()
             log("ChatProvider: chaining queued message (\(pendingMessages.count) remaining)")
             // Notify UI to dequeue (posted on main actor)
