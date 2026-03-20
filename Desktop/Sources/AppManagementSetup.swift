@@ -118,7 +118,7 @@ struct AppManagementSetupView: View {
                 if permissionGranted {
                     Button(action: {
                         log("AppManagementSetup: User clicked Install Update")
-                        AnalyticsManager.shared.trackEvent("app_management_install_clicked", properties: ["version": version])
+                        PostHogManager.shared.track("app_management_install_clicked", properties: ["version": version])
                         onDone()
                     }) {
                         Text("Install Update")
@@ -130,7 +130,7 @@ struct AppManagementSetupView: View {
                 } else {
                     Button(action: {
                         log("AppManagementSetup: User clicked Open System Settings")
-                        AnalyticsManager.shared.trackEvent("app_management_open_settings_clicked", properties: ["version": version])
+                        PostHogManager.shared.track("app_management_open_settings_clicked", properties: ["version": version])
                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AppManagement") {
                             NSWorkspace.shared.open(url)
                         }
@@ -148,7 +148,7 @@ struct AppManagementSetupView: View {
 
                     Button(action: {
                         log("AppManagementSetup: User clicked Not Now")
-                        AnalyticsManager.shared.trackEvent("app_management_dismissed", properties: ["version": version, "settings_opened": settingsOpened])
+                        PostHogManager.shared.track("app_management_dismissed", properties: ["version": version, "settings_opened": settingsOpened])
                         onDismiss()
                     }) {
                         Text("Not Now")
@@ -175,10 +175,10 @@ struct AppManagementSetupView: View {
             if startGranted {
                 permissionGranted = true
                 log("AppManagementSetup: Opened in done state (permission already granted)")
-                AnalyticsManager.shared.trackEvent("app_management_guide_shown", properties: ["version": version, "state": "done"])
+                PostHogManager.shared.track("app_management_guide_shown", properties: ["version": version, "state": "done"])
             } else {
                 log("AppManagementSetup: Opened in steps state (permission needed)")
-                AnalyticsManager.shared.trackEvent("app_management_guide_shown", properties: ["version": version, "state": "steps"])
+                PostHogManager.shared.track("app_management_guide_shown", properties: ["version": version, "state": "steps"])
             }
         }
         .onDisappear {
@@ -300,7 +300,7 @@ struct AppManagementSetupView: View {
         if canWrite {
             try? fm.removeItem(atPath: testPath)
             log("AppManagementSetup: Permission probe succeeded — permission granted")
-            AnalyticsManager.shared.trackEvent("app_management_permission_granted", properties: ["version": version])
+            PostHogManager.shared.track("app_management_permission_granted", properties: ["version": version])
             withAnimation(.easeInOut(duration: 0.3)) {
                 permissionGranted = true
             }
