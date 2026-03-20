@@ -112,25 +112,38 @@ async function ensureGwsVenv(): Promise<boolean> {
   logErr("Google Workspace MCP: creating venv from requirements.txt (first launch)...");
   mkdirSync(gwsMcpAppSupportDir, { recursive: true });
   const venvDir = join(gwsMcpAppSupportDir, ".venv");
+  // App bundles launched via LaunchServices have a minimal PATH; add Homebrew dirs
+  const envWithPath = {
+    ...process.env,
+    PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}`,
+  };
 
   try {
-    // Try uv first (faster)
+    // Try uv first (faster, handles dependency resolution better)
     try {
-      execSync(`uv venv "${venvDir}"`, { stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+      execSync(`uv venv "${venvDir}"`, { stdio: ["ignore", "pipe", "pipe"], timeout: 30000, env: envWithPath });
       execSync(`uv pip install -r "${requirementsPath}" --python "${join(venvDir, "bin", "python3")}"`, {
         stdio: ["ignore", "pipe", "pipe"],
         timeout: 120000,
+        env: envWithPath,
       });
       logErr("Google Workspace MCP: venv created successfully (uv)");
       return existsSync(gwsMcpPython);
-    } catch {
-      // uv not available, fall back to python3
+    } catch (uvErr) {
+      logErr(`Google Workspace MCP: uv failed (${uvErr}), trying pip fallback...`);
     }
 
-    execSync(`python3 -m venv "${venvDir}"`, { stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+    execSync(`python3 -m venv "${venvDir}"`, { stdio: ["ignore", "pipe", "pipe"], timeout: 30000, env: envWithPath });
+    // Upgrade pip first — system python may bundle an ancient version that can't resolve modern packages
+    execSync(`"${join(venvDir, "bin", "pip")}" install --upgrade pip`, {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 60000,
+      env: envWithPath,
+    });
     execSync(`"${join(venvDir, "bin", "pip")}" install -r "${requirementsPath}"`, {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 120000,
+      env: envWithPath,
     });
     logErr("Google Workspace MCP: venv created successfully (pip)");
     return existsSync(gwsMcpPython);
