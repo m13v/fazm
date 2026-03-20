@@ -392,6 +392,17 @@ workflows:
               if [ -f "$GWS_MANAGED_DIR/lib/libpython3.12.dylib" ]; then
                 cp "$GWS_MANAGED_DIR/lib/libpython3.12.dylib" "$WORKSPACE_MCP_BUNDLE/.venv/lib/libpython3.12.dylib"
               fi
+              # Copy stdlib so Python can find encodings, os, etc. on machines without uv
+              if [ -d "$GWS_MANAGED_DIR/lib/python3.12" ]; then
+                rsync -a --ignore-existing "$GWS_MANAGED_DIR/lib/python3.12/" "$WORKSPACE_MCP_BUNDLE/.venv/lib/python3.12/"
+              fi
+              # Rewrite pyvenv.cfg so Python finds stdlib relative to venv, not the managed install
+              cat > "$WORKSPACE_MCP_BUNDLE/.venv/pyvenv.cfg" <<PYVENV
+home = bin
+implementation = CPython
+version_info = 3.12
+include-system-site-packages = false
+PYVENV
             fi
             echo "Google Workspace MCP venv created in app bundle"
           else
@@ -443,6 +454,17 @@ workflows:
             if [ -f "$HINDSIGHT_MANAGED_DIR/lib/libpython3.12.dylib" ]; then
               cp "$HINDSIGHT_MANAGED_DIR/lib/libpython3.12.dylib" "$HINDSIGHT_BUNDLE/.venv/lib/libpython3.12.dylib"
             fi
+            # Copy stdlib so Python can find encodings, os, etc. on machines without uv
+            if [ -d "$HINDSIGHT_MANAGED_DIR/lib/python3.12" ]; then
+              rsync -a --ignore-existing "$HINDSIGHT_MANAGED_DIR/lib/python3.12/" "$HINDSIGHT_BUNDLE/.venv/lib/python3.12/"
+            fi
+            # Rewrite pyvenv.cfg so Python finds stdlib relative to venv, not the managed install
+            cat > "$HINDSIGHT_BUNDLE/.venv/pyvenv.cfg" <<PYVENV
+home = bin
+implementation = CPython
+version_info = 3.12
+include-system-site-packages = false
+PYVENV
           fi
           echo "Bundled Hindsight Memory MCP with venv"
 
