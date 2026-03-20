@@ -116,11 +116,17 @@ async function startHindsight(): Promise<boolean> {
   }
 
   logErr("Hindsight: starting server (gemini, model=gemini-pro-latest)...");
+
+  // Pre-create pg0 data directory to avoid first-launch permission issues
+  const home = process.env.HOME || "";
+  const pg0DataDir = join(home, ".pg0", "instances", "fazm");
+  try { mkdirSync(pg0DataDir, { recursive: true }); } catch {}
+
   // Use a clean environment to avoid conflicting Google auth vars
   // (e.g. CLOUD_ML_REGION, ANTHROPIC_VERTEX_PROJECT_ID) from the parent
   const hindsightEnv: Record<string, string> = {
     PATH: process.env.PATH || "/usr/bin:/bin",
-    HOME: process.env.HOME || "",
+    HOME: home,
     TMPDIR: process.env.TMPDIR || "/tmp",
     LANG: process.env.LANG || "en_US.UTF-8",
     PYTHONHOME: join(hindsightDir, ".venv"),
@@ -145,9 +151,12 @@ async function startHindsight(): Promise<boolean> {
 
   hindsightProcess.unref();
 
-  // Log stderr for diagnostics
+  // Log stderr for diagnostics (also write to file for SSH debugging)
+  const hindsightLogPath = join(process.env.TMPDIR || "/tmp", "hindsight.log");
   hindsightProcess.stderr?.on("data", (data: Buffer) => {
-    logErr(`Hindsight: ${data.toString().trim()}`);
+    const msg = data.toString().trim();
+    logErr(`Hindsight: ${msg}`);
+    try { appendFileSync(hindsightLogPath, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
   });
 
   hindsightProcess.on("exit", (code) => {
