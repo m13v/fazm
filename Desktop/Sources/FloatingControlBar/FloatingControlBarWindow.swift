@@ -1292,6 +1292,20 @@ class FloatingControlBarManager {
                 await self.sendAIQuery(text, barWindow: window, provider: provider)
             }
         }
+
+        // Debug: trigger observer card polling
+        // Trigger: xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testPollObserver"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.fazm.testPollObserver"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let provider = self.chatProvider else { return }
+                log("FloatingControlBarManager: Test poll observer triggered")
+                provider.pollObserverCards()
+            }
+        }
     }
 
     /// Whether the floating bar window is currently visible.
