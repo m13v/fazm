@@ -2670,7 +2670,7 @@ class ChatProvider: ObservableObject {
                     PostHogManager.shared.track("observer_card_shown", properties: [
                         "activity_id": activityId,
                         "card_type": type,
-                        "content_preview": String(displayText.prefix(500)),
+                        "content": displayText,
                     ])
                 }
 
@@ -2724,14 +2724,22 @@ class ChatProvider: ObservableObject {
                 log("ChatProvider: Observer card action — id=\(activityId) action=\(action)\(isRollback ? " (rollback)" : "")")
 
                 // Track the user's response to the observer card
-                let cardType: String? = try await dbQueue.read { db in
-                    try String.fetchOne(db, sql: "SELECT type FROM observer_activity WHERE id = ?", arguments: [activityId])
+                let cardRow: Row? = try await dbQueue.read { db in
+                    try Row.fetchOne(db, sql: "SELECT type, content FROM observer_activity WHERE id = ?", arguments: [activityId])
+                }
+                let cardType: String = cardRow?["type"] ?? "unknown"
+                let cardContent: String = cardRow?["content"] ?? ""
+                var cardDisplayText = cardContent
+                if let jsonData = cardContent.data(using: .utf8),
+                   let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    cardDisplayText = (parsed["body"] as? String) ?? (parsed["message"] as? String) ?? (parsed["summary"] as? String) ?? cardContent
                 }
                 PostHogManager.shared.track("observer_card_action", properties: [
                     "activity_id": activityId,
                     "action": action,
-                    "card_type": cardType ?? "unknown",
+                    "card_type": cardType,
                     "is_rollback": isRollback,
+                    "content": cardDisplayText,
                 ])
 
                 if action == "approve" {
