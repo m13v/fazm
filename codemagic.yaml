@@ -368,49 +368,35 @@ workflows:
             echo "WARNING: Google Workspace MCP not cloned — skipping"
           fi
 
-          # Build Google Workspace MCP venv as tarball (uploaded to GCS, downloaded on first launch)
-          # Not bundled in the app to avoid code signature issues (~38 MB compressed tarball).
-          GWS_MCP_BUILD="/tmp/gws-mcp-build"
-          rm -rf "$GWS_MCP_BUILD"
-          mkdir -p "$GWS_MCP_BUILD"
+          # Build Google Workspace MCP venv directly into app bundle
           if [ -f "$WORKSPACE_MCP_BUNDLE/requirements.txt" ]; then
-            echo "Creating Google Workspace MCP venv for tarball..."
+            echo "Creating Google Workspace MCP venv in app bundle..."
             # Use uv-managed standalone python (python-build-standalone) for full portability.
             # The resulting binary uses @executable_path/../lib/libpython3.12.dylib (relative),
             # so it works on any Mac without needing system Python or Xcode CLT installed.
             uv python install 3.12 2>&1 | tail -1 || true
-            uv venv "$GWS_MCP_BUILD/.venv" --python 3.12 --relocatable --python-preference only-managed --quiet 2>&1
-            uv pip install --python "$GWS_MCP_BUILD/.venv/bin/python3" \
+            uv venv "$WORKSPACE_MCP_BUNDLE/.venv" --python 3.12 --relocatable --python-preference only-managed --quiet 2>&1
+            uv pip install --python "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3" \
               -r "$WORKSPACE_MCP_BUNDLE/requirements.txt" --quiet 2>&1 | tail -3 || true
             # Strip __pycache__ to save space (keep .dist-info — needed by importlib.metadata)
-            find "$GWS_MCP_BUILD/.venv" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+            find "$WORKSPACE_MCP_BUNDLE/.venv" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
             # Replace absolute Python symlink with a copy + bundle libpython for portability
-            GWS_REAL_PYTHON=$(readlink -f "$GWS_MCP_BUILD/.venv/bin/python" 2>/dev/null)
+            GWS_REAL_PYTHON=$(readlink -f "$WORKSPACE_MCP_BUNDLE/.venv/bin/python" 2>/dev/null)
             GWS_MANAGED_DIR=$(dirname "$(dirname "$GWS_REAL_PYTHON")")
             if [ -n "$GWS_REAL_PYTHON" ] && [ -f "$GWS_REAL_PYTHON" ]; then
-              rm -f "$GWS_MCP_BUILD/.venv/bin/python"
-              cp "$GWS_REAL_PYTHON" "$GWS_MCP_BUILD/.venv/bin/python"
-              rm -f "$GWS_MCP_BUILD/.venv/bin/python3" "$GWS_MCP_BUILD/.venv/bin/python3.12"
-              ln -s python "$GWS_MCP_BUILD/.venv/bin/python3"
-              ln -s python "$GWS_MCP_BUILD/.venv/bin/python3.12"
+              rm -f "$WORKSPACE_MCP_BUNDLE/.venv/bin/python"
+              cp "$GWS_REAL_PYTHON" "$WORKSPACE_MCP_BUNDLE/.venv/bin/python"
+              rm -f "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3" "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3.12"
+              ln -s python "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3"
+              ln -s python "$WORKSPACE_MCP_BUNDLE/.venv/bin/python3.12"
               # Copy libpython so @executable_path/../lib/libpython3.12.dylib resolves
               if [ -f "$GWS_MANAGED_DIR/lib/libpython3.12.dylib" ]; then
-                cp "$GWS_MANAGED_DIR/lib/libpython3.12.dylib" "$GWS_MCP_BUILD/.venv/lib/libpython3.12.dylib"
+                cp "$GWS_MANAGED_DIR/lib/libpython3.12.dylib" "$WORKSPACE_MCP_BUNDLE/.venv/lib/libpython3.12.dylib"
               fi
             fi
-            # Sign all Mach-O binaries in the venv before tarballing
-            find "$GWS_MCP_BUILD/.venv" -type f 2>/dev/null | while read bin; do
-              file "$bin" 2>/dev/null | grep -q "Mach-O" && \
-                codesign --force --options runtime --timestamp \
-                  --sign "$SIGN_IDENTITY" "$bin" 2>/dev/null || true
-            done
-            # Create tarball
-            GWS_MCP_TARBALL="/tmp/gws-mcp-venv.tar.gz"
-            tar -czf "$GWS_MCP_TARBALL" -C "$GWS_MCP_BUILD" .venv
-            GWS_MCP_TARBALL_SIZE=$(stat -f%z "$GWS_MCP_TARBALL" 2>/dev/null || stat -c%s "$GWS_MCP_TARBALL")
-            echo "Google Workspace MCP tarball created: $(( GWS_MCP_TARBALL_SIZE / 1024 / 1024 )) MB"
+            echo "Google Workspace MCP venv created in app bundle"
           else
-            echo "WARNING: Google Workspace MCP requirements.txt not found — skipping tarball"
+            echo "WARNING: Google Workspace MCP requirements.txt not found — skipping venv"
           fi
 
           # Bundle Hindsight Memory MCP (Python venv in app bundle)
@@ -953,11 +939,6 @@ workflows:
           gcloud storage cp "$ARCH_X86_64_ZIP" "gs://$BUCKET/$PREFIX/Fazm-x86_64.zip"
 
           # Upload Google Workspace MCP tarball (downloaded by app on first launch)
-          GWS_MCP_TARBALL="/tmp/gws-mcp-venv.tar.gz"
-          if [ -f "$GWS_MCP_TARBALL" ]; then
-            gcloud storage cp "$GWS_MCP_TARBALL" "gs://$BUCKET/google-workspace-mcp/gws-mcp-venv.tar.gz"
-            echo "Uploaded GWS MCP tarball to gs://$BUCKET/google-workspace-mcp/gws-mcp-venv.tar.gz"
-          fi
 
           # Compute SHA256 and sizes
           ARM64_SHA256=$(shasum -a 256 "$ARCH_ARM64_ZIP" | awk '{print $1}')
