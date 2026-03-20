@@ -219,13 +219,15 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "save_knowledge_graph",
 ]);
 
-// Observer session only gets these tools (SQL reads, screenshots, skills)
+// Observer session only gets these tools (SQL reads, screenshots, skills, browser profile, cards)
 const OBSERVER_TOOL_NAMES = new Set([
   "execute_sql",
   "capture_screenshot",
   "load_skill",
   "list_skills",
   "update_skill",
+  "query_browser_profile",
+  "save_observer_card",
 ]);
 
 const ALL_TOOLS = [
@@ -459,6 +461,18 @@ Aim for 15-40 nodes with meaningful edges connecting them.`,
         },
       },
       required: ["nodes", "edges"],
+    },
+  },
+  {
+    name: "save_observer_card",
+    description: `Save an observer card to notify the user about something you observed. The card is saved immediately and the user can dismiss it to undo. Use this instead of writing raw SQL to observer_activity.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        body: { type: "string" as const, description: "The card text to show the user, e.g. 'Saved: user prefers dark mode'" },
+        type: { type: "string" as const, enum: ["insight", "pattern", "skill_created", "kg_update"], description: "Card type (default: insight)" },
+      },
+      required: ["body"],
     },
   },
 ];
