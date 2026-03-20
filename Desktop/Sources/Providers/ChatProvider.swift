@@ -761,7 +761,7 @@ class ChatProvider: ObservableObject {
             }
             // Pre-warm ACP sessions with their respective system prompts.
             // This is the only place the system prompt is built and applied.
-            let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            let mainSystemPrompt = buildSystemPrompt(contextString: "")
             cachedMainSystemPrompt = mainSystemPrompt
             let floatingSystemPrompt = Self.floatingBarSystemPromptPrefixCurrent + "\n\n" + mainSystemPrompt
             let savedFloatingSessionId = UserDefaults.standard.string(forKey: floatingSessionIdKey)
@@ -1165,10 +1165,6 @@ class ChatProvider: ObservableObject {
         // Get user name from AuthService
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
 
-        // Use the context string from backend (includes memories + conversations)
-        // Fall back to just memories if context is empty
-        let contextSection = contextString.isEmpty ? formatMemoriesSection() : contextString
-
         // Build individual sections
         let goalSection = formatGoalSection()
         let tasksSection = formatTasksSection()
@@ -1177,7 +1173,6 @@ class ChatProvider: ObservableObject {
         // Build base prompt with goals, AI profile, and dynamic schema
         var prompt = ChatPromptBuilder.buildDesktopChat(
             userName: userName,
-            memoriesSection: contextSection,
             goalSection: goalSection,
             tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
