@@ -603,47 +603,6 @@ async function handleJsonRpc(
             },
           });
         }
-      } else if (isObserver && toolName === "save_knowledge_graph") {
-        // Observer mode: KG writes require user approval
-        // Use the observer's description if provided, fall back to programmatic summary
-        const observerDescription = args.description as string | undefined;
-        const nodes = (args.nodes as Array<Record<string, unknown>>) || [];
-        const edges = (args.edges as Array<Record<string, unknown>>) || [];
-        let body: string;
-        if (observerDescription) {
-          body = observerDescription;
-        } else {
-          const nodesSummary = nodes.map((n: Record<string, unknown>) => `${n.name || n.label || n.id} (${n.type || n.node_type || "entity"})`).join(", ");
-          const edgesSummary = edges.map((e: Record<string, unknown>) => `${e.source || e.source_id} → ${e.target || e.target_id} (${e.relation || e.label})`).join(", ");
-          body = `Save to knowledge graph:\n• Nodes: ${nodesSummary || "none"}\n• Edges: ${edgesSummary || "none"}`;
-        }
-        // Strip description from args before storing in pending_operations (avoid duplication)
-        const { description: _desc, ...argsWithoutDescription } = args as Record<string, unknown>;
-        const insertCard = buildObserverInsert("approval_request", {
-          title: "Update knowledge graph",
-          body,
-          pending_operations: [{ tool: "save_knowledge_graph", args: argsWithoutDescription }],
-          buttons: [
-            { label: "Approve", action: "approve" },
-            { label: "Dismiss", action: "dismiss" },
-          ],
-        });
-        await requestSwiftTool("execute_sql", { query: insertCard });
-        notifyObserverCardReady();
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: {
-              content: [
-                {
-                  type: "text",
-                  text: "Knowledge graph update queued for user approval. A card has been shown to the user. Continue with other tasks — do NOT retry this write.",
-                },
-              ],
-            },
-          });
-        }
       } else if (
         toolName === "check_permission_status" ||
         toolName === "request_permission" ||
