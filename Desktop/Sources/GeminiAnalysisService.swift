@@ -398,19 +398,16 @@ actor GeminiAnalysisService {
 
         var verdict = "NO_TASK"
         var task: String?
-        var confidence: String?
 
         for line in lines {
             if line.hasPrefix("VERDICT:") {
                 verdict = line.replacingOccurrences(of: "VERDICT:", with: "").trimmingCharacters(in: .whitespaces)
             } else if line.hasPrefix("TASK:") {
                 task = line.replacingOccurrences(of: "TASK:", with: "").trimmingCharacters(in: .whitespaces)
-            } else if line.hasPrefix("CONFIDENCE:") {
-                confidence = line.replacingOccurrences(of: "CONFIDENCE:", with: "").trimmingCharacters(in: .whitespaces)
             }
         }
 
-        return AnalysisResult(verdict: verdict, task: task, confidence: confidence, raw: raw, chunksAnalyzed: chunksAnalyzed)
+        return AnalysisResult(verdict: verdict, task: task, raw: raw, chunksAnalyzed: chunksAnalyzed)
     }
 
     private func cleanupChunkFiles(chunks: [ChunkEntry]) {
