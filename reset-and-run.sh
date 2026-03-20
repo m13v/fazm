@@ -94,6 +94,11 @@ set -e
 #
 ###############################################################################
 
+# Acquire exclusive lock — prevents concurrent builds/tests by parallel agents
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/scripts/fazm-lock.sh"
+fazm_acquire_lock 300
+
 # Clear system OPENAI_API_KEY so .env takes precedence
 unset OPENAI_API_KEY
 
