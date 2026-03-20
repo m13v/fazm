@@ -178,10 +178,9 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "save_knowledge_graph",
 ]);
 
-// Observer session only gets these tools (KG, SQL, screenshots, skills)
+// Observer session only gets these tools (SQL reads, screenshots, skills)
 const OBSERVER_TOOL_NAMES = new Set([
   "execute_sql",
-  "save_knowledge_graph",
   "capture_screenshot",
   "load_skill",
 ]);
@@ -199,36 +198,6 @@ Use for: app usage stats, time queries, task management, aggregations, anything 
         query: { type: "string" as const, description: "SQL query to execute" },
       },
       required: ["query"],
-    },
-  },
-  {
-    name: "complete_task",
-    description: `Toggle a task's completion status. Syncs to backend (Firestore).
-Pass the task's backendId.`,
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        task_id: {
-          type: "string" as const,
-          description: "The task's backendId",
-        },
-      },
-      required: ["task_id"],
-    },
-  },
-  {
-    name: "delete_task",
-    description: `Delete a task permanently. Syncs to backend (Firestore).
-Pass the task's backendId.`,
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        task_id: {
-          type: "string" as const,
-          description: "The task's backendId",
-        },
-      },
-      required: ["task_id"],
     },
   },
   {
@@ -556,26 +525,6 @@ async function handleJsonRpc(
         }
 
         const result = await requestSwiftTool("execute_sql", { query });
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "complete_task") {
-        const taskId = args.task_id as string;
-        const result = await requestSwiftTool("complete_task", { task_id: taskId });
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "delete_task") {
-        const taskId = args.task_id as string;
-        const result = await requestSwiftTool("delete_task", { task_id: taskId });
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
