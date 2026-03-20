@@ -37,6 +37,9 @@ actor GeminiAnalysisService {
     /// Buffer of chunk entries waiting for analysis (persisted to disk as JSON).
     private var chunkBuffer: [ChunkEntry] = []
     private var isAnalyzing = false
+    /// Cooldown after failed analysis to avoid spamming the API.
+    private var lastFailedAnalysis: Date?
+    private let retryCooldown: TimeInterval = 300 // 5 minutes
 
     /// Stable directory for chunk video files (inside Application Support, survives restarts).
     private let chunksDir: URL
@@ -123,9 +126,13 @@ actor GeminiAnalysisService {
 
         log("GeminiAnalysis: buffered chunk \(info.chunkIndex) (\(chunkBuffer.count)/\(maxChunks))")
 
-        // Trigger analysis when we have enough chunks
+        // Trigger analysis when we have enough chunks (with cooldown after failures)
         if chunkBuffer.count >= maxChunks && !isAnalyzing {
-            Task { await triggerAnalysis() }
+            if let lastFail = lastFailedAnalysis, Date().timeIntervalSince(lastFail) < retryCooldown {
+                // Still in cooldown — skip retry
+            } else {
+                Task { await triggerAnalysis() }
+            }
         }
     }
 
@@ -148,8 +155,9 @@ actor GeminiAnalysisService {
             cleanupChunkFiles(chunks: chunks)
             log("GeminiAnalysis: cleared \(analyzedCount) chunks after successful analysis, \(chunkBuffer.count) new chunks kept")
         } else {
-            // Failed — keep buffer intact so we retry next time
-            log("GeminiAnalysis: analysis failed, keeping \(chunks.count) chunks for retry")
+            // Failed — keep buffer intact, set cooldown before retry
+            lastFailedAnalysis = Date()
+            log("GeminiAnalysis: analysis failed, keeping \(chunks.count) chunks for retry (cooldown \(Int(retryCooldown))s)")
         }
         return result
     }
@@ -265,10 +273,18 @@ actor GeminiAnalysisService {
         let metadata = ["file": ["display_name": name]]
         startReq.httpBody = try? JSONSerialization.data(withJSONObject: metadata)
 
-        guard let (_, startResp) = try? await URLSession.shared.data(for: startReq),
-              let httpResp = startResp as? HTTPURLResponse,
+        let startResult: (Data, URLResponse)
+        do {
+            startResult = try await URLSession.shared.data(for: startReq)
+        } catch {
+            log("GeminiAnalysis: File API start failed for \(name) (network: \(error.localizedDescription))")
+            return nil
+        }
+        guard let httpResp = startResult.1 as? HTTPURLResponse,
               let uploadURL = httpResp.value(forHTTPHeaderField: "X-Goog-Upload-URL") else {
-            log("GeminiAnalysis: File API start failed for \(name)")
+            let body = String(data: startResult.0, encoding: .utf8) ?? ""
+            let status = (startResult.1 as? HTTPURLResponse)?.statusCode ?? -1
+            log("GeminiAnalysis: File API start failed for \(name) (status=\(status)): \(body.prefix(300))")
             return nil
         }
 
