@@ -123,6 +123,7 @@ async function startHindsight(): Promise<boolean> {
     HOME: process.env.HOME || "",
     TMPDIR: process.env.TMPDIR || "/tmp",
     LANG: process.env.LANG || "en_US.UTF-8",
+    PYTHONHOME: join(hindsightDir, ".venv"),
     HINDSIGHT_API_LLM_PROVIDER: "gemini",
     HINDSIGHT_API_LLM_MODEL: "gemini-pro-latest",
     HINDSIGHT_API_LLM_API_KEY: geminiApiKey,
@@ -873,7 +874,7 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
       name: "google-workspace",
       command: gwsMcpPython,
       args: [gwsMcpMain, "--transport", "stdio"],
-      env: [],
+      env: [{ name: "PYTHONHOME", value: join(gwsMcpDir, ".venv") }],
     });
   }
 
