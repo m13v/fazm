@@ -938,8 +938,6 @@ workflows:
           gcloud storage cp "$ARCH_ARM64_ZIP"  "gs://$BUCKET/$PREFIX/Fazm-arm64.zip"
           gcloud storage cp "$ARCH_X86_64_ZIP" "gs://$BUCKET/$PREFIX/Fazm-x86_64.zip"
 
-          # Upload Google Workspace MCP tarball (downloaded by app on first launch)
-
           # Compute SHA256 and sizes
           ARM64_SHA256=$(shasum -a 256 "$ARCH_ARM64_ZIP" | awk '{print $1}')
           X86_64_SHA256=$(shasum -a 256 "$ARCH_X86_64_ZIP" | awk '{print $1}')
