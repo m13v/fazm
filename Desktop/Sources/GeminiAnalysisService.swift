@@ -26,7 +26,6 @@ actor GeminiAnalysisService {
 
         VERDICT: NO_TASK or TASK_FOUND
         TASK: (only if TASK_FOUND) One sentence: what the user is trying to accomplish overall, and one concrete action the agent would take to help.
-        CONFIDENCE: (only if TASK_FOUND) How confident this saves 5x time (low/medium/high)
         """
 
     private let model = "gemini-pro-latest"
@@ -56,7 +55,6 @@ actor GeminiAnalysisService {
     struct AnalysisResult: Sendable {
         let verdict: String  // "NO_TASK" or "TASK_FOUND"
         let task: String?
-        let confidence: String?
         let raw: String
         let chunksAnalyzed: Int
     }
@@ -241,7 +239,7 @@ actor GeminiAnalysisService {
         let parsed = parseResult(raw, chunksAnalyzed: chunks.count)
         log("GeminiAnalysis: \(parsed.verdict) (\(chunks.count) chunks)")
         if let task = parsed.task {
-            log("GeminiAnalysis: task=\(task) confidence=\(parsed.confidence ?? "?")")
+            log("GeminiAnalysis: task=\(task)")
         }
         return parsed
     }
