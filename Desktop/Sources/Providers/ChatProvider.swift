@@ -1709,6 +1709,7 @@ class ChatProvider: ObservableObject {
     func stopAgent() {
         guard isSending else { return }
         isStopping = true
+        pendingMessages.removeAll()
         Task {
             await acpBridge.interrupt()
         }
