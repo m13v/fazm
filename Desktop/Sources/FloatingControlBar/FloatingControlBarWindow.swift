@@ -150,6 +150,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self?.handleSmartTVToggle(enabled)
             }
 
+        // Resize window when SmartTV visibility changes (e.g. user hides TV via X button)
+        state.$smartTVVisible
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] visible in
+                guard let self, self.state.showingAIConversation, !self.state.isCollapsed else { return }
+                // Adjust window height: add or remove the SmartTV height
+                let delta: CGFloat = visible ? Self.smartTVHeight : -Self.smartTVHeight
+                let newHeight = max(self.frame.height + delta, Self.minResponseHeight)
+                self.resizeAnchored(to: NSSize(width: self.frame.width, height: newHeight), makeResizable: true, animated: true)
+            }
+            .store(in: &smartTVPauseCancellables)
+
         // Pause Smart TV video when PTT starts
         state.$isVoiceListening
             .removeDuplicates()
