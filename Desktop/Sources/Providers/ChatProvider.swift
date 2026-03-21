@@ -291,6 +291,7 @@ class ChatProvider: ObservableObject {
     @Published var showCreditExhaustedAlert = false
     /// True while the agent is compacting conversation context
     @Published var isCompacting = false
+    @Published var isObserverRunning = false
 
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
