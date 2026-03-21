@@ -31,7 +31,7 @@ struct FloatingControlBarView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Smart TV: YouTube Shorts above the chat (only when dialog is open)
-            if smartTVSettings.smartTVEnabled && state.showingAIConversation {
+            if smartTVSettings.smartTVEnabled && state.showingAIConversation && !state.isCollapsed {
                 SmartTVView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
