@@ -343,6 +343,11 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTStarted(mode: "hold")
     updateBarState()
 
+    // Show inline voice indicator when PTT starts in an already-open conversation
+    if chatWasOpenBeforePTT && barState?.showingAIResponse == true {
+      barState?.isVoiceFollowUp = true
+      barState?.voiceFollowUpTranscript = ""
+    }
 
     startAudioTranscription()
     startMaxDurationTimer()
@@ -379,6 +384,12 @@ class PushToTalkManager: ObservableObject {
 
     AnalyticsManager.shared.floatingBarPTTStarted(mode: "locked")
 
+    // Show inline voice indicator when PTT starts in an already-open conversation
+    if chatWasOpenBeforePTT && barState?.showingAIResponse == true {
+      barState?.isVoiceFollowUp = true
+      barState?.voiceFollowUpTranscript = ""
+    }
+
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
     if transcriptionService == nil {
@@ -406,6 +417,8 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     lastInterimText = ""
     pttOpenedChat = false
+    barState?.isVoiceFollowUp = false
+    barState?.voiceFollowUpTranscript = ""
     batchAudioLock.lock()
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
@@ -540,6 +553,8 @@ class PushToTalkManager: ObservableObject {
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
+    barState?.isVoiceFollowUp = false
+    barState?.voiceFollowUpTranscript = ""
     updateBarState(skipResize: hasQuery || wasPttOpenedChat)
 
     guard hasQuery else {
