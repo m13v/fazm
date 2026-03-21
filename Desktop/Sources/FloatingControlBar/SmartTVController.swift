@@ -6,20 +6,37 @@ class SmartTVController {
     static let shared = SmartTVController()
     weak var webView: WKWebView?
 
+    /// True while a search navigation is in progress — suppresses play/pause
+    /// from Combine observers to avoid fighting with page load.
+    var isNavigating = false
+
     /// Navigate to YouTube Shorts search results for the given query.
     func searchAndPlay(query: String) {
         guard let webView,
               let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://m.youtube.com/results?search_query=\(encoded)&sp=EgIYAQ%3D%3D")
         else { return }
+        isNavigating = true
+        log("SmartTV: searchAndPlay — navigating to: \(query)")
         webView.load(URLRequest(url: url))
     }
 
-    func pauseVideo() {
+    func pauseVideo(source: String = "") {
+        guard !isNavigating else {
+            log("SmartTV: pauseVideo SKIPPED (navigating) source=\(source)")
+            return
+        }
+        log("SmartTV: pauseVideo source=\(source)")
         webView?.evaluateJavaScript("document.querySelectorAll('video').forEach(v => v.pause())")
     }
 
-    func playVideo() {
+    func playVideo(source: String = "") {
+        log("SmartTV: playVideo source=\(source)")
         webView?.evaluateJavaScript("document.querySelectorAll('video').forEach(v => v.play())")
+    }
+
+    /// Called when navigation completes and the Shorts player is ready.
+    func navigationFinished() {
+        isNavigating = false
     }
 }
