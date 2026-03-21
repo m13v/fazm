@@ -649,6 +649,10 @@ actor ACPBridge {
       case .observerPoll:
         // Handled immediately in deliverMessage(); should never reach here
         break
+
+      case .observerStatus(_):
+        // Handled immediately in deliverMessage(); should never reach here
+        break
       }
     }
   }
