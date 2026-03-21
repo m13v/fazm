@@ -45,6 +45,30 @@ struct AudioLevelBarsView: View {
     }
 }
 
+/// Wrapper that observes AudioLevelState directly, so only this view
+/// re-renders on audio level changes — not the entire conversation tree.
+struct ObservedAudioLevelBarsView: View {
+    @ObservedObject var audioLevel: AudioLevelState
+    var barCount: Int = 5
+    var barWidth: CGFloat = 3
+    var spacing: CGFloat = 2
+    var maxHeight: CGFloat = 20
+    var minHeight: CGFloat = 3
+    var color: Color = .white
+
+    var body: some View {
+        AudioLevelBarsView(
+            level: audioLevel.level,
+            barCount: barCount,
+            barWidth: barWidth,
+            spacing: spacing,
+            maxHeight: maxHeight,
+            minHeight: minHeight,
+            color: color
+        )
+    }
+}
+
 /// Larger version for Settings with green/yellow/red gradient bars.
 struct AudioLevelBarsSettingsView: View {
     let level: Float
