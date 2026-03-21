@@ -1957,8 +1957,14 @@ async function main(): Promise<void> {
           // Immediately pre-warm a new session so the first query doesn't wait
           const savedCfg = lastWarmupConfig?.sessions?.find((s) => s.key === key);
           if (savedCfg) {
-            // Strip resume — we want a fresh session, not the old one
-            const freshCfg = { ...savedCfg, resume: undefined };
+            // Strip resume — we want a fresh session, not the old one.
+            // Also strip <conversation_history> from the system prompt so the
+            // new chat starts without context from the previous conversation.
+            let freshPrompt = savedCfg.systemPrompt;
+            if (freshPrompt) {
+              freshPrompt = freshPrompt.replace(/\n\n<conversation_history>[\s\S]*?<\/conversation_history>/, "");
+            }
+            const freshCfg = { ...savedCfg, resume: undefined, systemPrompt: freshPrompt };
             logErr(`Pre-warming new session for ${key} after reset...`);
             preWarmSession(lastWarmupConfig!.cwd, [freshCfg]).catch((err) =>
               logErr(`Post-reset pre-warm failed for ${key}: ${err}`)
