@@ -367,19 +367,19 @@ final class UpdaterViewModel: ObservableObject {
 
         isInitialized = true
 
-        #if DEBUG
-        // Test hook: fake an available update for UI testing
+        // Test hook: fake an available update for UI testing (dev builds only)
         // xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testUpdateAvailable"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
-        DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.fazm.testUpdateAvailable"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.updateAvailable = true
-            self?.availableVersion = "9.9.9"
-            logSync("UpdaterViewModel: Faked update available for testing")
+        if Bundle.main.bundleIdentifier == "com.fazm.desktop-dev" {
+            DistributedNotificationCenter.default().addObserver(
+                forName: NSNotification.Name("com.fazm.testUpdateAvailable"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.updateAvailable = true
+                self?.availableVersion = "9.9.9"
+                logSync("UpdaterViewModel: Faked update available for testing")
+            }
         }
-        #endif
 
         // On launch, probe App Management permission if we previously showed the guide.
         // This handles the "Quit & Reopen" flow: user grants permission → app restarts →
