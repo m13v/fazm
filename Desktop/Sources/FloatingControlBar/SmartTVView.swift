@@ -188,29 +188,6 @@ struct SmartTVView: NSViewRepresentable {
                         SmartTVController.shared.navigationFinished()
                         webView.evaluateJavaScript(Self.autoAdvanceJS)
                         log("SmartTV: injected auto-advance after search→shorts SPA nav")
-                        // Log diagnostics and DOM structure after a delay
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            SmartTVController.shared.logVideoDiagnostics()
-                            // Dump each ancestor on its own log line
-                            let domJS = """
-                            (function() {
-                                var video = document.querySelector('video');
-                                if (!video) { console.log('[Fazm] no video found'); return; }
-                                var el = video;
-                                var depth = 0;
-                                while (el && depth < 20) {
-                                    console.log('[Fazm] DOM[' + depth + '] ' + el.tagName +
-                                        (el.id ? '#' + el.id : '') +
-                                        ' class=' + (el.className || '').toString().substring(0,50) +
-                                        ' scrollH=' + el.scrollHeight + ' clientH=' + el.clientHeight +
-                                        ' overflow=' + getComputedStyle(el).overflowY);
-                                    el = el.parentElement;
-                                    depth++;
-                                }
-                            })();
-                            """
-                            webView.evaluateJavaScript(domJS)
-                        }
                     }
                 }
             } else if url.contains("/shorts/") {
