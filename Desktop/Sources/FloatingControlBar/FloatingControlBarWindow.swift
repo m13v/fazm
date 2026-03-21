@@ -18,7 +18,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     /// Base height used as the reference for 2× cap.
     private static let defaultBaseResponseHeight: CGFloat = 215
     /// Overhead (px) added to measured scroll content to account for control bar, header, follow-up input, and padding.
-    private static let responseViewOverhead: CGFloat = 190
 
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
@@ -26,7 +25,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var isUserDragging = false
     /// Set by ResizeHandleNSView while the user is manually dragging the corner.
     /// Prevents the response-height observer from fighting manual resize.
-    var isUserResizing = false
 
     /// Persist the current window size as the user's preferred chat height.
     func saveUserSize() {
@@ -1035,23 +1033,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         )
     }
 
-    func windowWillStartLiveResize(_ notification: Notification) {
-        isUserResizing = true
-    }
-
-    func windowDidEndLiveResize(_ notification: Notification) {
-        isUserResizing = false
-        // Save the user's chosen size so it persists across sessions
-        if state.showingAIResponse {
-            UserDefaults.standard.set(
-                NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
-            )
-            // Re-cap the auto-expand observer to the user's new height so it
-            // won't jump back above what the user chose.
-            setupResponseHeightObserver(maxHeight: self.frame.height)
-        }
-    }
-
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         var clamped = NSSize(
             width: max(frameSize.width, FloatingControlBarWindow.minBarSize.width),
@@ -1065,7 +1046,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        if !isResizingProgrammatically && !isUserResizing && state.showingAIResponse {
+        if !isResizingProgrammatically && state.showingAIResponse {
             UserDefaults.standard.set(
                 NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
             )
