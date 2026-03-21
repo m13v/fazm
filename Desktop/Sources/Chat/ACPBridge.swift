@@ -276,6 +276,23 @@ actor ACPBridge {
         {
           Task { await self?.markOOM() }
         }
+        // Track Hindsight MCP startup status
+        if text.contains("Hindsight:") && text.contains("startup_time=") {
+          let ready = text.contains("Hindsight: ready")
+          // Parse startup_time from "startup_time=12.3s"
+          var startupTime: Double? = nil
+          if let range = text.range(of: "startup_time="),
+             let endRange = text.range(of: "s", range: range.upperBound..<text.endIndex) {
+            startupTime = Double(text[range.upperBound..<endRange.lowerBound])
+          }
+          var props: [String: Any] = ["ready": ready]
+          if let t = startupTime { props["startup_time_s"] = t }
+          if !ready {
+            // Capture the error reason from the line
+            props["error"] = text.trimmingCharacters(in: .whitespacesAndNewlines)
+          }
+          PostHogManager.shared.track("Hindsight Status", properties: props)
+        }
       }
     }
 
