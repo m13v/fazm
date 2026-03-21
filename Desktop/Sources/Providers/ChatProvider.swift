@@ -751,6 +751,11 @@ class ChatProvider: ObservableObject {
                     self?.pollObserverCards()
                 }
             }
+            await acpBridge.setObserverStatusHandler { [weak self] running in
+                Task { @MainActor [weak self] in
+                    self?.isObserverRunning = running
+                }
+            }
             // Set up background tool call handler for observer session tool calls
             // (execute_sql, etc.) that arrive when no main query is active
             await acpBridge.setBackgroundToolCallHandler { callId, name, input in
