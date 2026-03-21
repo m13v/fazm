@@ -154,12 +154,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         state.$smartTVVisible
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] visible in
+            .sink { [weak self] _ in
                 guard let self, self.state.showingAIConversation, !self.state.isCollapsed else { return }
-                // Adjust window height: add or remove the SmartTV height
-                let delta: CGFloat = visible ? Self.smartTVHeight : -Self.smartTVHeight
-                let newHeight = max(self.frame.height + delta, Self.minResponseHeight)
-                self.resizeAnchored(to: NSSize(width: self.frame.width, height: newHeight), makeResizable: true, animated: true)
+                // Recalculate response height — smartTVExtraHeight reflects current visibility
+                if self.state.showingAIResponse {
+                    self.resizeToResponseHeightPublic(animated: true)
+                }
             }
             .store(in: &smartTVPauseCancellables)
 
