@@ -404,7 +404,7 @@ struct AIResponseView: View {
             }
 
             // Render observer cards as a compact stack
-            if !observerCards.isEmpty {
+            if !observerCards.isEmpty || state.isObserverRunning {
                 ObserverCardStackView(
                     cards: observerCards.map { card in
                         ObserverCardItem(
@@ -416,6 +416,7 @@ struct AIResponseView: View {
                             actedAction: card.actedAction
                         )
                     },
+                    isObserverRunning: state.isObserverRunning,
                     onAction: { id, action in
                         handleObserverCardAction(activityId: id, action: action)
                     }
