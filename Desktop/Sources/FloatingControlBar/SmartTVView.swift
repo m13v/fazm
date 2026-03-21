@@ -37,6 +37,34 @@ struct SmartTVView: NSViewRepresentable {
     }
 
     class Coordinator: NSObject, WKNavigationDelegate {
+        /// JavaScript that disables video looping and auto-scrolls to the next Short when one ends.
+        static let autoAdvanceJS = """
+        (function() {
+            document.querySelectorAll('video').forEach(v => v.muted = true);
+            if (!window.__fazmAutoAdvance) {
+                window.__fazmAutoAdvance = true;
+                function attachEndedListener(video) {
+                    if (video.__fazmEnded) return;
+                    video.__fazmEnded = true;
+                    video.loop = false;
+                    video.addEventListener('ended', function() {
+                        var container = document.querySelector('#shorts-container') ||
+                                        document.querySelector('ytm-shorts-player') ||
+                                        document.scrollingElement || document.body;
+                        container.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+                    });
+                }
+                document.querySelectorAll('video').forEach(attachEndedListener);
+                new MutationObserver(function(mutations) {
+                    document.querySelectorAll('video').forEach(function(v) {
+                        v.muted = true;
+                        attachEndedListener(v);
+                    });
+                }).observe(document.body, { childList: true, subtree: true });
+            }
+        })();
+        """
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             let url = webView.url?.absoluteString ?? ""
             log("SmartTV: didFinish — url=\(url.prefix(80))")
@@ -54,47 +82,18 @@ struct SmartTVView: NSViewRepresentable {
                     })();
                     """
                     webView.evaluateJavaScript(js)
+
+                    // Inject auto-advance after click (SPA navigation won't trigger didFinish)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        SmartTVController.shared.navigationFinished()
+                        webView.evaluateJavaScript(Self.autoAdvanceJS)
+                        log("SmartTV: injected auto-advance after search→shorts SPA nav")
+                    }
                 }
             } else if url.contains("/shorts/") {
                 // On Shorts player page: navigation done, let YouTube autoplay
                 SmartTVController.shared.navigationFinished()
-                // Ensure video starts muted and auto-advance to next Short when video ends
-                let setupJS = """
-                (function() {
-                    // Mute all current videos
-                    document.querySelectorAll('video').forEach(v => v.muted = true);
-
-                    // Auto-advance: when a Short ends, scroll down to trigger next one
-                    if (!window.__fazmAutoAdvance) {
-                        window.__fazmAutoAdvance = true;
-
-                        function attachEndedListener(video) {
-                            if (video.__fazmEnded) return;
-                            video.__fazmEnded = true;
-                            video.loop = false;  // Disable loop so 'ended' fires
-                            video.addEventListener('ended', function() {
-                                // Scroll down by viewport height to advance to next Short
-                                var container = document.querySelector('#shorts-container') ||
-                                                document.querySelector('ytm-shorts-player') ||
-                                                document.scrollingElement || document.body;
-                                container.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
-                            });
-                        }
-
-                        // Attach to existing videos
-                        document.querySelectorAll('video').forEach(attachEndedListener);
-
-                        // Watch for new videos added dynamically
-                        new MutationObserver(function(mutations) {
-                            document.querySelectorAll('video').forEach(function(v) {
-                                v.muted = true;
-                                attachEndedListener(v);
-                            });
-                        }).observe(document.body, { childList: true, subtree: true });
-                    }
-                })();
-                """
-                webView.evaluateJavaScript(setupJS)
+                webView.evaluateJavaScript(Self.autoAdvanceJS)
                 log("SmartTV: on Shorts player, navigation finished (muted, auto-advance enabled)")
             } else {
                 SmartTVController.shared.navigationFinished()
