@@ -10,14 +10,24 @@ class SmartTVController {
     /// from Combine observers to avoid fighting with page load.
     var isNavigating = false
 
+    /// Pending search query — set when searchAndPlay is called before the webView exists.
+    /// Consumed by the SmartTVView coordinator after initial page load.
+    var pendingQuery: String?
+
     /// Navigate to YouTube Shorts search results for the given query.
     func searchAndPlay(query: String) {
-        guard let webView,
-              let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        guard let webView else {
+            // WebView not ready yet — store for later
+            log("SmartTV: searchAndPlay deferred (webView nil) — query: \(query.prefix(50))")
+            pendingQuery = query
+            return
+        }
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://m.youtube.com/results?search_query=\(encoded)&sp=EgIYAQ%3D%3D")
         else { return }
+        pendingQuery = nil
         isNavigating = true
-        log("SmartTV: searchAndPlay — navigating to: \(query)")
+        log("SmartTV: searchAndPlay — navigating to: \(query.prefix(50))")
         webView.load(URLRequest(url: url))
     }
 
