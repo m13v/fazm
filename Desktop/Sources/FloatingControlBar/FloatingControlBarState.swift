@@ -19,6 +19,13 @@ struct QueuedMessage: Identifiable, Equatable {
     }
 }
 
+/// Lightweight observable for audio level that doesn't trigger re-renders
+/// of the entire conversation view tree.
+@MainActor
+class AudioLevelState: ObservableObject {
+    @Published var level: Float = 0.0
+}
+
 /// Observable object holding the state for the floating control bar.
 @MainActor
 class FloatingControlBarState: NSObject, ObservableObject {
@@ -61,8 +68,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceFinalizing: Bool = false
     @Published var voiceTranscript: String = ""
 
-    // Audio level for PTT visualization
-    @Published var voiceAudioLevel: Float = 0.0
+    // Audio level for PTT visualization — uses a separate observable
+    // to avoid re-rendering the entire conversation view on every level change.
+    let audioLevel = AudioLevelState()
 
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false
