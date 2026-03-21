@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "macos-use-remote": {
+      "type": "stdio",
+      "command": "/Users/matthewdi/fazm/scripts/macstadium/macos-use-remote.sh",
+      "args": [],
+      "env": {}
+    }
+  }
+}
