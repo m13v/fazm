@@ -296,9 +296,11 @@ class TranscriptionService {
             queryItems.append(URLQueryItem(name: "keyterm", value: term))
         }
 
-        // Add find-and-replace rules for common patterns (URLs, emails, file extensions)
-        for rule in Self.defaultReplacements {
-            queryItems.append(URLQueryItem(name: "replace", value: "\(rule.find):\(rule.replace)"))
+        // Add find-and-replace rules only for English (these are English-specific spoken patterns)
+        if language == "en" || language.hasPrefix("en-") {
+            for rule in Self.defaultReplacements {
+                queryItems.append(URLQueryItem(name: "replace", value: "\(rule.find):\(rule.replace)"))
+            }
         }
 
         components.queryItems = queryItems
@@ -571,9 +573,11 @@ extension TranscriptionService {
             components.queryItems?.append(URLQueryItem(name: "keyterm", value: term))
         }
 
-        // Add find-and-replace rules for common patterns (URLs, emails, file extensions)
-        for rule in defaultReplacements {
-            components.queryItems?.append(URLQueryItem(name: "replace", value: "\(rule.find):\(rule.replace)"))
+        // Add find-and-replace rules only for English (these are English-specific spoken patterns)
+        if language == "en" || language.hasPrefix("en-") {
+            for rule in defaultReplacements {
+                components.queryItems?.append(URLQueryItem(name: "replace", value: "\(rule.find):\(rule.replace)"))
+            }
         }
 
         guard let url = components.url else {

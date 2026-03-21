@@ -564,8 +564,16 @@ class BleAudioService {
 class AssistantSettings: ObservableObject {
     static let shared = AssistantSettings()
     @Published var transcriptionEnabled: Bool = false
-    @Published var transcriptionLanguage: String = "en"
-    @Published var transcriptionAutoDetect: Bool = false
+    @Published var transcriptionLanguage: String = UserDefaults.standard.string(forKey: "transcription_language") ?? "multi" {
+        didSet {
+            UserDefaults.standard.set(transcriptionLanguage, forKey: "transcription_language")
+        }
+    }
+    @Published var transcriptionAutoDetect: Bool = UserDefaults.standard.object(forKey: "transcription_auto_detect") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(transcriptionAutoDetect, forKey: "transcription_auto_detect")
+        }
+    }
     @Published var batchTranscriptionEnabled: Bool = false
     @Published var vadGateEnabled: Bool = false
     @Published var screenAnalysisEnabled: Bool = false
@@ -576,13 +584,20 @@ class AssistantSettings: ObservableObject {
     }
     @Published var analysisDelay: Int = 3
     @Published var glowOverlayEnabled: Bool = false
-    var effectiveTranscriptionLanguage: String { transcriptionLanguage }
+    var effectiveTranscriptionLanguage: String {
+        if transcriptionAutoDetect {
+            return "multi"  // DeepGram Nova-3 multilingual code-switching
+        }
+        return transcriptionLanguage
+    }
     var effectiveVocabulary: [String] { transcriptionVocabulary }
 
     static var supportedLanguages: [(code: String, name: String)] {
-        [("en", "English"), ("es", "Spanish"), ("fr", "French"), ("de", "German"),
+        [("multi", "Auto-detect (Multilingual)"),
+         ("en", "English"), ("ru", "Русский"), ("es", "Spanish"), ("fr", "French"), ("de", "German"),
          ("it", "Italian"), ("pt", "Portuguese"), ("ja", "Japanese"), ("ko", "Korean"),
-         ("zh", "Chinese"), ("ru", "Russian"), ("ar", "Arabic"), ("hi", "Hindi")]
+         ("zh", "Chinese"), ("ar", "Arabic"), ("hi", "Hindi"),
+         ("nl", "Dutch"), ("uk", "Українська"), ("pl", "Polish"), ("tr", "Turkish")]
     }
     static func supportsAutoDetect(_ language: String) -> Bool { true }
 }
