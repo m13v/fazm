@@ -21,6 +21,24 @@ class PostHogManager {
     func initialize() {
         guard !isInitialized else { return }
 
+        // Migration: clear the isIdentified flag that was incorrectly set by older
+        // versions (≤0.5.2) which called PostHogSDK.identify() from setUserProperty().
+        // MUST run BEFORE setup() so the SDK reads the corrected state from disk.
+        // PostHog stores this as a file: ~/Library/Application Support/{bundleId}/{apiKey}/posthog.isIdentified
+        let migrationKey = "posthog_identity_migrated_v3"
+        if !UserDefaults.standard.bool(forKey: migrationKey) {
+            if let bundleId = Bundle.main.bundleIdentifier,
+               let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                let isIdentifiedFile = appSupport
+                    .appendingPathComponent(bundleId)
+                    .appendingPathComponent(apiKey)
+                    .appendingPathComponent("posthog.isIdentified")
+                try? FileManager.default.removeItem(at: isIdentifiedFile)
+            }
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            log("PostHog: Cleared stale isIdentified flag (one-time migration v3, now before setup)")
+        }
+
         let config = PostHogConfig(apiKey: apiKey, host: host)
 
         // Disable automatic lifecycle events — PostHog's observer calls setResourceValues(isExcludedFromBackupKey:)
@@ -32,24 +50,6 @@ class PostHogManager {
         config.preloadFeatureFlags = true
 
         PostHogSDK.shared.setup(config)
-
-        // One-time migration: clear the isIdentified flag that was incorrectly set by
-        // older versions (≤0.5.2) which called PostHogSDK.identify() from setUserProperty().
-        // Without this, the SDK silently ignores identifyAuthUser()'s identify() call.
-        // PostHog stores this as a file: ~/Library/Application Support/{bundleId}/{apiKey}/posthog.isIdentified
-        let migrationKey = "posthog_identity_migrated_v2"
-        if !UserDefaults.standard.bool(forKey: migrationKey) {
-            if let bundleId = Bundle.main.bundleIdentifier,
-               let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-                let isIdentifiedFile = appSupport
-                    .appendingPathComponent(bundleId)
-                    .appendingPathComponent(apiKey)
-                    .appendingPathComponent("posthog.isIdentified")
-                try? FileManager.default.removeItem(at: isIdentifiedFile)
-            }
-            UserDefaults.standard.set(true, forKey: migrationKey)
-            log("PostHog: Cleared stale isIdentified flag (one-time migration)")
-        }
 
         isInitialized = true
         log("PostHog: Initialized successfully")
@@ -122,6 +122,17 @@ class PostHogManager {
         // so isIdentified stays false until this call.
         PostHogSDK.shared.identify(userId, userProperties: properties)
         log("PostHog: Identified auth user \(userId) (was: \(currentDistinctId))")
+
+        // Always set properties on the CURRENT person via $set as a safety net.
+        // If the identify() call above was silently ignored (e.g., because an older
+        // buggy version set isIdentified=true prematurely), the distinct_id stays as
+        // the device UUID and the person receiving events has no email/name. This
+        // explicit $set ensures properties are set on whatever person is active.
+        let newDistinctId = PostHogSDK.shared.getDistinctId()
+        if newDistinctId != userId {
+            PostHogSDK.shared.capture("$set", properties: ["$set": properties])
+            log("PostHog: identify() did not switch distinct_id (still \(newDistinctId)), forcing $set on current person")
+        }
     }
 
     /// Register super properties that are sent with every event
