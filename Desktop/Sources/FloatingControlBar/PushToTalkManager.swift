@@ -739,6 +739,11 @@ class PushToTalkManager: ObservableObject {
     }
     barState?.voiceTranscript = liveText
 
+    // Sync live transcript into the inline voice follow-up indicator
+    if barState?.isVoiceFollowUp == true {
+      barState?.voiceFollowUpTranscript = liveText
+    }
+
     // Sync live transcript directly into the input field
     if pttOpenedChat {
       barState?.aiInputText = preVoiceInputText.isEmpty ? liveText : preVoiceInputText + " " + liveText
