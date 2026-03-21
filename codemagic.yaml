@@ -464,13 +464,26 @@ workflows:
 
           # Bundle OpenSSL 3 dylibs for pg0's embedded PostgreSQL
           # pg0 downloads a postgres binary linked against /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib
-          # which doesn't exist on clean Macs without Homebrew
+          # which doesn't exist on clean Macs without Homebrew.
+          # We copy the dylibs to Contents/Frameworks/ and rewrite their internal references
+          # to use @loader_path so libssl can find libcrypto regardless of install location.
+          # The Python binary is signed with allow-dyld-environment-variables entitlement
+          # so DYLD_LIBRARY_PATH works even with hardened runtime.
           OPENSSL_LIB="/opt/homebrew/opt/openssl@3/lib"
           OPENSSL_DEST="$APP_BUNDLE/Contents/Frameworks"
           if [ -f "$OPENSSL_LIB/libssl.3.dylib" ] && [ -f "$OPENSSL_LIB/libcrypto.3.dylib" ]; then
             cp "$OPENSSL_LIB/libssl.3.dylib" "$OPENSSL_DEST/"
             cp "$OPENSSL_LIB/libcrypto.3.dylib" "$OPENSSL_DEST/"
-            echo "Bundled OpenSSL 3 dylibs for pg0 PostgreSQL"
+            chmod u+w "$OPENSSL_DEST/libssl.3.dylib" "$OPENSSL_DEST/libcrypto.3.dylib"
+            # Rewrite libssl's reference to libcrypto from absolute Cellar path to @loader_path
+            CELLAR_CRYPTO=$(otool -L "$OPENSSL_DEST/libssl.3.dylib" | grep libcrypto | awk '{print $1}')
+            if [ -n "$CELLAR_CRYPTO" ]; then
+              install_name_tool -change "$CELLAR_CRYPTO" "@loader_path/libcrypto.3.dylib" "$OPENSSL_DEST/libssl.3.dylib"
+            fi
+            # Rewrite install names to @loader_path for clean resolution
+            install_name_tool -id "@loader_path/libssl.3.dylib" "$OPENSSL_DEST/libssl.3.dylib"
+            install_name_tool -id "@loader_path/libcrypto.3.dylib" "$OPENSSL_DEST/libcrypto.3.dylib"
+            echo "Bundled and relinked OpenSSL 3 dylibs for pg0 PostgreSQL"
           else
             echo "WARNING: OpenSSL 3 dylibs not found at $OPENSSL_LIB — pg0 may fail on clean Macs"
           fi
@@ -649,9 +662,21 @@ workflows:
           fi
 
           # Sign Hindsight Memory MCP native binaries (.so/.dylib and executables in venv)
+          # The Python binary gets special entitlements to allow DYLD_LIBRARY_PATH
+          # (needed for pg0's OpenSSL dylibs to be found via Contents/Frameworks/)
           HINDSIGHT_BUNDLE="$APP_BUNDLE/Contents/Resources/hindsight"
+          PYTHON_ENTITLEMENTS="$CM_BUILD_DIR/Desktop/Python.entitlements"
           if [ -d "$HINDSIGHT_BUNDLE/.venv" ]; then
+            # Sign the Python binary with DYLD entitlements first
+            HINDSIGHT_PYTHON="$HINDSIGHT_BUNDLE/.venv/bin/python"
+            if [ -f "$HINDSIGHT_PYTHON" ] && file "$HINDSIGHT_PYTHON" 2>/dev/null | grep -q "Mach-O"; then
+              codesign --force --options runtime --timestamp \
+                --entitlements "$PYTHON_ENTITLEMENTS" \
+                --sign "$SIGN_IDENTITY" "$HINDSIGHT_PYTHON"
+            fi
+            # Sign all other Mach-O files (except python which was already signed above)
             find "$HINDSIGHT_BUNDLE/.venv" -type f 2>/dev/null | while read bin; do
+              [ "$bin" = "$HINDSIGHT_PYTHON" ] && continue
               file "$bin" 2>/dev/null | grep -q "Mach-O" && \
                 codesign --force --options runtime --timestamp \
                   --sign "$SIGN_IDENTITY" "$bin" 2>/dev/null || true
