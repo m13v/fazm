@@ -200,12 +200,14 @@ struct FloatingControlBarView: View {
                 .opacity(updateButtonPulse ? 1.0 : 0.4)
                 .scaleEffect(updateButtonPulse ? 1.15 : 0.9)
                 .shadow(color: FazmColors.purplePrimary.opacity(updateButtonPulse ? 0.9 : 0.0), radius: updateButtonPulse ? 8 : 0)
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: updateButtonPulse)
         }
         .buttonStyle(.plain)
         .help("Update available — v\(updaterViewModel.availableVersion)")
         .onAppear {
-            updateButtonPulse = true
+            updateButtonPulse = false
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                updateButtonPulse = true
+            }
         }
     }
 
