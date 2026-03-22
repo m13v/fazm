@@ -288,8 +288,6 @@ pub async fn auto_enroll(
         });
     }
 
-    let max_enroll = config.session_recording_max_auto_enroll;
-
     // Fetch current enrolled IDs from PostHog feature flag
     let current_ids = match get_enrolled_ids(api_key).await {
         Ok(ids) => ids,
@@ -310,18 +308,6 @@ pub async fn auto_enroll(
         });
     }
 
-    // Cap reached?
-    if current_ids.len() >= max_enroll {
-        tracing::info!(
-            "Session recording auto-enroll: cap reached ({}/{}), skipping {}",
-            current_ids.len(), max_enroll, device_id
-        );
-        return Json(AutoEnrollResponse {
-            enrolled: false,
-            reason: format!("enrollment cap reached ({}/{})", current_ids.len(), max_enroll),
-        });
-    }
-
     // Add this device
     let mut new_ids = current_ids;
     new_ids.push(device_id.to_string());
@@ -335,13 +321,13 @@ pub async fn auto_enroll(
     }
 
     tracing::info!(
-        "Session recording auto-enroll: enrolled {} ({}/{})",
-        device_id, new_ids.len(), max_enroll
+        "Session recording auto-enroll: enrolled {} (total: {})",
+        device_id, new_ids.len()
     );
 
     Json(AutoEnrollResponse {
         enrolled: true,
-        reason: format!("enrolled ({}/{})", new_ids.len(), max_enroll),
+        reason: format!("enrolled (total: {})", new_ids.len()),
     })
 }
 
