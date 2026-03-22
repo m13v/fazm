@@ -1823,7 +1823,8 @@ class FloatingControlBarManager {
         } else if let errorText = provider.errorMessage {
             // Provider reported an error (timeout, bridge crash, etc.)
             // Show it even if there's partial content — append to existing or create new message
-            if barWindow.state.currentAIMessage != nil && !barWindow.state.aiResponseText.isEmpty {
+            let hasContent = !barWindow.state.aiResponseText.isEmpty || !(barWindow.state.currentAIMessage?.contentBlocks.isEmpty ?? true)
+            if barWindow.state.currentAIMessage != nil && hasContent {
                 barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
             } else {
                 barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
@@ -1832,8 +1833,9 @@ class FloatingControlBarManager {
             // Browser extension setup interrupted the query — retry is pending,
             // don't show a spurious error message.
             log("FloatingControlBarManager: Suppressing error message — browser setup retry pending")
-        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
-            // No error message and no response — something else went wrong
+        } else if barWindow.state.currentAIMessage == nil ||
+                  (barWindow.state.aiResponseText.isEmpty && (barWindow.state.currentAIMessage?.contentBlocks.isEmpty ?? true)) {
+            // No error message, no text, and no tool call blocks — something else went wrong
             barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
         }
 
