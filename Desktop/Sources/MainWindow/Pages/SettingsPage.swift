@@ -128,6 +128,7 @@ struct SettingsContentView: View {
         case home = "Home"
         case general = "General"
         case shortcuts = "Shortcuts"
+        case permissions = "Permissions"
         case dictionary = "Dictionary"
         case advanced = "Advanced"
         case about = "About"
@@ -176,6 +177,8 @@ struct SettingsContentView: View {
                     generalSection
                 case .shortcuts:
                     shortcutsSection
+                case .permissions:
+                    PermissionsPage(appState: appState)
                 case .dictionary:
                     dictionarySection
                 case .advanced:
