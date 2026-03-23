@@ -59,6 +59,8 @@ actor ACPBridge {
     case toolProgress(toolUseId: String, toolName: String, elapsedTimeSeconds: Double)
     /// Collapsed summary of multiple tool calls
     case toolUseSummary(summary: String)
+    /// Rate limit info from Claude API (utilization warnings & rejections)
+    case rateLimit(status: String, resetsAt: Double?, rateLimitType: String?, utilization: Double?)
   }
 
   /// Callback for status events (compaction, tasks, tool progress)
@@ -87,6 +89,7 @@ actor ACPBridge {
     case taskNotification(taskId: String, status: String, summary: String)
     case toolProgress(toolUseId: String, toolName: String, elapsedTimeSeconds: Double)
     case toolUseSummary(summary: String)
+    case rateLimit(status: String, resetsAt: Double?, rateLimitType: String?, utilization: Double?, overageStatus: String?, overageDisabledReason: String?)
     case observerPoll
     case observerStatus(running: Bool)
   }
@@ -664,6 +667,9 @@ actor ACPBridge {
       case .toolUseSummary(let summary):
         onStatusEvent(.toolUseSummary(summary: summary))
 
+      case .rateLimit(let status, let resetsAt, let rateLimitType, let utilization, _, _):
+        onStatusEvent(.rateLimit(status: status, resetsAt: resetsAt, rateLimitType: rateLimitType, utilization: utilization))
+
       case .observerPoll:
         // Handled immediately in deliverMessage(); should never reach here
         break
@@ -842,6 +848,15 @@ actor ACPBridge {
     case "tool_use_summary":
       let summary = dict["summary"] as? String ?? ""
       return .toolUseSummary(summary: summary)
+
+    case "rate_limit":
+      let status = dict["status"] as? String ?? "unknown"
+      let resetsAt = dict["resetsAt"] as? Double
+      let rateLimitType = dict["rateLimitType"] as? String
+      let utilization = dict["utilization"] as? Double
+      let overageStatus = dict["overageStatus"] as? String
+      let overageDisabledReason = dict["overageDisabledReason"] as? String
+      return .rateLimit(status: status, resetsAt: resetsAt, rateLimitType: rateLimitType, utilization: utilization, overageStatus: overageStatus, overageDisabledReason: overageDisabledReason)
 
     case "observer_poll":
       return .observerPoll
