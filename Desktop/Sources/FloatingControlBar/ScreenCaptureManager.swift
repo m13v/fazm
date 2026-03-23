@@ -2,16 +2,24 @@ import AppKit
 import ImageIO
 
 class ScreenCaptureManager {
+
+    enum CaptureResult {
+        case success(URL)
+        /// Window found but CGWindowListCreateImage returned nil — almost certainly a Screen Recording permission issue.
+        case permissionDenied
+    }
+
     /// Capture the frontmost window of a specific application by PID.
-    /// Falls back to full-screen capture if the window cannot be found.
-    static func captureAppWindow(pid: pid_t) -> URL? {
+    /// Returns `.permissionDenied` when the window is found but pixel capture fails (Screen Recording permission revoked).
+    static func captureAppWindow(pid: pid_t) -> CaptureResult {
         // Try on-screen windows first, then all windows (catches fullscreen apps in other Spaces)
         let windowInfo = findWindow(for: pid, onScreenOnly: true)
             ?? findWindow(for: pid, onScreenOnly: false)
 
         guard let windowInfo, let windowID = windowInfo[kCGWindowNumber] as? CGWindowID else {
             log("ScreenCaptureManager: No window found for PID \(pid), falling back to full screen")
-            return captureScreen()
+            if let url = captureScreen() { return .success(url) }
+            return .permissionDenied
         }
 
         let ownerName = windowInfo[kCGWindowOwnerName as CFString] as? String ?? "unknown"
@@ -23,12 +31,14 @@ class ScreenCaptureManager {
             windowID,
             [.boundsIgnoreFraming, .bestResolution]
         ) else {
-            log("ScreenCaptureManager: Could not capture window for PID \(pid), falling back to full screen")
-            return captureScreen()
+            // Window metadata is readable but pixel capture failed — Screen Recording permission is missing/stale
+            log("ScreenCaptureManager: Could not capture window '\(ownerName)' for PID \(pid) — likely missing Screen Recording permission")
+            return .permissionDenied
         }
 
         log("ScreenCaptureManager: Captured window of '\(ownerName)' (PID \(pid), \(image.width)×\(image.height))")
-        return saveImage(image)
+        if let url = saveImage(image) { return .success(url) }
+        return .permissionDenied
     }
 
     /// Find the best window for a PID. Accepts any window layer (including fullscreen).
