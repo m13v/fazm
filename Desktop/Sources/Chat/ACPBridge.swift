@@ -1173,7 +1173,7 @@ enum BridgeError: LocalizedError {
       // Extract "resets X" clause from the error message if present (e.g. "resets 11pm (America/Santiago)")
       if let range = message.range(of: #"resets\s+\S.*"#, options: .regularExpression) {
         let resets = String(message[range])
-        return "You've hit Claude's usage limit (\(resets)). Your quota will reset shortly — try again then."
+        return "You've hit Claude's usage limit (\(resets)). Upgrade to Claude Pro at claude.ai for higher limits."
       }
       return "Built-in credits are exhausted. Please switch to your personal Claude account in Settings."
     case .agentError(let msg):
