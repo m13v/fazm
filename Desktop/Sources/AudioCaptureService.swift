@@ -70,6 +70,8 @@ class AudioCaptureService: @unchecked Sendable {
 
     // Device change handling
     private var isReconfiguring = false
+    /// Guards against concurrent startCapture calls (e.g. rapid PTT toggling).
+    private var isStarting = false
     private let listenerQueue = DispatchQueue(label: "com.fazm.audiocapture.listener")
 
     /// Dedicated queue for CoreAudio device operations (start/stop/reconfigure)
@@ -115,10 +117,11 @@ class AudioCaptureService: @unchecked Sendable {
     ///   - onAudioChunk: Callback receiving 16-bit PCM audio data chunks at 16kHz
     ///   - onAudioLevel: Optional callback receiving normalized audio level (0.0 - 1.0)
     func startCapture(deviceUID: String? = nil, onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) async throws {
-        guard !isCapturing else {
-            log("AudioCapture: Already capturing")
+        guard !isCapturing, !isStarting else {
+            log("AudioCapture: Already capturing or start in progress")
             return
         }
+        isStarting = true
 
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
@@ -128,6 +131,7 @@ class AudioCaptureService: @unchecked Sendable {
         // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
         // take seconds to respond, blocking the caller. Dispatch the entire setup to audioQueue,
         // mirroring the pattern already used in stopCapture() and handleConfigurationChange().
+        defer { isStarting = false }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             audioQueue.async { [weak self] in
                 guard let self else {
@@ -271,14 +275,38 @@ class AudioCaptureService: @unchecked Sendable {
 
         removePropertyListeners()
 
-        // Capture values before clearing state so we can dispatch the heavy
-        // CoreAudio calls off the main thread.
+        // Mark as not capturing FIRST to tell the IOProc to bail out early,
+        // but keep all other state intact until the device is fully stopped.
+        isCapturing = false
+
         let procID = self.ioProcID
         let devID = self.deviceID
 
+        // Stop the device SYNCHRONOUSLY on audioQueue to guarantee no more
+        // IOProc callbacks fire before we clear state. AudioDeviceStop blocks
+        // until the in-flight IOProc returns, so after this call the audio IO
+        // thread is guaranteed idle.
+        if let procID = procID, devID != kAudioObjectUnknown {
+            let work = {
+                AudioDeviceStop(devID, procID)
+                AudioDeviceDestroyIOProcID(devID, procID)
+            }
+            if Thread.isMainThread {
+                // Dispatch sync from main thread — audioQueue never calls back
+                // to main so this cannot deadlock.
+                audioQueue.sync(execute: work)
+            } else if sync {
+                audioQueue.sync(execute: work)
+            } else {
+                // Even without sync requested, we still need the device stopped
+                // before clearing state. Use sync to be safe.
+                audioQueue.sync(execute: work)
+            }
+        }
+
+        // Device is stopped — no IOProc can fire. Safe to clear all state.
         ioProcID = nil
         deviceID = kAudioObjectUnknown
-        isCapturing = false
         isReconfiguring = false
         requestedDeviceUID = nil
         onAudioChunk = nil
@@ -290,19 +318,6 @@ class AudioCaptureService: @unchecked Sendable {
         targetFormat = nil
         detectedSampleRate = 0.0
         smoothedLevel = 0.0
-
-        // AudioDeviceStop can block waiting for the IO thread
-        if let procID = procID, devID != kAudioObjectUnknown {
-            let work = {
-                AudioDeviceStop(devID, procID)
-                AudioDeviceDestroyIOProcID(devID, procID)
-            }
-            if sync && !Thread.isMainThread {
-                audioQueue.sync(execute: work)
-            } else {
-                audioQueue.async(execute: work)
-            }
-        }
 
         log("AudioCapture: Stopped capturing")
     }
@@ -505,13 +520,20 @@ class AudioCaptureService: @unchecked Sendable {
         return status == noErr ? format : nil
     }
 
-    /// Handle incoming audio data from the IOProc callback
+    /// Handle incoming audio data from the IOProc callback.
+    /// Runs on CoreAudio's real-time IO thread. All state reads are
+    /// captured into locals at the top to avoid races with stopCapture().
     private func handleAudioInput(_ inputData: UnsafePointer<AudioBufferList>?, timestamp: UnsafePointer<AudioTimeStamp>?) {
+        // Snapshot all mutable state into locals. If stopCapture() races us
+        // and nils these out, we either bail (isCapturing=false) or continue
+        // with the captured references which are still valid for this callback.
         guard isCapturing,
               let bufferList = inputData?.pointee,
               let converter = audioConverter,
               let targetFmt = targetFormat,
-              let inputFmt = inputFormat else { return }
+              let inputFmt = inputFormat,
+              let chunkHandler = onAudioChunk else { return }
+        let levelHandler = onAudioLevel
 
         let buffer = bufferList.mBuffers
         guard let data = buffer.mData, buffer.mDataByteSize > 0 else { return }
@@ -586,7 +608,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         // Calculate and report audio level (RMS normalized to 0.0 - 1.0)
         // Uses smoothing and decay to match system audio behavior
-        if let levelHandler = onAudioLevel, !pcmData.isEmpty {
+        if let levelHandler = levelHandler, !pcmData.isEmpty {
             let sumOfSquares: Float = pcmData.reduce(0.0) { acc, sample in
                 let normalized = Float(sample) / 32767.0
                 return acc + normalized * normalized
