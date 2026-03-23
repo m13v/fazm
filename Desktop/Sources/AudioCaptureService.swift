@@ -285,22 +285,12 @@ class AudioCaptureService: @unchecked Sendable {
         // Stop the device SYNCHRONOUSLY on audioQueue to guarantee no more
         // IOProc callbacks fire before we clear state. AudioDeviceStop blocks
         // until the in-flight IOProc returns, so after this call the audio IO
-        // thread is guaranteed idle.
+        // thread is guaranteed idle. audioQueue never dispatches back to the
+        // calling thread, so this cannot deadlock.
         if let procID = procID, devID != kAudioObjectUnknown {
-            let work = {
+            audioQueue.sync {
                 AudioDeviceStop(devID, procID)
                 AudioDeviceDestroyIOProcID(devID, procID)
-            }
-            if Thread.isMainThread {
-                // Dispatch sync from main thread — audioQueue never calls back
-                // to main so this cannot deadlock.
-                audioQueue.sync(execute: work)
-            } else if sync {
-                audioQueue.sync(execute: work)
-            } else {
-                // Even without sync requested, we still need the device stopped
-                // before clearing state. Use sync to be safe.
-                audioQueue.sync(execute: work)
             }
         }
 
