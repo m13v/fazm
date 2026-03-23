@@ -131,6 +131,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusBarItem: NSStatusItem?
     private var toggleBarObserver: NSObjectProtocol?
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Crash-loop detection must run before ANY other init.
+        // If 3+ rapid crashes are detected, this will restore the previous version and terminate.
+        UpdateRollbackManager.checkForCrashLoop()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
         // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
@@ -397,6 +403,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Clean up old screenshots in the background
         Task.detached { ScreenCaptureManager.cleanupOldScreenshots() }
+
+        // Mark successful launch — resets the crash-loop counter.
+        // Must be at the END of applicationDidFinishLaunching so that crashes during
+        // any of the above init still count toward the crash-loop threshold.
+        UpdateRollbackManager.markSuccessfulLaunch()
+
+        // If we just rolled back from a bad update, show a notification and track analytics.
+        UpdateRollbackManager.handlePostRollbackIfNeeded()
 
         log("AppDelegate: applicationDidFinishLaunching completed")
     }
