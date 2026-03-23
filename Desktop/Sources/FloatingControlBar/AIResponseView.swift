@@ -292,6 +292,10 @@ struct AIResponseView: View {
                 connectClaudeButton
             }
 
+            if state.showUpgradeClaudeButton {
+                upgradeClaudeButton
+            }
+
             Spacer()
 
             ReportIssueButton(isHanging: isHanging)
@@ -329,6 +333,39 @@ struct AIResponseView: View {
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 connectClaudePulse = true
+            }
+        }
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    @State private var upgradePulse = false
+
+    private var upgradeClaudeButton: some View {
+        Button(action: {
+            if let url = URL(string: "https://claude.ai/upgrade") {
+                NSWorkspace.shared.open(url)
+            }
+            state.showUpgradeClaudeButton = false
+        }) {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.up.circle")
+                    .font(.system(size: 10))
+                Text("Upgrade Plan")
+                    .scaledFont(size: 11, weight: .medium)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(FazmColors.purplePrimary)
+                    .shadow(color: FazmColors.purplePrimary.opacity(upgradePulse ? 0.6 : 0.2), radius: upgradePulse ? 8 : 2)
+            )
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                upgradePulse = true
             }
         }
         .transition(.scale.combined(with: .opacity))
