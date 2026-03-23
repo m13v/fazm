@@ -11,16 +11,28 @@ struct PermissionsPage: View {
                 // Header
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .scaledFont(size: 28)
-                            .foregroundColor(FazmColors.warning)
+                        if appState.hasMissingPermissions {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .scaledFont(size: 28)
+                                .foregroundColor(FazmColors.warning)
 
-                        Text("Permissions Required")
-                            .scaledFont(size: 24, weight: .bold)
-                            .foregroundColor(FazmColors.textPrimary)
+                            Text("Permissions Required")
+                                .scaledFont(size: 24, weight: .bold)
+                                .foregroundColor(FazmColors.textPrimary)
+                        } else {
+                            Image(systemName: "checkmark.shield.fill")
+                                .scaledFont(size: 28)
+                                .foregroundColor(.green)
+
+                            Text("Permissions")
+                                .scaledFont(size: 24, weight: .bold)
+                                .foregroundColor(FazmColors.textPrimary)
+                        }
                     }
 
-                    Text("Fazm needs the following permissions to work properly.")
+                    Text(appState.hasMissingPermissions
+                        ? "Fazm needs the following permissions to work properly."
+                        : "All permissions are granted. Fazm is working properly.")
                         .scaledFont(size: 14)
                         .foregroundColor(FazmColors.textSecondary)
 
@@ -475,7 +487,7 @@ struct ScreenRecordingPermissionSection: View {
                         }
 
                         Text(appState.isScreenRecordingStale
-                            ? "Permission needs re-enabling after app update"
+                            ? "Permission expired or became stale — needs re-enabling"
                             : "Required for proactive monitoring and context awareness")
                             .scaledFont(size: 13)
                             .foregroundColor(appState.isScreenRecordingStale ? .red.opacity(0.8) : FazmColors.textTertiary)
