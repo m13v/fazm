@@ -135,6 +135,7 @@
     "Fixed Connect Claude button not responding in floating bar when credits run out",
     "Fixed Intel Mac support: skip Hindsight/PostgreSQL on x86_64, fix __dirname error in skills, improve Login Item error handling",
     "Fixed a crash caused by a race condition in audio capture during rapid PTT toggling",
-    "Fixed Fazm silently showing desktop instead of app windows when Screen Recording permission is missing \u2014 now shows a clear error and prompts to re-enable the permission"
+    "Fixed Fazm silently showing desktop instead of app windows when Screen Recording permission is missing \u2014 now shows a clear error and prompts to re-enable the permission",
+    "Improved rate limit messaging \u2014 shows upgrade option when hitting Claude usage limits"
   ]
 }
