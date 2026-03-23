@@ -170,6 +170,15 @@ actor ACPBridge {
   /// Whether the bridge subprocess is alive and ready
   var isAlive: Bool { isRunning }
 
+  deinit {
+    // Resume any pending continuation to prevent "SWIFT TASK CONTINUATION MISUSE" crash.
+    // In deinit, no other references exist so direct access is safe.
+    if let continuation = messageContinuation {
+      messageContinuation = nil
+      continuation.resume(throwing: BridgeError.stopped)
+    }
+  }
+
   // MARK: - Lifecycle
 
   /// Start the Node.js ACP bridge process
@@ -936,18 +945,35 @@ actor ACPBridge {
     messageGeneration &+= 1
     let expectedGeneration = messageGeneration
 
-    return try await withCheckedThrowingContinuation { continuation in
-      self.messageContinuation = continuation
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        self.messageContinuation = continuation
 
-      if let timeout = timeout {
-        Task {
-          try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-          if self.messageGeneration == expectedGeneration, self.messageContinuation != nil {
-            self.messageContinuation = nil
-            continuation.resume(throwing: BridgeError.timeout)
+        if let timeout = timeout {
+          Task {
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            if self.messageGeneration == expectedGeneration, self.messageContinuation != nil {
+              self.messageContinuation = nil
+              continuation.resume(throwing: BridgeError.timeout)
+            }
           }
         }
       }
+    } onCancel: {
+      // Resume the continuation when the calling Task is cancelled (e.g., view dismissed,
+      // ACPBridge deallocated while a query is in flight). Without this, the continuation
+      // leaks and Swift emits "SWIFT TASK CONTINUATION MISUSE: waitForMessage(timeout:)
+      // leaked its continuation" which corrupts memory and causes EXC_BAD_ACCESS crashes.
+      Task { await self.cancelPendingContinuation(generation: expectedGeneration) }
+    }
+  }
+
+  /// Resume and clear the pending continuation if it matches the expected generation.
+  /// Called from the cancellation handler to safely access actor-isolated state.
+  private func cancelPendingContinuation(generation: UInt64) {
+    if self.messageGeneration == generation, let continuation = self.messageContinuation {
+      self.messageContinuation = nil
+      continuation.resume(throwing: CancellationError())
     }
   }
 
