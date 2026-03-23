@@ -88,6 +88,29 @@ ClaudeAcpAgent.prototype.newSession = async function (params) {
         }
       }
 
+      // --- Forward rate_limit_event (dropped by ACP agent) ---
+      if (item.value?.type === "rate_limit_event") {
+        try {
+          const info = item.value.rate_limit_info ?? {};
+          await acpClient.sessionUpdate({
+            sessionId: sid,
+            update: {
+              sessionUpdate: "rate_limit",
+              status: info.status ?? "unknown",
+              resetsAt: info.resetsAt ?? null,
+              rateLimitType: info.rateLimitType ?? null,
+              utilization: info.utilization ?? null,
+              overageStatus: info.overageStatus ?? null,
+              overageDisabledReason: info.overageDisabledReason ?? null,
+              isUsingOverage: info.isUsingOverage ?? false,
+              surpassedThreshold: info.surpassedThreshold ?? null,
+            },
+          });
+        } catch (e) {
+          console.error(`[patched-acp] Forward rate_limit_event: ${e}`);
+        }
+      }
+
       // --- Forward dropped top-level messages ---
       try {
         if (item.value?.type === "tool_progress") {
