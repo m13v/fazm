@@ -1077,6 +1077,7 @@ class FloatingControlBarManager {
     private(set) var chatProvider: ChatProvider?
     private var workspaceObserver: Any?
     private var dequeueObserver: Any?
+    private weak var appState: AppState?
 
     /// PID of the last active app before Fazm. Used to capture that app's window for screenshots.
     private(set) var lastActiveAppPID: pid_t = 0
@@ -1127,7 +1128,15 @@ class FloatingControlBarManager {
         Task.detached { [weak self] in
             let url: URL?
             if targetPID != 0 {
-                url = ScreenCaptureManager.captureAppWindow(pid: targetPID)
+                switch ScreenCaptureManager.captureAppWindow(pid: targetPID) {
+                case .success(let capturedURL):
+                    url = capturedURL
+                case .permissionDenied:
+                    url = nil
+                    await MainActor.run {
+                        self?.flagScreenRecordingPermissionLost()
+                    }
+                }
             } else {
                 url = ScreenCaptureManager.captureScreen()
             }
@@ -1138,12 +1147,22 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Flag that Screen Recording permission is missing/stale so the user sees a prompt.
+    @MainActor
+    private func flagScreenRecordingPermissionLost() {
+        guard let appState = self.appState else { return }
+        guard !appState.isScreenRecordingStale else { return } // already flagged
+        log("FloatingControlBarManager: Screen Recording permission lost — flagging stale")
+        appState.isScreenRecordingStale = true
+    }
+
     /// Create the floating bar window and wire up AppState bindings.
     func setup(appState: AppState, chatProvider: ChatProvider) {
         guard window == nil else {
             log("FloatingControlBarManager: setup() called but window already exists")
             return
         }
+        self.appState = appState
         log("FloatingControlBarManager: setup() creating floating bar window")
 
         let barWindow = FloatingControlBarWindow(
@@ -1720,10 +1739,18 @@ class FloatingControlBarManager {
         if screenshotPath == nil {
             let targetPID = self.lastActiveAppPID
             screenshotPath = await Task.detached {
-                targetPID != 0
-                    ? ScreenCaptureManager.captureAppWindow(pid: targetPID)
-                    : ScreenCaptureManager.captureScreen()
+                if targetPID != 0 {
+                    switch ScreenCaptureManager.captureAppWindow(pid: targetPID) {
+                    case .success(let url): return url
+                    case .permissionDenied: return nil as URL?
+                    }
+                } else {
+                    return ScreenCaptureManager.captureScreen()
+                }
             }.value
+            if screenshotPath == nil && targetPID != 0 {
+                flagScreenRecordingPermissionLost()
+            }
         }
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotPath != nil, queryText: message)
