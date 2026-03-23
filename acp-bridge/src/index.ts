@@ -1779,7 +1779,8 @@ function handleSessionUpdate(
     }
 
     case "rate_limit": {
-      const status = (update.status as string) ?? "unknown";
+      const rawStatus = (update.status as string) ?? "unknown";
+      const status = (["allowed", "allowed_warning", "rejected"].includes(rawStatus) ? rawStatus : "unknown") as "allowed" | "allowed_warning" | "rejected" | "unknown";
       const resetsAt = (update.resetsAt as number) ?? null;
       const rateLimitType = (update.rateLimitType as string) ?? null;
       const utilization = (update.utilization as number) ?? null;
