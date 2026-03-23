@@ -85,7 +85,7 @@ struct AIResponseView: View {
                                     let scrollHeight = geo.frame(in: .named("chatScroll")).height
                                     // Consider "at bottom" if the anchor is within 60pt of the visible area bottom
                                     let atBottom = bottomY >= 0 && bottomY <= scrollHeight + 60
-                                    scrollLog.notice("[SCROLL] bottomY=\(Int(bottomY)) scrollH=\(Int(scrollHeight)) atBottom=\(atBottom) userScrolled=\(self.userHasScrolledUp)")
+                                    NSLog("[SCROLL] bottomY=%d scrollH=%d atBottom=%d userScrolled=%d", Int(bottomY), Int(scrollHeight), atBottom ? 1 : 0, userHasScrolledUp ? 1 : 0)
                                     if atBottom != isAtBottom {
                                         DispatchQueue.main.async {
                                             isAtBottom = atBottom
@@ -102,12 +102,12 @@ struct AIResponseView: View {
                 .coordinateSpace(name: "chatScroll")
                 .background {
                     ScrollWheelDetector {
-                        scrollLog.notice("[SCROLL] wheel detected UP — setting userHasScrolledUp=true")
+                        NSLog("[SCROLL] wheel detected UP — setting userHasScrolledUp=true")
                         userHasScrolledUp = true
                     }
                 }
                 .onChange(of: currentMessage?.text) {
-                    scrollLog.notice("[SCROLL] text changed — userScrolled=\(self.userHasScrolledUp) isAtBottom=\(self.isAtBottom)")
+                    NSLog("[SCROLL] text changed — userScrolled=%d isAtBottom=%d", userHasScrolledUp ? 1 : 0, isAtBottom ? 1 : 0)
                     if !userHasScrolledUp {
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("bottom", anchor: .bottom)
