@@ -1012,7 +1012,7 @@ async function flushObserverBatch(): Promise<void> {
   observerRunning = true;
   const batch = observerBuffer.splice(0);
   const batchText = batch.map(t => `[${t.role}]: ${t.text}`).join("\n\n");
-  const prompt = `Here are the latest conversation turns from the main session:\n\n${batchText}\n\nAnalyze these turns. Be conservative — only save things that are genuinely significant and useful for future conversations. Skip routine queries, transient context, and near-duplicates of things already saved. Always recall first to check what's already known. Use Hindsight retain for each truly new and important observation. If you detect a repeated workflow (3+ times), draft a skill.`;
+  const prompt = `Here are the latest conversation turns from the main session:\n\n${batchText}\n\nAnalyze these turns. Be conservative — only save things that are genuinely significant and useful for future conversations. Skip routine queries, transient context, and near-duplicates of things already saved. Each observation in this batch must cover a distinct topic — no overlapping or closely related saves. Always recall first to check what's already known. Use Hindsight retain for each truly new and important observation. If you detect a repeated workflow (3+ times), draft a skill.`;
 
   // Register a per-session notification handler so observer notifications
   // don't get swallowed by the main query's handler or vice versa.
