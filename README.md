@@ -10,7 +10,7 @@ The fastest AI computer agent. Controls your browser, writes code, handles docum
 
 ### How Fazm Works
 
-https://github.com/user-attachments/assets/54fd52d2-c748-40ec-968b-eb0cd4b03d6c
+https://github.com/user-attachments/assets/42478070-9c32-48cc-b18a-61c646c6b6bd
 
 ### Smart Connections
 Automatically find and connect with the right people across platforms.
