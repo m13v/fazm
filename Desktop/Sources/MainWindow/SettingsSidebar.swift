@@ -69,6 +69,7 @@ struct SettingsSidebar: View {
     @Binding var selectedSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
     @Binding var highlightedSettingId: String?
+    @ObservedObject var appState: AppState
 
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
     @State private var searchQuery = ""
@@ -118,6 +119,7 @@ struct SettingsSidebar: View {
                                 section: section,
                                 isSelected: selectedSection == section,
                                 iconWidth: iconWidth,
+                                showWarning: section == .permissions && appState.hasMissingPermissions,
                                 onTap: {
                                     withAnimation(.easeInOut(duration: 0.15)) {
                                         selectedSection = section
@@ -287,6 +289,7 @@ struct SettingsSidebarItem: View {
     let section: SettingsContentView.SettingsSection
     let isSelected: Bool
     let iconWidth: CGFloat
+    var showWarning: Bool = false
     let onTap: () -> Void
 
     @State private var isHovered = false
@@ -296,6 +299,7 @@ struct SettingsSidebarItem: View {
         case .home: return "house"
         case .general: return "gearshape"
         case .shortcuts: return "keyboard"
+        case .permissions: return "lock.shield"
         case .dictionary: return "character.book.closed"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"
