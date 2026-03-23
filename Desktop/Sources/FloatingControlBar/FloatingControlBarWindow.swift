@@ -1280,6 +1280,7 @@ class FloatingControlBarManager {
                 state.displayedQuery = text
                 state.isAILoading = true
                 state.currentAIMessage = nil
+                state.showUpgradeClaudeButton = false
             }
         }
 
@@ -1851,6 +1852,14 @@ class FloatingControlBarManager {
         } else if let errorText = provider.errorMessage {
             // Provider reported an error (timeout, bridge crash, etc.)
             // Show it even if there's partial content — append to existing or create new message
+            let isRateLimit = errorText.contains("usage limit") || errorText.contains("rate limit")
+            let isPersonalMode = provider.bridgeMode == "personal"
+
+            // Show upgrade button for personal mode rate limits
+            if isRateLimit && isPersonalMode {
+                barWindow.state.showUpgradeClaudeButton = true
+            }
+
             let hasContent = !barWindow.state.aiResponseText.isEmpty || !(barWindow.state.currentAIMessage?.contentBlocks.isEmpty ?? true)
             if barWindow.state.currentAIMessage != nil && hasContent {
                 barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
