@@ -807,8 +807,7 @@ class ChatProvider: ObservableObject {
         // Ensure API keys are fetched before checking availability
         await KeyService.shared.ensureKeys()
 
-        // Always set up Vertex token manager — Hindsight Memory MCP needs ADC
-        // credentials for Gemini Pro via Vertex AI, regardless of chat mode.
+        // Set up Vertex token manager for Gemini API access.
         if vertexTokenManager == nil {
             let vtm = VertexTokenManager()
             if await vtm.isConfigured {
@@ -3043,13 +3042,6 @@ class ChatProvider: ObservableObject {
                 return
             }
 
-            // Roll back insight cards: delete the matching memory from Hindsight
-            if type == "insight" {
-                if let body = parsed["body"] as? String {
-                    await rollbackHindsightMemory(bodyText: body)
-                }
-            }
-
             // Roll back pending SQL operations if rollback_operations are provided
             if let rollbackOps = parsed["rollback_operations"] as? [[String: Any]] {
                 for op in rollbackOps {
@@ -3067,82 +3059,6 @@ class ChatProvider: ObservableObject {
             log("ChatProvider: Rolled back observer operations for id=\(activityId)")
         } catch {
             log("ChatProvider: Failed to rollback observer operations: \(error)")
-        }
-    }
-
-    /// Delete the Hindsight memory that matches the observer card body text
-    private func rollbackHindsightMemory(bodyText: String) async {
-        // Search Hindsight for the memory that matches this card's body
-        let hindsightPort = 18888
-        guard let searchUrl = URL(string: "http://127.0.0.1:\(hindsightPort)/mcp/default/") else { return }
-
-        // Search for matching memories using list_memories with the body text as query
-        var searchRequest = URLRequest(url: searchUrl)
-        searchRequest.httpMethod = "POST"
-        searchRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Strip "Saved: " prefix if present for better search matching
-        let searchQuery = bodyText.hasPrefix("Saved: ") ? String(bodyText.dropFirst(7)) : bodyText
-        let searchBody: [String: Any] = [
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": [
-                "name": "list_memories",
-                "arguments": ["q": searchQuery, "limit": 5]
-            ]
-        ]
-        searchRequest.httpBody = try? JSONSerialization.data(withJSONObject: searchBody)
-
-        do {
-            let (data, _) = try await URLSession.shared.data(for: searchRequest)
-            // Parse SSE response — Hindsight returns "event: message\ndata: {...}\n\n"
-            guard let responseStr = String(data: data, encoding: .utf8) else {
-                log("ChatProvider: Hindsight rollback — empty response")
-                return
-            }
-            // Extract JSON from SSE data line
-            let jsonStr: String
-            if let dataRange = responseStr.range(of: "data: ") {
-                jsonStr = String(responseStr[dataRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            } else {
-                jsonStr = responseStr
-            }
-            guard let jsonData = jsonStr.data(using: .utf8),
-                  let response = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                  let result = response["result"] as? [String: Any],
-                  let content = result["content"] as? [[String: Any]],
-                  let textContent = content.first(where: { ($0["type"] as? String) == "text" }),
-                  let text = textContent["text"] as? String,
-                  let memoriesData = text.data(using: .utf8),
-                  let memoriesResponse = try? JSONSerialization.jsonObject(with: memoriesData) as? [String: Any],
-                  let memories = memoriesResponse["memories"] as? [[String: Any]],
-                  let firstMemory = memories.first,
-                  let memoryId = firstMemory["id"] as? String else {
-                log("ChatProvider: Hindsight rollback — no matching memory found for: \(searchQuery.prefix(100))")
-                return
-            }
-
-            // Delete the matching memory
-            var deleteRequest = URLRequest(url: searchUrl)
-            deleteRequest.httpMethod = "POST"
-            deleteRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            let deleteBody: [String: Any] = [
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": [
-                    "name": "delete_memory",
-                    "arguments": ["memory_id": memoryId]
-                ]
-            ]
-            deleteRequest.httpBody = try? JSONSerialization.data(withJSONObject: deleteBody)
-
-            let (_, deleteResponse) = try await URLSession.shared.data(for: deleteRequest)
-            let statusCode = (deleteResponse as? HTTPURLResponse)?.statusCode ?? 0
-            log("ChatProvider: Hindsight rollback — deleted memory \(memoryId) (status=\(statusCode))")
-        } catch {
-            log("ChatProvider: Hindsight rollback failed: \(error)")
         }
     }
 
