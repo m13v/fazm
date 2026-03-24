@@ -597,6 +597,33 @@ async function handleJsonRpc(
 
         // Observer mode: intercept all writes
         if (isObserver && isWriteQuery) {
+          // Block writes to non-existent tables (e.g. hallucinated "hindsight_retains"
+          // when Hindsight MCP is unavailable and the LLM falls back to execute_sql)
+          const tableMatch = normalized.match(/INSERT\s+INTO\s+(\w+)/i) ||
+                             normalized.match(/UPDATE\s+(\w+)/i);
+          if (tableMatch) {
+            const KNOWN_TABLES = new Set([
+              "observer_activity", "ai_user_profiles", "chat_messages",
+              "indexed_files", "local_kg_nodes", "local_kg_edges", "grdb_migrations",
+            ]);
+            const targetTable = tableMatch[1].toLowerCase();
+            if (!KNOWN_TABLES.has(targetTable)) {
+              if (!isNotification) {
+                send({
+                  jsonrpc: "2.0",
+                  id,
+                  result: {
+                    content: [{
+                      type: "text",
+                      text: `Blocked: table "${targetTable}" does not exist in the app database. To save observations, use the Hindsight retain tool or save_observer_card tool instead — do NOT write raw SQL.`,
+                    }],
+                  },
+                });
+              }
+              return;
+            }
+          }
+
           const isObserverActivityWrite = normalized.includes("OBSERVER_ACTIVITY");
           if (isObserverActivityWrite) {
             // Observer card INSERT — re-encode safely via hex to prevent SQL injection
