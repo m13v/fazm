@@ -853,6 +853,9 @@ class ChatProvider: ObservableObject {
                         self?.oauthAutoReopenTask?.cancel()
                         self?.isClaudeAuthRequired = false
                         self?.claudeAuthTimedOut = false
+                        self?.claudeAuthFailed = false
+                        self?.claudeAuthFailedReason = nil
+                        self?.claudeAuthRetryCooldownEnd = nil
                         self?.isClaudeConnected = true
                         // Retry any query that was interrupted by the auth flow
                         self?.retryPendingMessage()
@@ -1017,6 +1020,9 @@ class ChatProvider: ObservableObject {
     func retryClaudeAuth() {
         log("ChatProvider: Retrying Claude OAuth")
         claudeAuthTimedOut = false
+        claudeAuthFailed = false
+        claudeAuthFailedReason = nil
+        claudeAuthRetryCooldownEnd = nil
         isClaudeAuthRequired = false
         acpBridgeStarted = false
         Task {
