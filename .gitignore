@@ -104,3 +104,4 @@ demo/out/
 # CLAUDE.md is tracked (public, no secrets)
 thread*.md
 Desktop/bin/
+.vercel
