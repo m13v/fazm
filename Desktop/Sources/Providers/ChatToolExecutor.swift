@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 import GRDB
 
@@ -129,6 +130,9 @@ class ChatToolExecutor {
             let count = names?.count ?? SkillInstaller.bundledSkillNames.count
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "install_skills", properties: ["requested_count": count])
             return result
+
+        case "speak_response":
+            return await executeSpeakResponse(toolCall.arguments)
 
         case "save_knowledge_graph":
             let result = await executeSaveKnowledgeGraph(toolCall.arguments)
@@ -1200,5 +1204,57 @@ class ChatToolExecutor {
         }
         log("capture_screenshot tool: returning \(data.count) bytes as base64")
         return data.base64EncodedString()
+    }
+
+    // MARK: - Voice Response (TTS)
+
+    /// Shared audio player for TTS playback (kept alive to prevent dealloc during playback)
+    private static var ttsAudioPlayer: AVAudioPlayer?
+
+    /// Speak text aloud using Deepgram Aura TTS
+    private static func executeSpeakResponse(_ args: [String: Any]) async -> String {
+        guard let text = args["text"] as? String, !text.isEmpty else {
+            return "Error: missing 'text' parameter"
+        }
+
+        log("speak_response: synthesizing \(text.count) chars")
+
+        do {
+            let apiKey = try await TranscriptionService.resolveDeepgramKey()
+
+            var components = URLComponents(string: "https://api.deepgram.com/v1/speak")!
+            components.queryItems = [
+                URLQueryItem(name: "model", value: "aura-luna-en"),
+            ]
+
+            var request = URLRequest(url: components.url!)
+            request.httpMethod = "POST"
+            request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+
+            // Deepgram speak API expects JSON body with text field, but Content-Type text/plain
+            let body = try JSONSerialization.data(withJSONObject: ["text": text])
+            request.httpBody = body
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
+                log("speak_response: Deepgram API error \(statusCode): \(errorBody)")
+                return "Error: Deepgram TTS failed with status \(statusCode)"
+            }
+
+            log("speak_response: received \(data.count) bytes of audio, playing...")
+
+            let player = try AVAudioPlayer(data: data)
+            ttsAudioPlayer = player
+            player.play()
+
+            return "OK: speaking \(text.count) chars"
+        } catch {
+            log("speak_response: error: \(error)")
+            return "Error: \(error.localizedDescription)"
+        }
     }
 }
