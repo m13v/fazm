@@ -301,6 +301,7 @@ struct SettingsSidebarItem: View {
     private var icon: String {
         switch section {
         case .home: return "house"
+        case .discoveredTasks: return "wand.and.stars"
         case .general: return "gearshape"
         case .shortcuts: return "keyboard"
         case .permissions: return "lock.shield"
