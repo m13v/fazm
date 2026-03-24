@@ -615,7 +615,7 @@ async function handleJsonRpc(
                   result: {
                     content: [{
                       type: "text",
-                      text: `Blocked: table "${targetTable}" does not exist in the app database. To save observations, use the save_memory tool or save_observer_card tool instead — do NOT write raw SQL.`,
+                      text: `Blocked: table "${targetTable}" does not exist in the app database. To save observations, use your file tools to write memory files or use save_observer_card instead — do NOT write raw SQL.`,
                     }],
                   },
                 });
