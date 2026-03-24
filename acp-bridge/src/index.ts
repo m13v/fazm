@@ -133,60 +133,82 @@ async function startHindsight(): Promise<boolean> {
   const pg0DataDir = join(home, ".pg0", "instances", "fazm");
   try { mkdirSync(pg0DataDir, { recursive: true }); } catch {}
 
-  // Wrap pg0's postgres/initdb binaries so they find our bundled OpenSSL dylibs.
-  // The pg0 Rust binary strips DYLD_* env vars when spawning child processes,
-  // so we rename the real binaries and replace them with shell wrappers that
-  // set DYLD_LIBRARY_PATH before exec'ing the original.
+  // pg0's extracted postgres/initdb binaries link to /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib
+  // which doesn't exist on clean Macs without Homebrew. We copy our bundled OpenSSL dylibs to
+  // that exact path so the hardcoded references resolve without modifying the binaries.
+  // (DYLD_LIBRARY_PATH wrapper approach causes SIGKILL on macOS Tahoe due to code signing enforcement.)
   const frameworksDir = join(
     dirname(process.execPath), "..", "..", "Frameworks"
   );
-  const pg0Binary = join(hindsightDir, ".venv", "lib", "python3.12", "site-packages", "pg0", "bin", "pg0");
-  const pg0Base = join(home, ".pg0", "installation");
+  const opensslTargetDir = "/opt/homebrew/opt/openssl@3/lib";
+  const bundledSsl = join(frameworksDir, "libssl.3.dylib");
+  const bundledCrypto = join(frameworksDir, "libcrypto.3.dylib");
+  const targetSsl = join(opensslTargetDir, "libssl.3.dylib");
+  const targetCrypto = join(opensslTargetDir, "libcrypto.3.dylib");
 
-  // On first launch, pg0 hasn't downloaded PostgreSQL yet. Trigger a start attempt
-  // which downloads postgres (it will fail due to missing OpenSSL, but the binaries
-  // will be in place for us to wrap).
-  if (!existsSync(pg0Base) && existsSync(pg0Binary)) {
+  if (existsSync(bundledSsl) && existsSync(bundledCrypto) && !existsSync(targetSsl)) {
+    // The shell command to create the directory and copy dylibs
+    const copyCmd = `mkdir -p "${opensslTargetDir}" && cp "${bundledSsl}" "${targetSsl}" && cp "${bundledCrypto}" "${targetCrypto}"`;
     try {
-      logErr("Hindsight: pre-downloading PostgreSQL via pg0...");
-      execSync(`"${pg0Binary}" start --name _download 2>&1`, { timeout: 120000 });
+      // Try without privileges first (works if /opt/homebrew exists and is user-owned)
+      execSync(copyCmd, { timeout: 10000, stdio: "pipe" });
+      logErr(`Hindsight: copied bundled OpenSSL dylibs to ${opensslTargetDir}`);
     } catch {
-      // Expected to fail (OpenSSL missing), but postgres binaries are now downloaded
-      logErr("Hindsight: PostgreSQL binaries downloaded (start failed as expected, will wrap)");
+      // Need admin privileges — use osascript to show macOS auth dialog
+      try {
+        // Write command to temp script to avoid quoting issues with osascript
+        const tmpScript = join(tmpdir(), "fazm-openssl-setup.sh");
+        writeFileSync(tmpScript, `#!/bin/bash\n${copyCmd}\n`, { mode: 0o755 });
+        execSync(`osascript -e 'do shell script "${tmpScript}" with administrator privileges'`, { timeout: 60000, stdio: "pipe" });
+        logErr(`Hindsight: copied bundled OpenSSL dylibs to ${opensslTargetDir} (with admin privileges)`);
+        try { unlinkSync(tmpScript); } catch {}
+      } catch (e) {
+        logErr(`Hindsight: could not copy OpenSSL to ${opensslTargetDir} (user may have denied admin prompt): ${e}`);
+      }
     }
-    // Clean up the failed instance
-    try { execSync(`"${pg0Binary}" drop --name _download --force 2>&1`, { timeout: 10000 }); } catch {}
   }
 
+  // Unwrap any previously-wrapped pg0 binaries (from the old DYLD_LIBRARY_PATH approach).
+  // Restore the original binary from .real if a wrapper script was in place.
+  const pg0Base = join(home, ".pg0", "installation");
   try {
     if (existsSync(pg0Base)) {
       for (const ver of readdirSync(pg0Base)) {
         const pg0Bin = join(pg0Base, ver, "bin");
         if (!existsSync(pg0Bin)) continue;
-        for (const bin of ["postgres", "initdb"]) {
+        for (const bin of ["postgres", "initdb", "psql", "pg_dump"]) {
           const orig = join(pg0Bin, bin);
           const real = join(pg0Bin, `${bin}.real`);
-          try {
-            if (!existsSync(real) && existsSync(orig)) {
-              // First wrap: move original binary to .real
-              copyFileSync(orig, real);
-              chmodSync(real, 0o755);
+          if (existsSync(real)) {
+            try {
+              copyFileSync(real, orig);
+              chmodSync(orig, 0o755);
+              logErr(`Hindsight: unwrapped ${bin} (restored original binary)`);
+            } catch (e) {
+              logErr(`Hindsight: failed to unwrap ${bin}: ${e}`);
             }
-            if (!existsSync(real)) continue;
-            // Always rewrite wrapper with current Frameworks path
-            // (path changes when app is updated, moved, or dev/prod switches)
-            const wrapper = `#!/bin/bash\nexport DYLD_LIBRARY_PATH="${frameworksDir}:\${DYLD_LIBRARY_PATH:-}"\nexec "$(dirname "$0")/${bin}.real" "$@"\n`;
-            writeFileSync(orig, wrapper, { mode: 0o755 });
-            logErr(`Hindsight: wrapped ${bin} for OpenSSL dylib resolution`);
-          } catch (e) {
-            logErr(`Hindsight: failed to wrap ${bin}: ${e}`);
           }
         }
       }
     }
   } catch (e) {
-    logErr(`Hindsight: failed to set up pg0 wrappers: ${e}`);
+    logErr(`Hindsight: failed to unwrap pg0 binaries: ${e}`);
   }
+
+  const pg0Binary = join(hindsightDir, ".venv", "lib", "python3.12", "site-packages", "pg0", "bin", "pg0");
+  // On first launch, pg0 hasn't downloaded PostgreSQL yet. Trigger a start attempt
+  // which downloads postgres binaries.
+  if (!existsSync(pg0Base) && existsSync(pg0Binary)) {
+    try {
+      logErr("Hindsight: pre-downloading PostgreSQL via pg0...");
+      execSync(`"${pg0Binary}" start --name _download 2>&1`, { timeout: 120000 });
+    } catch {
+      logErr("Hindsight: PostgreSQL binaries downloaded (start may have failed, continuing)");
+    }
+    // Clean up the attempt
+    try { execSync(`"${pg0Binary}" drop --name _download --force 2>&1`, { timeout: 10000 }); } catch {}
+  }
+
   const hindsightEnv: Record<string, string> = {
     PATH: process.env.PATH || "/usr/bin:/bin",
     HOME: home,
@@ -197,9 +219,6 @@ async function startHindsight(): Promise<boolean> {
     // The stdlib IS bundled at .venv/lib/python3.12/ (rsync'd during build), so
     // PYTHONHOME tells Python to find it there.
     PYTHONHOME: join(hindsightDir, ".venv"),
-    // pg0's extracted postgres binary links to /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib
-    // which doesn't exist on clean Macs — DYLD_LIBRARY_PATH makes dyld find our bundled copies
-    DYLD_LIBRARY_PATH: frameworksDir,
     HINDSIGHT_API_LLM_PROVIDER: "gemini",
     HINDSIGHT_API_LLM_MODEL: "gemini-pro-latest",
     HINDSIGHT_API_LLM_API_KEY: geminiApiKey,
