@@ -692,6 +692,10 @@ class AuthService: NSObject {
         var properties: [String: Any] = ["firebase_uid": userId]
         if let email = userEmail { properties["email"] = email }
         if !displayName.isEmpty { properties["name"] = displayName }
+        if let creationDate = Auth.auth().currentUser?.metadata.creationDate {
+            let formatter = ISO8601DateFormatter()
+            properties["created_at"] = formatter.string(from: creationDate)
+        }
         log("AuthService: setPostHogUserContext — userId=\(userId), email=\(userEmail ?? "nil")")
         PostHogManager.shared.identifyAuthUser(userId: userId, properties: properties)
     }
