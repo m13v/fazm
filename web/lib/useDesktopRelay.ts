@@ -52,7 +52,7 @@ export function useDesktopRelay(token: string | null): RelayHook {
       }
 
       // Connect WebSocket to tunnel
-      const wsUrl = tunnel_url.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`;
+      const wsUrl = tunnel_url.replace(/^http/, "ws");
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
