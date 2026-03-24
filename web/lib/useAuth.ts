@@ -11,7 +11,9 @@ export function useAuth() {
   useEffect(() => {
     const auth = getFirebaseAuth();
     // Handle redirect result (from mobile sign-in flow)
-    getRedirectResult(auth).catch(() => {});
+    getRedirectResult(auth).then((result) => {
+      if (result) console.log("Redirect sign-in success:", result.user?.email);
+    }).catch((err) => console.error("Redirect sign-in error:", err));
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
