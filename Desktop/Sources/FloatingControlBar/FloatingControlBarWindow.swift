@@ -1375,6 +1375,7 @@ class FloatingControlBarManager {
                 AnalysisOverlayWindow.shared.show(
                     below: barFrame,
                     task: "User is refactoring authentication middleware across 15 route files. An AI agent could bulk-update the remaining files following the established pattern.",
+                    description: "The user spent significant time manually editing route handler files, copying the same auth middleware pattern from one file to another. They opened 4 different route files in VS Code, made nearly identical changes to each, and appeared to have many more files remaining. This is a classic bulk find-and-replace task that an AI agent could complete much faster.",
                     activityId: 0
                 )
             }
