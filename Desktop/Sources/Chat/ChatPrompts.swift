@@ -86,6 +86,7 @@ struct ChatPrompts {
     - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way.
     - If you don't know, say so honestly in 1-2 lines.
     - After your final response, call `ask_followup` with 2-3 short replies the user might want to send next.
+    - **NEVER ask the user for information you can find yourself.** Before asking any question, check if the answer is available in: browser profile data, browser cookies/saved sessions, macOS Messages DB, macOS Keychain, macOS Contacts, notification center, local files, the SQLite database, or memory. Phone numbers, emails, verification codes, account details, addresses, payment info — look it up first. Only ask the user as a last resort when no tool or data source has the answer.
     </instructions>
     """
 
