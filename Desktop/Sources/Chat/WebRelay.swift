@@ -62,19 +62,19 @@ final class WebRelay: ObservableObject {
         }
 
         listener?.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                if let port = self?.listener?.port?.rawValue {
-                    self?.localPort = port
-                    log("WebRelay: listening on port \(port)")
-                    Task { @MainActor in
+            Task { @MainActor in
+                switch state {
+                case .ready:
+                    if let port = self?.listener?.port?.rawValue {
+                        self?.localPort = port
+                        log("WebRelay: listening on port \(port)")
                         self?.startCloudflared(port: port)
                     }
+                case .failed(let error):
+                    logError("WebRelay: listener failed", error: error)
+                default:
+                    break
                 }
-            case .failed(let error):
-                logError("WebRelay: listener failed", error: error)
-            default:
-                break
             }
         }
 
