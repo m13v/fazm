@@ -26,37 +26,6 @@ class ChatToolExecutor {
 
     private static var fileScanFileCount = 0
 
-    // MARK: - Bundled Python
-
-    /// Path to the bundled Python 3.12 binary (standalone venv in app bundle).
-    /// Used by browser profile tools so they don't depend on system Python or npx.
-    private static var bundledPython: String? = {
-        guard let resourceURL = Bundle.main.resourceURL else { return nil }
-        let python = resourceURL
-            .appendingPathComponent("python-venv")
-            .appendingPathComponent("bin")
-            .appendingPathComponent("python3")
-            .path
-        return FileManager.default.fileExists(atPath: python) ? python : nil
-    }()
-
-    /// Path to the bundled Python venv root (PYTHONHOME).
-    /// python-build-standalone binaries have a hardcoded prefix (/install/lib/python3.12)
-    /// that doesn't exist on user machines. Setting PYTHONHOME overrides this so Python
-    /// finds its stdlib at $PYTHONHOME/lib/python3.12 inside the app bundle.
-    private static var bundledPythonHome: String? = {
-        guard let resourceURL = Bundle.main.resourceURL else { return nil }
-        let venv = resourceURL
-            .appendingPathComponent("python-venv")
-            .path
-        return FileManager.default.fileExists(atPath: venv) ? venv : nil
-    }()
-
-    /// Path to the bundled ai-browser-profile directory in app Resources.
-    private static var bundledBrowserProfileDir: URL? = {
-        return Bundle.main.resourceURL?.appendingPathComponent("ai-browser-profile")
-    }()
-
     /// Execute a tool call and return the result as a string
     static func execute(_ toolCall: ToolCall) async -> String {
         log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
@@ -558,23 +527,7 @@ class ChatToolExecutor {
     /// Delete or update a specific memory in the browser profile database.
     private static func executeEditBrowserProfile(_ args: [String: Any]) async -> String {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let aiBrowserProfileDir = homeDir.appendingPathComponent("ai-browser-profile")
-        let dbPath = aiBrowserProfileDir.appendingPathComponent("memories.db").path
-
-        // Resolve Python — prefer bundled, fall back to user-installed
-        let python: String
-        let pythonPath: String?
-        if let bundledPy = bundledPython, let bundledDir = bundledBrowserProfileDir {
-            python = bundledPy
-            pythonPath = bundledDir.path
-        } else {
-            let userPython = aiBrowserProfileDir.appendingPathComponent(".venv/bin/python").path
-            guard FileManager.default.fileExists(atPath: userPython) else {
-                return "Browser profile not available."
-            }
-            python = userPython
-            pythonPath = nil
-        }
+        let dbPath = homeDir.appendingPathComponent("ai-browser-profile/memories.db").path
 
         guard FileManager.default.fileExists(atPath: dbPath) else {
             return "Browser profile not available."
@@ -583,85 +536,22 @@ class ChatToolExecutor {
         let action = args["action"] as? String ?? "delete"
         let query = args["query"] as? String ?? ""
         let newValue = args["new_value"] as? String ?? ""
-        let queryLiteral = pythonStringLiteral(query)
-        let newValueLiteral = pythonStringLiteral(newValue)
-        let dbPathLiteral = pythonStringLiteral(dbPath)
-
-        let script: String
-        if action == "delete" {
-            script = """
-                import logging
-                logging.disable(logging.CRITICAL)
-                from ai_browser_profile import MemoryDB
-                mem = MemoryDB(\(dbPathLiteral), defer_embeddings=True)
-                q = \(queryLiteral).lower()
-                rows = mem.conn.execute("SELECT id, key, value FROM memories WHERE lower(value) LIKE ? OR lower(key) LIKE ?", (f'%{q}%', f'%{q}%')).fetchall()
-                if not rows:
-                    print(f"No memories found matching: \(queryLiteral)")
-                else:
-                    for row in rows:
-                        mem.delete(row[0])
-                        print(f"Deleted: {row[1]}: {row[2]}")
-                mem.close()
-                """
-        } else {
-            script = """
-                import logging
-                logging.disable(logging.CRITICAL)
-                from ai_browser_profile import MemoryDB
-                mem = MemoryDB(\(dbPathLiteral), defer_embeddings=True)
-                q = \(queryLiteral).lower()
-                rows = mem.conn.execute("SELECT id, key, value FROM memories WHERE lower(value) LIKE ? OR lower(key) LIKE ?", (f'%{q}%', f'%{q}%')).fetchall()
-                if not rows:
-                    print(f"No memories found matching: \(queryLiteral)")
-                else:
-                    for row in rows:
-                        mem.update_memory(row[0], value=\(newValueLiteral))
-                        print(f"Updated: {row[1]}: {row[2]} -> \(newValueLiteral)")
-                mem.close()
-                """
-        }
-
-        let pythonHome = bundledPythonHome
 
         return await Task.detached(priority: .userInitiated) { () -> String in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: python)
-            process.arguments = ["-c", script]
-            process.currentDirectoryURL = aiBrowserProfileDir
-
-            // Set PYTHONPATH for bundled module
-            var env = ProcessInfo.processInfo.environment
-            if let pp = pythonPath {
-                let existing = env["PYTHONPATH"] ?? ""
-                env["PYTHONPATH"] = existing.isEmpty ? pp : "\(pp):\(existing)"
-                if let ph = pythonHome {
-                    env["PYTHONHOME"] = ph
-                }
-            } else {
-                env["PYTHONPATH"] = aiBrowserProfileDir.path
-            }
-            process.environment = env
-
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
             do {
-                try process.run()
-                process.waitUntilExit()
-                let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Done."
+                let db = try ProfileDatabase(path: dbPath)
+
+                if action == "delete" {
+                    let results = db.delete(matching: query)
+                    return results.isEmpty ? "No memories found matching: \(query)" : results.joined(separator: "\n")
+                } else {
+                    let results = db.update(matching: query, newValue: newValue)
+                    return results.isEmpty ? "No memories found matching: \(query)" : results.joined(separator: "\n")
+                }
             } catch {
                 return "Failed to edit browser profile: \(error.localizedDescription)"
             }
         }.value
-    }
-
-    private static func pythonStringLiteral(_ s: String) -> String {
-        let escaped = s.replacingOccurrences(of: "\\", with: "\\\\")
-                       .replacingOccurrences(of: "\"", with: "\\\"")
-        return "\"\(escaped)\""
     }
 
     /// Get file scan results from the database
