@@ -1362,6 +1362,24 @@ class FloatingControlBarManager {
             }
         }
 
+        // Debug: test the Gemini analysis overlay
+        // Trigger: xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testAnalysisOverlay"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.fazm.testAnalysisOverlay"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let barFrame = self.barWindowFrame else { return }
+                log("FloatingControlBarManager: Test analysis overlay triggered")
+                AnalysisOverlayWindow.shared.show(
+                    below: barFrame,
+                    task: "User is refactoring authentication middleware across 15 route files. An AI agent could bulk-update the remaining files following the established pattern.",
+                    activityId: 0
+                )
+            }
+        }
+
     }
 
     /// Whether the floating bar window is currently visible.
