@@ -2246,6 +2246,9 @@ class ChatProvider: ObservableObject {
                 messages[index].isStreaming = false
                 completeRemainingToolCalls(messageId: aiMessageId)
 
+                // Forward final result to phone
+                webRelay.sendToPhone(["type": "result", "text": messageText])
+
                 // Yield the main actor so the Combine $messages sink (scheduled
                 // via .receive(on: .main)) fires now, updating the UI to remove
                 // the typing indicator immediately rather than waiting for the
