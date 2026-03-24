@@ -151,13 +151,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     // Collapsed mode (half-height, semi-transparent, shown when clicking away)
     @Published var isCollapsed: Bool = false
 
-    // Smart TV visibility — hidden during input, shown after query is sent, hidden by user "hide TV" button
-    @Published var smartTVVisible: Bool = false
-    /// True when the user explicitly hid the TV via the hide button (suppresses auto-show until next query)
-    var smartTVHiddenByUser: Bool = false
-    /// True when the Smart TV video is muted
-    @Published var smartTVMuted: Bool = true
-
     // Send button hint (pulsating animation during tutorial)
     @Published var showSendButtonHint: Bool = false
 
