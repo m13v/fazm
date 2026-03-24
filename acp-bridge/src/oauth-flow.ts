@@ -30,6 +30,18 @@ const SCOPES = "user:inference";
 const KEYCHAIN_SERVICE = "Claude Code-credentials";
 const TOKEN_EXPIRY_SECONDS = 31536000; // 1 year
 
+// --- Error Types ---
+
+/** Thrown when the token endpoint rejects the exchange (e.g. 403 forbidden) */
+export class OAuthTokenExchangeError extends Error {
+  readonly httpStatus: number;
+  constructor(httpStatus: number, body: string) {
+    super(`Token exchange failed (${httpStatus}): ${body}`);
+    this.name = "OAuthTokenExchangeError";
+    this.httpStatus = httpStatus;
+  }
+}
+
 // --- PKCE Helpers ---
 
 function base64url(buf: Buffer): string {
@@ -287,7 +299,7 @@ async function exchangeCodeForToken(
           } else if (res.statusCode === 401) {
             reject(new Error("Authentication failed: Invalid authorization code"));
           } else {
-            reject(new Error(`Token exchange failed (${res.statusCode}): ${responseBody}`));
+            reject(new OAuthTokenExchangeError(res.statusCode!, responseBody));
           }
         });
       }
