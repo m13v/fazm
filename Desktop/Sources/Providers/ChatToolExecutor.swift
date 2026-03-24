@@ -1269,7 +1269,7 @@ class ChatToolExecutor {
     // MARK: - Knowledge Graph → Hindsight
 
     /// Convert KG nodes and edges to a natural language description
-    static func formatKGAsText(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) -> String {
+    nonisolated static func formatKGAsText(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) -> String {
         var nodeLabels: [String: (label: String, type: String)] = [:]
         for node in nodes {
             nodeLabels[node.nodeId] = (node.label, node.nodeType)
@@ -1296,8 +1296,7 @@ class ChatToolExecutor {
     }
 
     /// Best-effort retain KG data to Hindsight via MCP endpoint
-    @MainActor
-    static func retainKGToHindsight(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async {
+    nonisolated static func retainKGToHindsight(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async {
         guard !nodes.isEmpty else { return }
 
         let text = formatKGAsText(nodes: nodes, edges: edges)
