@@ -486,215 +486,26 @@ class ChatToolExecutor {
 
     // MARK: - Browser Profile Extraction
 
-    /// Extract user browser profile using the ai-browser-profile Python package.
-    /// Runs the fast extraction steps (autofill, history, bookmarks, logins, Notion) + cleanup,
-    /// then returns the interim profile. WhatsApp contacts and embeddings continue in the background.
+    /// Extract user browser profile using native Swift AutofillExtractor.
+    /// Reads autofill, history, bookmarks, and logins directly from browser SQLite/JSON files,
+    /// stores in ~/ai-browser-profile/memories.db, returns the profile text.
     private static func executeExtractBrowserProfile(_ args: [String: Any]) async -> String {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let aiBrowserProfileDir = homeDir.appendingPathComponent("ai-browser-profile")
-
-        // Resolve Python and extract script — prefer bundled, fall back to user-installed
-        let python: String
-        let extractScript: String
-        let workDir: URL
-
-        if let bundledDir = bundledBrowserProfileDir,
-           let bundledPy = bundledPython,
-           FileManager.default.fileExists(atPath: bundledDir.appendingPathComponent("extract.py").path) {
-            // Use bundled Python + bundled ai-browser-profile from app Resources
-            python = bundledPy
-            extractScript = bundledDir.appendingPathComponent("extract.py").path
-            // Work in ~/ai-browser-profile so memories.db lands in the user's home
-            workDir = aiBrowserProfileDir
-            // Ensure the user directory exists for output
-            try? FileManager.default.createDirectory(at: aiBrowserProfileDir, withIntermediateDirectories: true)
-            log("Using bundled Python and ai-browser-profile from app bundle")
-        } else {
-            // Fall back to user-installed ai-browser-profile
-            let userPython = aiBrowserProfileDir.appendingPathComponent(".venv/bin/python").path
-            let userExtract = aiBrowserProfileDir.appendingPathComponent("extract.py").path
-
-            if !FileManager.default.fileExists(atPath: userPython) ||
-               !FileManager.default.fileExists(atPath: userExtract) {
-                log("ai-browser-profile not found, installing via npx...")
-                let installResult = await Task.detached(priority: .userInitiated) {
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                    process.arguments = ["npx", "ai-browser-profile", "init"]
-                    process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
-                    let pipe = Pipe()
-                    process.standardOutput = pipe
-                    process.standardError = pipe
-                    do {
-                        try process.run()
-                        process.waitUntilExit()
-                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                        return (process.terminationStatus == 0, String(data: data, encoding: .utf8) ?? "")
-                    } catch {
-                        return (false, "Failed to run npx: \(error.localizedDescription)")
-                    }
-                }.value
-
-                if !installResult.0 {
-                    return "Failed to install ai-browser-profile: \(installResult.1)"
-                }
-            }
-
-            python = userPython
-            extractScript = userExtract
-            workDir = aiBrowserProfileDir
-        }
-
-        // Capture bundled dir path before entering detached task (actor isolation)
-        let bundledDirPath = bundledBrowserProfileDir?.path
-        let pythonHome = bundledPythonHome
-
-        // Run extraction — return as soon as the interim profile is printed (don't wait for embeddings)
         let result = await Task.detached(priority: .userInitiated) { () -> String in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: python)
-            process.arguments = [extractScript]
-            process.currentDirectoryURL = workDir
-
-            // Set PYTHONPATH so the bundled ai_browser_profile module is importable
-            // Set PYTHONHOME so python-build-standalone finds its stdlib in the app bundle
-            var env = ProcessInfo.processInfo.environment
-            if let bp = bundledDirPath {
-                let existing = env["PYTHONPATH"] ?? ""
-                env["PYTHONPATH"] = existing.isEmpty ? bp : "\(bp):\(existing)"
-            }
-            if let ph = pythonHome {
-                env["PYTHONHOME"] = ph
-            }
-            process.environment = env
-
-            // Use separate pipes so we can read both stdout and stderr
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
+            let extractor = AutofillExtractor()
+            let profile = extractor.extractAll()
 
             do {
-                try process.run()
+                let db = try ProfileDatabase()
+                db.ingestProfile(profile)
+                return db.profileText()
             } catch {
-                return "Failed to run extraction: \(error.localizedDescription)"
-            }
-
-            // Read output incrementally, return as soon as interim profile marker appears
-            let interimMarker = "Interim profile ready (WhatsApp + embeddings still running):\n"
-
-            return await withCheckedContinuation { continuation in
-                // nonisolated(unsafe) silences Swift 6 Sendable warnings for these vars
-                // that are safely guarded by the NSLock below.
-                nonisolated(unsafe) var hasResumed = false
-                let lock = NSLock()
-                nonisolated(unsafe) var accumulatedOutput = ""
-
-                @Sendable func tryResumeWithInterim() {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    guard !hasResumed else { return }
-
-                    // Parse browser transparency lines
-                    func parseLine(_ prefix: String) -> [String] {
-                        guard let range = accumulatedOutput.range(of: prefix),
-                              let end = accumulatedOutput[range.upperBound...].firstIndex(of: "\n") else { return [] }
-                        let value = String(accumulatedOutput[range.upperBound..<end]).trimmingCharacters(in: .whitespaces)
-                        return value.isEmpty ? [] : value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-                    }
-
-                    guard let profileStart = accumulatedOutput.range(of: interimMarker) else { return }
-
-                    let browsersScanned = parseLine("BROWSERS_SCANNED: ")
-                    let browsersDenied = parseLine("BROWSERS_PERMISSION_DENIED: ")
-
-                    var browserSummaryPrefix = ""
-                    if !browsersScanned.isEmpty {
-                        let scanned = browsersScanned.map { $0.capitalized }.joined(separator: ", ")
-                        browserSummaryPrefix += "Browsers scanned: \(scanned)"
-                        if !browsersDenied.isEmpty {
-                            let denied = browsersDenied.map { $0.capitalized }.joined(separator: ", ")
-                            browserSummaryPrefix += "\nSkipped (needs Full Disk Access): \(denied)"
-                        }
-                        browserSummaryPrefix += "\n\n"
-                    }
-
-                    let afterMarker = accumulatedOutput[profileStart.upperBound...]
-                    // Profile ends at the next log line (starts with timestamp like "HH:MM:SS")
-                    let profileText: String
-                    if let nextLogLine = afterMarker.range(of: #"\n\d{2}:\d{2}:\d{2} "#, options: .regularExpression) {
-                        profileText = String(afterMarker[..<nextLogLine.lowerBound])
-                    } else {
-                        profileText = String(afterMarker)
-                    }
-
-                    hasResumed = true
-                    continuation.resume(returning: browserSummaryPrefix + profileText)
+                // DB failed but we still have raw data — format inline
+                var lines: [String] = []
+                let grouped = profile.grouped
+                for (key, vals) in grouped.sorted(by: { $0.key < $1.key }) {
+                    lines.append("\(key): \(vals.joined(separator: ", "))")
                 }
-
-                // Read stderr (where logging output goes) incrementally
-                stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-                    let data = handle.availableData
-                    guard !data.isEmpty else { return }
-                    if let str = String(data: data, encoding: .utf8) {
-                        lock.lock()
-                        accumulatedOutput += str
-                        lock.unlock()
-                        tryResumeWithInterim()
-                    }
-                }
-
-                // Also read stdout for BROWSERS_SCANNED lines
-                stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                    let data = handle.availableData
-                    guard !data.isEmpty else { return }
-                    if let str = String(data: data, encoding: .utf8) {
-                        lock.lock()
-                        accumulatedOutput += str
-                        lock.unlock()
-                        tryResumeWithInterim()
-                    }
-                }
-
-                // Fallback: if process exits without the marker, return whatever we have
-                process.terminationHandler = { _ in
-                    // Clean up handlers
-                    stderrPipe.fileHandleForReading.readabilityHandler = nil
-                    stdoutPipe.fileHandleForReading.readabilityHandler = nil
-
-                    lock.lock()
-                    let alreadyResumed = hasResumed
-                    if !alreadyResumed { hasResumed = true }
-                    let output = accumulatedOutput
-                    lock.unlock()
-
-                    guard !alreadyResumed else { return }
-
-                    // Process exited without interim marker — try reading profile from DB
-                    let profileProcess = Process()
-                    profileProcess.executableURL = URL(fileURLWithPath: python)
-                    profileProcess.arguments = ["-c", """
-                        import sys, os
-                        sys.path.insert(0, os.path.expanduser("~/ai-browser-profile"))
-                        from ai_browser_profile import MemoryDB
-                        mem = MemoryDB(os.path.expanduser("~/ai-browser-profile/memories.db"))
-                        print(mem.profile_text())
-                        mem.close()
-                        """]
-                    profileProcess.currentDirectoryURL = aiBrowserProfileDir
-                    let profilePipe = Pipe()
-                    profileProcess.standardOutput = profilePipe
-                    profileProcess.standardError = profilePipe
-                    do {
-                        try profileProcess.run()
-                        profileProcess.waitUntilExit()
-                        let profileData = profilePipe.fileHandleForReading.readDataToEndOfFile()
-                        let fallback = String(data: profileData, encoding: .utf8) ?? "Extraction complete but could not read profile."
-                        continuation.resume(returning: fallback)
-                    } catch {
-                        continuation.resume(returning: "Extraction finished but could not read profile: \(output)")
-                    }
-                }
+                return lines.isEmpty ? "Extraction failed: \(error.localizedDescription)" : lines.joined(separator: "\n")
             }
         }.value
 
@@ -710,30 +521,11 @@ class ChatToolExecutor {
     /// Query the user's browser profile database (always available, not onboarding-only).
     private static func executeQueryBrowserProfile(_ args: [String: Any]) async -> String {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let aiBrowserProfileDir = homeDir.appendingPathComponent("ai-browser-profile")
-        let dbPath = aiBrowserProfileDir.appendingPathComponent("memories.db").path
-
-        // Resolve Python — prefer bundled, fall back to user-installed
-        let python: String
-        let pythonPath: String? // PYTHONPATH for bundled module
-        if let bundledPy = bundledPython, let bundledDir = bundledBrowserProfileDir {
-            python = bundledPy
-            pythonPath = bundledDir.path
-        } else {
-            let userPython = aiBrowserProfileDir.appendingPathComponent(".venv/bin/python").path
-            guard FileManager.default.fileExists(atPath: userPython) else {
-                return "Browser profile not available. Run `npx ai-browser-profile init` then extract browser data to set it up."
-            }
-            python = userPython
-            pythonPath = nil
-        }
+        let dbPath = homeDir.appendingPathComponent("ai-browser-profile/memories.db").path
 
         if !FileManager.default.fileExists(atPath: dbPath) {
-            // Auto-extract browser profile if not yet done
             log("Browser profile DB not found, auto-extracting...")
             let extractResult = await executeExtractBrowserProfile([:])
-            // If extraction failed or DB still doesn't exist, return the extraction result
-            // (which contains the profile summary if successful, or error if not)
             guard FileManager.default.fileExists(atPath: dbPath) else {
                 return extractResult.isEmpty ? "Browser profile extraction failed." : extractResult
             }
@@ -741,60 +533,22 @@ class ChatToolExecutor {
 
         let query = args["query"] as? String ?? "full profile"
         let tags = args["tags"] as? [String] ?? []
-        let queryLiteral = pythonStringLiteral(query)
-        let dbPathLiteral = pythonStringLiteral(dbPath)
-        let pythonHome = bundledPythonHome
 
         return await Task.detached(priority: .userInitiated) { () -> String in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: python)
-
-            let tagsExpr = tags.isEmpty ? "None" : "[\(tags.map { "\"\($0)\"" }.joined(separator: ", "))]"
-            let script = """
-                from ai_browser_profile import MemoryDB
-                mem = MemoryDB(\(dbPathLiteral))
-                query = \(queryLiteral)
-                tags = \(tagsExpr)
-                if tags:
-                    results = mem.search(tags, limit=20)
-                    for r in results:
-                        print(f'{r["key"]}: {r["value"]}')
-                elif query in ("full profile", "profile"):
-                    print(mem.profile_text())
-                else:
-                    results = mem.semantic_search(query, limit=15)
-                    for r in results:
-                        print(f'{r["key"]}: {r["value"]}')
-                mem.close()
-                """
-
-            process.arguments = ["-c", script]
-            process.currentDirectoryURL = aiBrowserProfileDir
-
-            // Set PYTHONPATH for bundled module
-            // Set PYTHONHOME so python-build-standalone finds its stdlib
-            var env = ProcessInfo.processInfo.environment
-            if let pp = pythonPath {
-                let existing = env["PYTHONPATH"] ?? ""
-                env["PYTHONPATH"] = existing.isEmpty ? pp : "\(pp):\(existing)"
-                if let ph = pythonHome {
-                    env["PYTHONHOME"] = ph
-                }
-            } else {
-                // Fallback: add user-installed dir to PYTHONPATH
-                env["PYTHONPATH"] = aiBrowserProfileDir.path
-            }
-            process.environment = env
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
             do {
-                try process.run()
-                process.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                return output.isEmpty ? "No results found for query: \(query)" : output
+                let db = try ProfileDatabase(path: dbPath)
+
+                if !tags.isEmpty {
+                    let results = db.search(tags: tags, limit: 20)
+                    if results.isEmpty { return "No results found for tags: \(tags.joined(separator: ", "))" }
+                    return results.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+                } else if query == "full profile" || query == "profile" {
+                    return db.profileText()
+                } else {
+                    let results = db.textSearch(query: query, limit: 15)
+                    if results.isEmpty { return "No results found for query: \(query)" }
+                    return results.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+                }
             } catch {
                 return "Failed to query browser profile: \(error.localizedDescription)"
             }
