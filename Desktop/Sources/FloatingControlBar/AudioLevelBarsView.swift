@@ -69,6 +69,33 @@ struct ObservedAudioLevelBarsView: View {
     }
 }
 
+/// Observed transcript view that only re-renders when AudioLevelState changes,
+/// not when the entire FloatingControlBarState changes.
+struct ObservedTranscriptView: View {
+    @ObservedObject var audioLevel: AudioLevelState
+    var isVoiceFinalizing: Bool
+    var isVoiceLocked: Bool
+    var pttKeySymbol: String
+
+    var body: some View {
+        if isVoiceFinalizing {
+            Text("Transcribing...")
+                .scaledFont(size: 13)
+                .foregroundColor(.white.opacity(0.8))
+        } else if !audioLevel.transcript.isEmpty {
+            Text(audioLevel.transcript)
+                .scaledFont(size: 13)
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(1)
+                .truncationMode(.head)
+        } else {
+            Text(isVoiceLocked ? "Tap \(pttKeySymbol) to send" : "Release \(pttKeySymbol) to send")
+                .scaledFont(size: 13)
+                .foregroundColor(.white.opacity(0.5))
+        }
+    }
+}
+
 /// Larger version for Settings with green/yellow/red gradient bars.
 struct AudioLevelBarsSettingsView: View {
     let level: Float
