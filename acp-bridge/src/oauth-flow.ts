@@ -79,7 +79,7 @@ export async function startOAuthFlow(logErr: (msg: string) => void): Promise<OAu
   const { server, port } = await startCallbackServer();
   logErr(`OAuth callback server listening on port ${port}`);
 
-  const redirectUri = `http://127.0.0.1:${port}/callback`;
+  const redirectUri = `http://localhost:${port}/callback`;
 
   // Build authorization URL
   const authUrl = new URL(AUTHORIZE_URL);
