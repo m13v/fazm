@@ -553,6 +553,7 @@ class ChatProvider: ObservableObject {
                             self?.pendingAutoOpenAuth = false
                             log("ChatProvider: Auto-opening auth URL after bridge restart")
                             BrowserExtensionSetup.openURLInChrome(url)
+                            self?.scheduleOAuthAutoReopen(url)
                         }
                     }
                 },
@@ -830,6 +831,7 @@ class ChatProvider: ObservableObject {
                             self?.pendingAutoOpenAuth = false
                             log("ChatProvider: Auto-opening auth URL after bridge restart")
                             BrowserExtensionSetup.openURLInChrome(url)
+                            self?.scheduleOAuthAutoReopen(url)
                         }
                     }
                 },
@@ -2216,6 +2218,7 @@ class ChatProvider: ObservableObject {
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
+                        self?.oauthAutoReopenTask?.cancel()
                         self?.isClaudeAuthRequired = false
                         self?.checkClaudeConnectionStatus()
                     }
