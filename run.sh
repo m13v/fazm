@@ -1,10 +1,32 @@
 #!/bin/bash
 set -e
 
-# Acquire exclusive lock — prevents concurrent builds/tests by parallel agents
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Check test lock — another agent may be actively testing with the running app.
+# This check happens BEFORE the build lock, because run.sh kills the app on start.
+FAZM_TEST_LOCK="/tmp/fazm-test.lock"
+if [ -f "$FAZM_TEST_LOCK" ]; then
+    lock_age=$(( $(date +%s) - $(stat -f %m "$FAZM_TEST_LOCK") ))
+    lock_holder=$(cat "$FAZM_TEST_LOCK" 2>/dev/null || echo "unknown")
+    if [ "$lock_age" -lt 600 ]; then
+        echo "[run.sh] ⚠️  BLOCKED: Test lock held by: $lock_holder (${lock_age}s ago)"
+        echo "[run.sh] Another agent is actively testing. run.sh would kill their app session."
+        echo "[run.sh] Wait for them to finish, or remove /tmp/fazm-test.lock if the lock is stale."
+        exit 1
+    else
+        echo "[run.sh] Removing stale test lock (${lock_age}s old): $lock_holder"
+        rm -f "$FAZM_TEST_LOCK"
+    fi
+fi
+
+# Write our own test lock — we're about to kill the app and take over
+echo "agent=run.sh pid=$$ started=$(date +%s)" > "$FAZM_TEST_LOCK"
+# Acquire exclusive build lock — prevents concurrent builds by parallel agents
 source "$SCRIPT_DIR/scripts/fazm-lock.sh"
 fazm_acquire_lock 300
+# Override the trap to also release the test lock on exit
+trap 'fazm_release_lock; rm -f "$FAZM_TEST_LOCK"' EXIT
 
 # Clear system OPENAI_API_KEY so .env takes precedence
 unset OPENAI_API_KEY
