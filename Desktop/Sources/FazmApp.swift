@@ -1036,4 +1036,122 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillResignActive(_ notification: Notification) {
         AnalyticsManager.shared.appResignedActive()
     }
+
+    // MARK: - Code Signature Diagnostics
+
+    /// Log code signature verification and install origin at startup.
+    /// Helps diagnose KERN_CODESIGN_ERROR crashes by capturing the signature state
+    /// and whether the app was delivered via Sparkle update or fresh DMG install.
+    private func logCodeSignatureStatus() {
+        DispatchQueue.global(qos: .utility).async {
+            let appPath = Bundle.main.bundlePath
+
+            // 1. Verify code signature
+            let verifyProcess = Process()
+            verifyProcess.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            verifyProcess.arguments = ["--verify", "--deep", "--strict", appPath]
+            let verifyPipe = Pipe()
+            verifyProcess.standardError = verifyPipe
+            verifyProcess.standardOutput = verifyPipe
+            do {
+                try verifyProcess.run()
+                verifyProcess.waitUntilExit()
+            } catch {
+                log("CodeSign: Failed to run codesign: \(error)")
+                return
+            }
+
+            let verifyOutput = String(data: verifyPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let verifyOK = verifyProcess.terminationStatus == 0
+
+            // 2. Get page size of main binary
+            let infoProcess = Process()
+            infoProcess.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            let mainBinary = Bundle.main.executablePath ?? "\(appPath)/Contents/MacOS/Fazm"
+            infoProcess.arguments = ["-d", "--verbose=4", "--arch", "arm64", mainBinary]
+            let infoPipe = Pipe()
+            infoProcess.standardError = infoPipe
+            infoProcess.standardOutput = infoPipe
+            do {
+                try infoProcess.run()
+                infoProcess.waitUntilExit()
+            } catch {
+                log("CodeSign: Failed to get signing info: \(error)")
+                return
+            }
+
+            let infoOutput = String(data: infoPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let pageSize = infoOutput.split(separator: "\n")
+                .first(where: { $0.contains("Page size=") })
+                .flatMap { line in
+                    line.split(separator: "=").last.map { String($0) }
+                } ?? "unknown"
+
+            // 3. Detect install origin
+            let hadSparkleUpdate = UserDefaults.standard.bool(forKey: "hasSuccessfullyInstalledSparkleUpdate")
+            let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+            let currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+            let previousVersion = UserDefaults.standard.string(forKey: "fazm_previousVersion")
+            let previousBuild = UserDefaults.standard.string(forKey: "fazm_previousBuild")
+            let isVersionChange = previousVersion != nil && (previousVersion != currentVersion || previousBuild != currentBuild)
+
+            // Persist current version for next launch comparison
+            UserDefaults.standard.set(currentVersion, forKey: "fazm_previousVersion")
+            UserDefaults.standard.set(currentBuild, forKey: "fazm_previousBuild")
+
+            // Check for quarantine xattr (present on DMG downloads, cleared by Sparkle updates)
+            let xattrProcess = Process()
+            xattrProcess.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+            xattrProcess.arguments = ["-p", "com.apple.quarantine", appPath]
+            let xattrPipe = Pipe()
+            xattrProcess.standardOutput = xattrPipe
+            xattrProcess.standardError = Pipe()
+            do {
+                try xattrProcess.run()
+                xattrProcess.waitUntilExit()
+            } catch { /* ignore */ }
+            let hasQuarantine = xattrProcess.terminationStatus == 0
+            let quarantineValue = hasQuarantine
+                ? (String(data: xattrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "present")
+                : "none"
+
+            // Determine install method
+            let installMethod: String
+            if hasQuarantine {
+                installMethod = "dmg-download"
+            } else if hadSparkleUpdate && isVersionChange {
+                installMethod = "sparkle-update (just updated)"
+            } else if hadSparkleUpdate {
+                installMethod = "sparkle-managed"
+            } else if previousVersion == nil {
+                installMethod = "first-launch"
+            } else {
+                installMethod = "unknown"
+            }
+
+            // 4. Check app bundle modification time vs binary modification time
+            let fm = FileManager.default
+            let appModDate = (try? fm.attributesOfItem(atPath: appPath)[.modificationDate] as? Date)?.description ?? "?"
+            let binModDate = (try? fm.attributesOfItem(atPath: mainBinary)[.modificationDate] as? Date)?.description ?? "?"
+
+            // 5. List all loaded Mach-O images (for matching crash addresses to binaries)
+            var imageList = ""
+            let imageCount = _dyld_image_count()
+            for i in 0..<min(imageCount, 50) {
+                if let name = _dyld_get_image_name(i) {
+                    let path = String(cString: name)
+                    let header = _dyld_get_image_header(i)
+                    let slide = _dyld_get_image_vmaddr_slide(i)
+                    // Only log non-system images (our app + embedded binaries)
+                    if path.contains("Fazm") || path.contains("fazm") || path.contains("Sparkle") {
+                        let addr = UInt(bitPattern: header)
+                        imageList += " \(path.split(separator: "/").last ?? Substring(path))@\(String(addr, radix: 16))"
+                    }
+                }
+            }
+
+            let prevStr = previousVersion.map { "\($0)+\(previousBuild ?? "?")" } ?? "none"
+            log("CodeSign: verify=\(verifyOK ? "OK" : "FAILED") pageSize=\(pageSize) version=\(currentVersion)+\(currentBuild) prevVersion=\(prevStr) install=\(installMethod) quarantine=\(quarantineValue) appMod=\(appModDate) binMod=\(binModDate)\(imageList.isEmpty ? "" : " images=[\(imageList.trimmingCharacters(in: .whitespaces))]")\(verifyOK ? "" : " error=\(verifyOutput)")")
+        }
+    }
 }
