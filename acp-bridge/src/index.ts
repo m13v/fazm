@@ -789,6 +789,8 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
   // Google Workspace MCP (Python, stdio transport)
   if (existsSync(googleWorkspaceMcpPython) && existsSync(googleWorkspaceMcpMain)) {
     const googleWorkspaceMcpVenv = join(googleWorkspaceMcpDir, ".venv");
+    const homeDir = process.env.HOME || "~";
+    const gwsCredsDir = join(homeDir, "google_workspace_mcp");
     servers.push({
       name: "google-workspace",
       command: googleWorkspaceMcpPython,
@@ -798,6 +800,11 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
         // redirects stdlib resolution to the bundled .venv which contains the
         // actual lib/python3.12 directory and site-packages.
         { name: "PYTHONHOME", value: googleWorkspaceMcpVenv },
+        // Point to user-writable credential paths (the app bundle is read-only).
+        // The google-cloud-oauth-setup skill stores client_secret.json here after
+        // the user creates their personal Google Cloud OAuth app.
+        { name: "GOOGLE_CLIENT_SECRET_PATH", value: join(gwsCredsDir, "client_secret.json") },
+        { name: "WORKSPACE_MCP_CREDENTIALS_DIR", value: join(gwsCredsDir, "auth") },
       ],
     });
   }
