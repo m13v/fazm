@@ -17,6 +17,10 @@ import { homedir } from "os";
 // ESM has no __dirname — derive it from import.meta.url
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// File-based memory storage
+const memoryDir = join(homedir(), "Library", "Application Support", "Fazm", "memory");
+const memoryFilePath = join(memoryDir, "memory.md");
+
 // Current query mode
 let currentMode: "ask" | "act" = (process.env.FAZM_QUERY_MODE || process.env.OMI_QUERY_MODE) === "ask" ? "ask" : "act";
 
@@ -888,6 +892,57 @@ async function handleJsonRpc(
             id,
             result: { content: [{ type: "text", text: "Card created." }] },
           });
+        }
+      } else if (toolName === "save_memory") {
+        // File-based memory — append timestamped entry to markdown file
+        const content = (args.content as string) || "";
+        const category = (args.category as string) || "fact";
+        const timestamp = new Date().toISOString();
+        try {
+          mkdirSync(memoryDir, { recursive: true });
+          const entry = `\n## ${timestamp} [${category}]\n\n${content}\n`;
+          appendFileSync(memoryFilePath, entry, "utf8");
+          logErr(`save_memory: saved ${content.length} bytes (${category})`);
+          if (!isNotification) {
+            send({
+              jsonrpc: "2.0",
+              id,
+              result: { content: [{ type: "text", text: `Memory saved (${category}): ${content.substring(0, 100)}${content.length > 100 ? "..." : ""}` }] },
+            });
+          }
+        } catch (err) {
+          logErr(`save_memory: failed: ${err}`);
+          if (!isNotification) {
+            sendErrorResponse(id, -32603, `Failed to save memory: ${err}`);
+          }
+        }
+      } else if (toolName === "recall_memory") {
+        // File-based memory — read full memory file
+        try {
+          if (!existsSync(memoryFilePath)) {
+            if (!isNotification) {
+              send({
+                jsonrpc: "2.0",
+                id,
+                result: { content: [{ type: "text", text: "No memories saved yet." }] },
+              });
+            }
+          } else {
+            const content = readFileSync(memoryFilePath, "utf8");
+            logErr(`recall_memory: returned ${content.length} bytes`);
+            if (!isNotification) {
+              send({
+                jsonrpc: "2.0",
+                id,
+                result: { content: [{ type: "text", text: content || "No memories saved yet." }] },
+              });
+            }
+          }
+        } catch (err) {
+          logErr(`recall_memory: failed: ${err}`);
+          if (!isNotification) {
+            sendErrorResponse(id, -32603, `Failed to read memory: ${err}`);
+          }
         }
       } else if (toolName === "speak_response") {
         // Voice response — forward to Swift for TTS playback
