@@ -9,17 +9,13 @@
 
 import { createInterface } from "readline";
 import { createConnection } from "net";
-import { readFileSync, writeFileSync, appendFileSync, readdirSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
 
 // ESM has no __dirname — derive it from import.meta.url
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// File-based memory storage
-const memoryDir = join(homedir(), "Library", "Application Support", "Fazm", "memory");
-const memoryFilePath = join(memoryDir, "memory.md");
 
 // Current query mode
 let currentMode: "ask" | "act" = (process.env.FAZM_QUERY_MODE || process.env.OMI_QUERY_MODE) === "ask" ? "ask" : "act";
