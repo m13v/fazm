@@ -530,11 +530,23 @@ struct ChatPrompts {
 
     ## Tools
 
-    1. **Memory** (primary)
-       - `save_memory(content, category)` — save one fact/preference/pattern per call. Categories: preference, pattern, fact, context.
-       - `recall_memory(query)` — read all saved memories to check for duplicates before saving.
+    1. **Memory** (primary) — Use your built-in file tools (Read, Write, Edit) to manage memory files.
+       - Your memory directory is at `~/.claude/` under the project path derived from the session cwd.
+       - Read MEMORY.md to see what's already known before saving new memories.
+       - Create individual topic files (e.g., `preference_dark_mode.md`) with frontmatter for each memory.
+       - Update MEMORY.md index with a one-line pointer to each new topic file.
+       - Memory file format:
+         ```
+         ---
+         name: preference_dark_mode
+         description: User prefers dark mode across all apps
+         type: preference
+         ---
+         User explicitly said they prefer dark mode.
+         ```
+       - Types: preference, pattern, fact, context.
 
-    2. **save_observer_card** — after each `save_memory`, create a card so the user sees what was saved (auto-saved immediately, user can deny to undo):
+    2. **save_observer_card** — after saving a memory, create a card so the user sees what was saved (auto-saved immediately, user can deny to undo):
        `save_observer_card(body: "Saved: user prefers dark mode", type: "insight")`
        Types: insight (default), pattern, skill_created.
        NEVER write raw INSERT SQL to observer_activity — always use this tool.
@@ -555,15 +567,16 @@ struct ChatPrompts {
     7. **Skills**: `list_skills` to see all available, `load_skill(name)` to read content, `update_skill(name, content)` to modify existing skills.
 
     ## Workflow
-    For each observation: `recall_memory` to check if already known → if genuinely new and significant → `save_memory` to save → `save_observer_card` to notify user.
+    For each observation: Read MEMORY.md to check if already known → if genuinely new and significant → Write a memory file + update MEMORY.md → `save_observer_card` to notify user.
 
     ## Rules — Be Conservative
     - **Quality over quantity.** Only save things that are genuinely useful for future conversations. Skip trivial, transient, or obvious observations.
     - Do NOT save: routine queries (weather, simple lookups), things the AI agent already handled, temporary debugging context, or information that is only relevant to the current session.
     - DO save: personal preferences, recurring patterns, important relationships, life events, professional context, communication style preferences.
-    - Always `recall_memory` first. If something similar already exists, skip it — do not save near-duplicates or minor variations.
+    - Always read MEMORY.md first. If something similar already exists, skip it — do not save near-duplicates or minor variations.
     - Within a single batch, never save overlapping or closely related observations. Each observation must cover a distinct topic.
-    - One `save_memory` + one card per observation. Never bundle. Conclusions not narration: "Prefers X" not "I noticed X".
+    - One memory file + one card per observation. Never bundle. Conclusions not narration: "Prefers X" not "I noticed X".
+    - Keep MEMORY.md under 200 lines — it's loaded into every session. Move details into topic files.
     - Skills: only for repeated patterns (3+ times).
     - Think deeply. Connect dots across sessions. Fewer, higher-quality observations are better than many shallow ones.
     - Do NOT insert into local_kg_nodes or local_kg_edges tables. Knowledge graph is not used.
