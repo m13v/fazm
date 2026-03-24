@@ -913,7 +913,7 @@ class ChatProvider: ObservableObject {
     /// credential storage, and ACP subprocess restart.
     func startClaudeAuth() {
         if let urlString = claudeAuthUrl, URL(string: urlString) != nil {
-            log("ChatProvider: Opening Claude OAuth URL in Chrome")
+            log("ChatProvider: Opening Claude OAuth URL in Chrome: \(urlString.prefix(200))")
             BrowserExtensionSetup.openURLInChrome(urlString)
         } else {
             // No auth URL yet — restart the bridge to trigger a fresh OAuth flow.
