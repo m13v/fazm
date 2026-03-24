@@ -48,6 +48,10 @@ class BrowserProfileMigrationManager {
         popupWindow.contentView = hostingView
         popupWindow.title = "Browser Profile Import"
         popupWindow.titlebarAppearsTransparent = true
+        popupWindow.titleVisibility = .hidden
+        popupWindow.standardWindowButton(.closeButton)?.isHidden = true
+        popupWindow.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        popupWindow.standardWindowButton(.zoomButton)?.isHidden = true
         popupWindow.isMovableByWindowBackground = true
         popupWindow.appearance = NSAppearance(named: .darkAqua)
         popupWindow.backgroundColor = NSColor(FazmColors.backgroundPrimary)
