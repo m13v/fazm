@@ -245,12 +245,6 @@ actor ACPBridge {
       env["CLOUD_ML_REGION"] = region
     }
 
-    // Pass Gemini API key for Hindsight Memory MCP.
-    // KeyService fetches it from the backend; override any stale .env value.
-    if let geminiKey = KeyService.shared.geminiAPIKey, !geminiKey.isEmpty {
-      env["GEMINI_API_KEY"] = geminiKey
-    }
-
     // Ensure the directory containing node is in PATH
     let nodeDir = (nodePath as NSString).deletingLastPathComponent
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
@@ -302,23 +296,6 @@ actor ACPBridge {
         {
           Task { await self?.markOOM() }
         }
-        // Track Hindsight MCP startup status
-        if text.contains("Hindsight:") && text.contains("startup_time=") {
-          let ready = text.contains("Hindsight: ready")
-          // Parse startup_time from "startup_time=12.3s"
-          var startupTime: Double? = nil
-          if let range = text.range(of: "startup_time="),
-             let endRange = text.range(of: "s", range: range.upperBound..<text.endIndex) {
-            startupTime = Double(text[range.upperBound..<endRange.lowerBound])
-          }
-          var props: [String: Any] = ["ready": ready]
-          if let t = startupTime { props["startup_time_s"] = t }
-          if !ready {
-            // Capture the error reason from the line
-            props["error"] = text.trimmingCharacters(in: .whitespacesAndNewlines)
-          }
-          Task { @MainActor in PostHogManager.shared.track("Hindsight Status", properties: props) }
-        }
       }
     }
 
@@ -368,7 +345,7 @@ actor ACPBridge {
     try? stdinPipe?.fileHandleForWriting.close()
 
     // Kill all descendant processes recursively. The bridge spawns ACP which spawns
-    // MCP servers (playwright, google-workspace, macos-use, whatsapp, hindsight).
+    // MCP servers (playwright, google-workspace, macos-use, whatsapp).
     // The ACP subprocess creates its own process group, so kill(-pid) only reaches
     // direct children — grandchildren (MCP servers) survive and become orphans.
     // We must walk the full process tree and kill every descendant.
