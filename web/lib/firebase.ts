@@ -12,7 +12,7 @@ import {
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "placeholder",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "fazm-prod.firebaseapp.com",
+  authDomain: "chat.fazm.ai",
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "fazm-prod",
 };
 
