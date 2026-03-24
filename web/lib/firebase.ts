@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   onAuthStateChanged,
   type User,
   type Auth,
@@ -33,5 +35,5 @@ function getFirebaseAuth(): Auth {
 
 const googleProvider = new GoogleAuthProvider();
 
-export { getFirebaseAuth, googleProvider, signInWithPopup, onAuthStateChanged };
+export { getFirebaseAuth, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged };
 export type { User };

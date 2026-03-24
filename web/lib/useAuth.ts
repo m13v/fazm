@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getFirebaseAuth, googleProvider, signInWithPopup, onAuthStateChanged, type User } from "./firebase";
+import { getFirebaseAuth, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, type User } from "./firebase";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -10,6 +10,8 @@ export function useAuth() {
 
   useEffect(() => {
     const auth = getFirebaseAuth();
+    // Handle redirect result (from mobile sign-in flow)
+    getRedirectResult(auth).catch(() => {});
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
@@ -35,7 +37,12 @@ export function useAuth() {
 
   const signIn = useCallback(async () => {
     const auth = getFirebaseAuth();
-    await signInWithPopup(auth, googleProvider);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch {
+      // Popup blocked or closed — fall back to redirect (works on mobile)
+      await signInWithRedirect(auth, googleProvider);
+    }
   }, []);
 
   const signOut = useCallback(async () => {
