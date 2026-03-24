@@ -740,7 +740,7 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
     env: fazmToolsEnv,
   });
 
-  // Observer only gets fazm-tools + Hindsight (via buildMeta) — no browser/UI tools
+  // Observer only gets fazm-tools — no browser/UI tools
   if (sessionKey === "observer") {
     return servers;
   }
