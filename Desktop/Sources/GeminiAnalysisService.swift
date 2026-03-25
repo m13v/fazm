@@ -99,6 +99,8 @@ actor GeminiAnalysisService {
         let document: String?
         let raw: String
         let chunksAnalyzed: Int
+        let toolCallCount: Int
+        let turnsUsed: Int
     }
 
     /// Chunk info passed from SessionRecordingManager when a chunk is finalized.
@@ -248,6 +250,11 @@ actor GeminiAnalysisService {
 
         log("GeminiAnalysis: starting analysis of \(chunks.count) chunks")
 
+        // Gather user context in parallel with chunk upload preparation
+        log("GeminiAnalysis: gathering user context...")
+        let userContext = await gatherUserContext()
+        log("GeminiAnalysis: user context gathered (\(userContext.count) chars)")
+
         // Upload large chunks via File API, prepare inline parts for small ones
         var parts: [[String: Any]] = []
         var uploadedFileNames: [String] = []
@@ -283,13 +290,20 @@ actor GeminiAnalysisService {
 
         // Build app context summary from chunk metadata
         let appContext = buildAppContextSummary(chunks: chunks)
-        let prompt = analysisPromptTemplate.replacingOccurrences(of: "{APP_CONTEXT}", with: appContext)
+        let prompt = analysisPromptTemplate
+            .replacingOccurrences(of: "{APP_CONTEXT}", with: appContext)
+            .replacingOccurrences(of: "{USER_CONTEXT}", with: userContext)
 
         // Add the prompt as the last part
         parts.append(["text": prompt])
 
-        // Call generateContent
-        let result = await callGenerateContent(parts: parts, apiKey: apiKey)
+        // Call generateContent with agentic loop (function calling enabled)
+        let (result, toolCallCount, turnsUsed) = await callGenerateContentAgentic(
+            initialParts: parts,
+            tools: toolDeclarations,
+            apiKey: apiKey,
+            maxTurns: 5
+        )
 
         // Cleanup uploaded Gemini File API files (these are remote, always safe to delete)
         for fileName in uploadedFileNames {
@@ -302,7 +316,7 @@ actor GeminiAnalysisService {
         }
 
         let parsed = parseResult(raw, chunksAnalyzed: chunks.count)
-        log("GeminiAnalysis: \(parsed.verdict) (\(chunks.count) chunks)")
+        log("GeminiAnalysis: \(parsed.verdict) (\(chunks.count) chunks, \(toolCallCount) tool calls, \(turnsUsed) turns)")
         if let task = parsed.task {
             log("GeminiAnalysis: task=\(task)")
         }
@@ -312,6 +326,458 @@ actor GeminiAnalysisService {
     private func resolveAPIKey() async -> String? {
         await KeyService.shared.ensureKeys(timeout: 5)
         return KeyService.shared.geminiAPIKey
+    }
+
+    // MARK: - User Context Gathering
+
+    /// Gather all user context to inject into the analysis prompt.
+    private func gatherUserContext() async -> String {
+        var sections: [String] = []
+
+        // User identity
+        let userName = AuthService.shared.displayName.isEmpty ? "Unknown" : AuthService.shared.displayName
+        let timezone = TimeZone.current.identifier
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        dateFormatter.timeZone = TimeZone.current
+        let now = dateFormatter.string(from: Date())
+        sections.append("<user_identity>\nName: \(userName)\nTimezone: \(timezone)\nCurrent time: \(now)\n</user_identity>")
+
+        // AI user profile
+        if let profile = await AIUserProfileService.shared.getLatestProfile(),
+           !profile.profileText.isEmpty {
+            let truncated = String(profile.profileText.prefix(2000))
+            sections.append("<user_profile>\n\(truncated)\n</user_profile>")
+            log("GeminiAnalysis: injected user profile (\(truncated.count) chars)")
+        }
+
+        // Recent chat messages (what the user has been asking Fazm)
+        let messages = await ChatMessageStore.loadMessages(context: "__floating__", limit: 20)
+        if !messages.isEmpty {
+            var chatLines: [String] = []
+            for msg in messages {
+                let role = msg.sender == .user ? "User" : "Fazm"
+                let text = String(msg.text.prefix(300))
+                chatLines.append("[\(role)] \(text)")
+            }
+            sections.append("<recent_conversations>\nRecent messages between the user and Fazm's AI assistant (newest last):\n\(chatLines.joined(separator: "\n"))\n</recent_conversations>")
+            log("GeminiAnalysis: injected \(messages.count) recent chat messages")
+        }
+
+        // Database schema (so Gemini knows what queries are possible)
+        let schema = await loadDatabaseSchema()
+        if !schema.isEmpty {
+            sections.append("<database_schema>\n\(schema)\n</database_schema>")
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    /// Load the database schema using the same format as ChatProvider.
+    private func loadDatabaseSchema() async -> String {
+        guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return "" }
+        do {
+            let tables = try await dbQueue.read { db -> [(name: String, sql: String)] in
+                let rows = try Row.fetchAll(db, sql: """
+                    SELECT name, sql FROM sqlite_master
+                    WHERE type='table' AND sql IS NOT NULL
+                    ORDER BY name
+                """)
+                return rows.compactMap { row -> (name: String, sql: String)? in
+                    guard let name: String = row["name"],
+                          let sql: String = row["sql"] else { return nil }
+                    return (name: name, sql: sql)
+                }
+            }
+
+            var lines: [String] = ["Database schema (fazm.db):"]
+            for (name, sql) in tables {
+                if ChatPrompts.excludedTables.contains(name) { continue }
+                if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
+                if name.contains("_fts") { continue }
+
+                // Extract column names from CREATE TABLE DDL
+                let columnNames = extractColumnNames(from: sql).filter {
+                    !ChatPrompts.excludedColumns.contains($0)
+                }
+                guard !columnNames.isEmpty else { continue }
+
+                let annotation = ChatPrompts.tableAnnotations[name] ?? ""
+                let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
+                lines.append(header)
+                lines.append("  \(columnNames.joined(separator: ", "))")
+            }
+            lines.append(ChatPrompts.schemaFooter)
+            return lines.joined(separator: "\n")
+        } catch {
+            log("GeminiAnalysis: failed to load schema: \(error)")
+            return ""
+        }
+    }
+
+    /// Extract column names from a CREATE TABLE SQL statement.
+    private func extractColumnNames(from sql: String) -> [String] {
+        // Find the content between the first ( and last )
+        guard let openParen = sql.firstIndex(of: "("),
+              let closeParen = sql.lastIndex(of: ")") else { return [] }
+        let inner = String(sql[sql.index(after: openParen)..<closeParen])
+
+        var names: [String] = []
+        for part in inner.components(separatedBy: ",") {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Skip constraints (PRIMARY KEY, UNIQUE, CHECK, FOREIGN KEY)
+            let upper = trimmed.uppercased()
+            if upper.hasPrefix("PRIMARY") || upper.hasPrefix("UNIQUE") ||
+               upper.hasPrefix("CHECK") || upper.hasPrefix("FOREIGN") ||
+               upper.hasPrefix("CONSTRAINT") { continue }
+
+            // First token is the column name
+            if let name = trimmed.components(separatedBy: .whitespaces).first?
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`")),
+               !name.isEmpty {
+                names.append(name)
+            }
+        }
+        return names
+    }
+
+    // MARK: - Gemini Function Calling (Tool Declarations)
+
+    /// Tool declarations for the Gemini function calling API.
+    private var toolDeclarations: [[String: Any]] {
+        [[
+            "functionDeclarations": [
+                [
+                    "name": "query_database",
+                    "description": "Execute a read-only SQL SELECT query against the user's local fazm.db database. Tables include: chat_messages (conversation history), observer_activity (past discovered tasks, insights), ai_user_profiles (AI-generated user summaries), indexed_files (file metadata from Downloads/Documents/Desktop). Only SELECT queries are allowed.",
+                    "parameters": [
+                        "type": "object",
+                        "properties": [
+                            "sql": ["type": "string", "description": "A SELECT SQL query to execute against the database"]
+                        ],
+                        "required": ["sql"]
+                    ] as [String: Any]
+                ] as [String: Any],
+                [
+                    "name": "read_dev_log",
+                    "description": "Read the last N lines of Fazm's development log to see what the app and its AI agent have been doing recently. Useful for detecting if the AI agent is currently running automated tasks (you'll see ACP bridge messages, tool calls, query processing). If you see terminal/IDE activity in the video, check this log to determine if it's the AI agent working.",
+                    "parameters": [
+                        "type": "object",
+                        "properties": [
+                            "lines": ["type": "integer", "description": "Number of lines to read from the end of the log (max 200, default 50)"]
+                        ],
+                        "required": ["lines"]
+                    ] as [String: Any]
+                ] as [String: Any],
+                [
+                    "name": "get_active_sessions",
+                    "description": "Check if Fazm's AI agent is currently processing any tasks. Returns information about active ACP (Agent Control Protocol) sessions and recent tool activity. Use this when you see automated-looking activity in the video to avoid suggesting tasks the agent is already handling.",
+                    "parameters": [
+                        "type": "object",
+                        "properties": [:] as [String: Any],
+                        "required": [] as [String]
+                    ] as [String: Any]
+                ] as [String: Any]
+            ]
+        ]]
+    }
+
+    // MARK: - Tool Execution
+
+    private static let blockedSQLKeywords = [
+        "DROP", "ALTER", "TRUNCATE", "CREATE", "ATTACH", "DETACH", "VACUUM", "REINDEX", "PRAGMA"
+    ]
+
+    /// Execute a tool call from Gemini and return the result string.
+    private func executeTool(name: String, args: [String: Any]) async -> String {
+        log("GeminiAnalysis: executing tool \(name) with args: \(args)")
+        switch name {
+        case "query_database":
+            return await executeQueryDatabase(args: args)
+        case "read_dev_log":
+            return executeReadDevLog(args: args)
+        case "get_active_sessions":
+            return executeGetActiveSessions()
+        default:
+            return "Error: unknown tool '\(name)'"
+        }
+    }
+
+    /// Execute a SELECT-only SQL query against fazm.db.
+    private func executeQueryDatabase(args: [String: Any]) async -> String {
+        guard let sql = args["sql"] as? String, !sql.isEmpty else {
+            return "Error: sql parameter is required"
+        }
+
+        var sanitized = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Fix common LLM SQL mistakes
+        sanitized = sanitized.replacingOccurrences(of: "\\'", with: "''")
+        let upper = sanitized.uppercased()
+
+        // Block dangerous keywords
+        for keyword in Self.blockedSQLKeywords {
+            if upper.range(of: "\\b\(keyword)\\b", options: .regularExpression) != nil {
+                return "Error: \(keyword) statements are not allowed. Only SELECT queries."
+            }
+        }
+
+        // Must be SELECT or WITH
+        guard upper.hasPrefix("SELECT") || upper.hasPrefix("WITH") else {
+            return "Error: only SELECT queries are allowed"
+        }
+
+        // Block multi-statement
+        let statements = sanitized.components(separatedBy: ";")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if statements.count > 1 {
+            return "Error: only single statements allowed"
+        }
+
+        guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else {
+            return "Error: database not available"
+        }
+
+        do {
+            // Auto-append LIMIT if missing
+            var finalQuery = sanitized
+            if !upper.contains("LIMIT") {
+                if finalQuery.hasSuffix(";") { finalQuery = String(finalQuery.dropLast()) }
+                finalQuery += " LIMIT 100"
+            }
+
+            let query = finalQuery
+            let rows = try await dbQueue.read { db in
+                try Row.fetchAll(db, sql: query)
+            }
+
+            if rows.isEmpty { return "No results" }
+
+            let columns = Array(rows[0].columnNames)
+            var lines: [String] = [columns.joined(separator: " | ")]
+            lines.append(String(repeating: "-", count: min(columns.count * 20, 120)))
+
+            for row in rows.prefix(100) {
+                let values = row.map { (_, dbValue) -> String in
+                    let value: String
+                    switch dbValue.storage {
+                    case .null: value = "NULL"
+                    case .int64(let i): value = String(i)
+                    case .double(let d): value = String(d)
+                    case .string(let s): value = s
+                    case .blob(let data): value = "<\(data.count) bytes>"
+                    }
+                    return value.count > 300 ? String(value.prefix(300)) + "..." : value
+                }
+                lines.append(values.joined(separator: " | "))
+            }
+            lines.append("\(rows.count) row(s)")
+
+            // Cap total response size
+            var result = lines.joined(separator: "\n")
+            if result.count > 4000 {
+                result = String(result.prefix(4000)) + "\n... (truncated)"
+            }
+            return result
+        } catch {
+            return "SQL Error: \(error.localizedDescription)"
+        }
+    }
+
+    /// Read the last N lines of the dev log.
+    private func executeReadDevLog(args: [String: Any]) -> String {
+        let requestedLines = min(args["lines"] as? Int ?? 50, 200)
+
+        // Try dev log first, then prod log
+        let devPath = "/private/tmp/fazm-dev.log"
+        let prodPath = "/private/tmp/fazm.log"
+        let logPath = FileManager.default.fileExists(atPath: devPath) ? devPath : prodPath
+
+        guard let data = FileManager.default.contents(atPath: logPath),
+              let content = String(data: data, encoding: .utf8) else {
+            return "No log file available"
+        }
+
+        let allLines = content.components(separatedBy: "\n")
+        let tail = allLines.suffix(requestedLines)
+        var result = tail.joined(separator: "\n")
+        if result.count > 4000 {
+            result = String(result.prefix(4000)) + "\n... (truncated)"
+        }
+        return result
+    }
+
+    /// Check for active ACP sessions by parsing the dev log for recent activity.
+    private func executeGetActiveSessions() -> String {
+        let devPath = "/private/tmp/fazm-dev.log"
+        let prodPath = "/private/tmp/fazm.log"
+        let logPath = FileManager.default.fileExists(atPath: devPath) ? devPath : prodPath
+
+        guard let data = FileManager.default.contents(atPath: logPath),
+              let content = String(data: data, encoding: .utf8) else {
+            return "No log file available to determine session status"
+        }
+
+        // Look at the last 200 lines for ACP activity
+        let allLines = content.components(separatedBy: "\n")
+        let recentLines = allLines.suffix(200)
+
+        // Look for ACP-related patterns in the last 120 seconds
+        let cutoff = Date().addingTimeInterval(-120)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "HH:mm:ss.SSS"
+
+        var acpActivity: [String] = []
+        var activeQueries: [String] = []
+
+        for line in recentLines {
+            // Check for ACP bridge activity
+            if line.contains("ACPBridge:") || line.contains("acp") {
+                acpActivity.append(String(line.prefix(200)))
+            }
+            // Check for active query processing
+            if line.contains("query") && (line.contains("streaming") || line.contains("processing") || line.contains("tool_use")) {
+                activeQueries.append(String(line.prefix(200)))
+            }
+        }
+
+        var result = "Active Session Status:\n"
+        if acpActivity.isEmpty && activeQueries.isEmpty {
+            result += "No recent ACP agent activity detected. The AI agent appears idle."
+        } else {
+            if !activeQueries.isEmpty {
+                result += "Recent agent query activity (may indicate active task):\n"
+                for line in activeQueries.suffix(10) {
+                    result += "  \(line)\n"
+                }
+            }
+            if !acpActivity.isEmpty {
+                result += "Recent ACP bridge activity:\n"
+                for line in acpActivity.suffix(10) {
+                    result += "  \(line)\n"
+                }
+            }
+        }
+
+        return result
+    }
+
+    // MARK: - Agentic Multi-Turn API
+
+    /// Call Gemini with function calling support. Loops up to maxTurns when the model calls tools.
+    /// Returns the final text response after all tool calls are resolved.
+    private func callGenerateContentAgentic(
+        initialParts: [[String: Any]],
+        tools: [[String: Any]],
+        apiKey: String,
+        maxTurns: Int = 5
+    ) async -> (text: String?, toolCallCount: Int, turnsUsed: Int) {
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)") else {
+            return (nil, 0, 0)
+        }
+
+        var contents: [[String: Any]] = [["role": "user", "parts": initialParts]]
+        var totalToolCalls = 0
+
+        for turn in 1...maxTurns {
+            let body: [String: Any] = [
+                "contents": contents,
+                "tools": tools,
+                "generationConfig": [
+                    "temperature": 0.3,
+                    "maxOutputTokens": 16384
+                ],
+                "safetySettings": [
+                    ["category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"],
+                    ["category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"],
+                    ["category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"],
+                    ["category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"],
+                ]
+            ]
+
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.timeoutInterval = 300
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+            // Retry up to 3 times per turn
+            var responseParts: [[String: Any]]?
+            for attempt in 1...3 {
+                guard let (data, resp) = try? await URLSession.shared.data(for: req),
+                      let http = resp as? HTTPURLResponse else {
+                    if attempt < 3 {
+                        try? await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt)) * 1_000_000_000))
+                    }
+                    continue
+                }
+
+                if (200...299).contains(http.statusCode),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let candidates = json["candidates"] as? [[String: Any]],
+                   let content = candidates.first?["content"] as? [String: Any],
+                   let parts = content["parts"] as? [[String: Any]] {
+                    responseParts = parts
+                    break
+                }
+
+                let bodyStr = String(data: data, encoding: .utf8) ?? ""
+                log("GeminiAnalysis: agentic turn \(turn) attempt \(attempt) failed (status=\(http.statusCode)): \(bodyStr.prefix(200))")
+                if attempt < 3 {
+                    try? await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt)) * 1_000_000_000))
+                }
+            }
+
+            guard let parts = responseParts else {
+                log("GeminiAnalysis: agentic turn \(turn) failed after retries")
+                return (nil, totalToolCalls, turn)
+            }
+
+            // Check if the response contains function calls
+            var functionCalls: [(name: String, args: [String: Any])] = []
+            var textParts: [String] = []
+
+            for part in parts {
+                if let fc = part["functionCall"] as? [String: Any],
+                   let name = fc["name"] as? String {
+                    let args = fc["args"] as? [String: Any] ?? [:]
+                    functionCalls.append((name: name, args: args))
+                }
+                if let text = part["text"] as? String {
+                    textParts.append(text)
+                }
+            }
+
+            // If no function calls, we're done — return the text
+            if functionCalls.isEmpty {
+                let finalText = textParts.joined(separator: "\n")
+                log("GeminiAnalysis: agentic loop completed in \(turn) turn(s), \(totalToolCalls) tool call(s)")
+                return (finalText.isEmpty ? nil : finalText, totalToolCalls, turn)
+            }
+
+            // Append model's response to conversation
+            contents.append(["role": "model", "parts": parts])
+
+            // Execute each function call and build response parts
+            var functionResponseParts: [[String: Any]] = []
+            for fc in functionCalls {
+                totalToolCalls += 1
+                log("GeminiAnalysis: tool call #\(totalToolCalls): \(fc.name)")
+                let result = await executeTool(name: fc.name, args: fc.args)
+                functionResponseParts.append([
+                    "functionResponse": [
+                        "name": fc.name,
+                        "response": ["result": result]
+                    ] as [String: Any]
+                ])
+            }
+
+            // Append tool results as user turn
+            contents.append(["role": "user", "parts": functionResponseParts])
+        }
+
+        log("GeminiAnalysis: exhausted \(maxTurns) agentic turns")
+        return (nil, totalToolCalls, maxTurns)
     }
 
     // MARK: - Gemini File API (Resumable Upload)
