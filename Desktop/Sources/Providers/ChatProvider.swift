@@ -1512,7 +1512,7 @@ class ChatProvider: ObservableObject {
     /// Formats the last 10 non-empty messages in the current session as a conversation history string.
     /// Used to seed new ACP sessions with context from the existing chat UI history.
     private func buildConversationHistory() -> String {
-        let recent = messages.filter { !$0.text.isEmpty }.suffix(20)
+        let recent = messages.filter { !$0.text.isEmpty }.suffix(10)
         return recent.map { msg in
             let role = msg.sender == .user ? "User" : "Assistant"
             return "\(role): \(msg.text)"
