@@ -146,6 +146,7 @@
     "Added Discovered Tasks tab showing AI-identified tasks from screen analysis",
     "Fixed Claude OAuth sign-in failing on first attempt when not logged in to claude.ai",
     "Fixed Connect Claude button staying visible after successful authentication",
-    "Polished tool call status indicators: shows action verbs instead of technical labels, shortened file paths"
+    "Polished tool call status indicators: shows action verbs instead of technical labels, shortened file paths",
+    "Smarter task discovery: the screen observer now understands your context (profile, chat history, goals) and can query your data before suggesting tasks"
   ]
 }
