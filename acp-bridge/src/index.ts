@@ -582,11 +582,12 @@ async function startAuthFlow(): Promise<void> {
       await flow.complete;
       logErr("OAuth flow completed successfully");
 
+      // Notify Swift immediately so it can cancel auto-reopen timers and
+      // update the UI before the (slow) ACP restart + warmup completes.
+      send({ type: "auth_success" });
+
       // Restart ACP subprocess so it picks up new credentials from Keychain
       await restartAcpProcess();
-
-      // Notify Swift
-      send({ type: "auth_success" });
     } catch (err) {
       logErr(`OAuth flow failed: ${err}`);
       if (err instanceof OAuthTokenExchangeError) {
