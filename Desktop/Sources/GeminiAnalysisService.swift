@@ -62,7 +62,8 @@ actor GeminiAnalysisService {
         """
 
     private let model = "gemini-pro-latest"
-    private let maxChunks = 60
+    private let maxChunks = 120  // Hard cap on buffered chunks (safety limit)
+    private let targetDurationSeconds: TimeInterval = 3600  // Trigger analysis after 60 min of recordings
     /// Gemini File API: chunks above this size use resumable upload; smaller ones use inline base64.
     private let inlineSizeLimit = 1_500_000 // 1.5 MB
 
@@ -180,10 +181,13 @@ actor GeminiAnalysisService {
 
         persistBufferIndex()
 
-        log("GeminiAnalysis: buffered chunk \(info.chunkIndex) (\(chunkBuffer.count)/\(maxChunks))")
+        let totalDuration = bufferedDuration
+        let totalMinutes = Int(totalDuration / 60)
+        let targetMinutes = Int(targetDurationSeconds / 60)
+        log("GeminiAnalysis: buffered chunk \(info.chunkIndex) (\(chunkBuffer.count) chunks, \(totalMinutes)/\(targetMinutes) min)")
 
-        // Trigger analysis when we have enough chunks (with cooldown after failures)
-        if chunkBuffer.count >= maxChunks && !isAnalyzing {
+        // Trigger analysis when total buffered duration reaches the target (with cooldown after failures)
+        if totalDuration >= targetDurationSeconds && !isAnalyzing {
             if let lastFail = lastFailedAnalysis, Date().timeIntervalSince(lastFail) < retryCooldown {
                 // Still in cooldown — skip retry
             } else {
@@ -238,6 +242,11 @@ actor GeminiAnalysisService {
     }
 
     var bufferedChunkCount: Int { chunkBuffer.count }
+
+    /// Total duration of all buffered chunks in seconds.
+    var bufferedDuration: TimeInterval {
+        chunkBuffer.reduce(0) { $0 + $1.endTimestamp.timeIntervalSince($1.startTimestamp) }
+    }
 
     // MARK: - Persistence
 
