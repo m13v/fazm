@@ -92,7 +92,14 @@ class SessionRecordingManager {
                     localURL: info.localURL,
                     chunkIndex: info.chunkIndex,
                     startTimestamp: info.startTimestamp,
-                    endTimestamp: info.endTimestamp
+                    endTimestamp: info.endTimestamp,
+                    activeApps: info.activeApps.map { app in
+                        GeminiAnalysisService.ActiveAppInfo(
+                            appName: app.appName,
+                            windowTitle: app.windowTitle,
+                            frameCount: app.frameCount
+                        )
+                    }
                 )
                 await GeminiAnalysisService.shared.handleChunk(chunkInfo)
             }
