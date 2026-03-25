@@ -23,6 +23,7 @@ struct AIResponseView: View {
     @Binding var isVoiceFollowUp: Bool
     @Binding var voiceFollowUpTranscript: String
     @Binding var suggestedReplies: [String]
+    @Binding var suggestedReplyQuestion: String
 
     var onClose: (() -> Void)?
     var onNewChat: (() -> Void)?
@@ -687,29 +688,15 @@ struct AIResponseView: View {
     // MARK: - Suggested Replies
 
     private var suggestedRepliesView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(suggestedReplies, id: \.self) { reply in
-                    Button(action: {
-                        suggestedReplies = []
-                        onSendFollowUp?(reply)
-                    }) {
-                        Text(reply)
-                            .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(.white.opacity(0.9))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
+        QuickReplyButtonsView(
+            question: suggestedReplyQuestion,
+            options: suggestedReplies,
+            onSelect: { reply in
+                suggestedReplies = []
+                suggestedReplyQuestion = ""
+                onSendFollowUp?(reply)
             }
-        }
+        )
     }
 
     // MARK: - Observer Thinking Indicator
