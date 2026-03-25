@@ -354,6 +354,36 @@ struct SettingsContentView: View {
             }
 
             // Background Style
+
+            // Voice Response (TTS) card
+            settingsCard(settingId: "general.voiceresponse") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .scaledFont(size: 16)
+                            .foregroundColor(FazmColors.purplePrimary)
+
+                        Text("Voice Response")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(FazmColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $voiceResponseEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: voiceResponseEnabled) { _, newValue in
+                                AnalyticsManager.shared.settingToggled(setting: "voice_response", enabled: newValue)
+                                Task { await chatProvider?.restartBridgeForVoiceResponse() }
+                            }
+                    }
+
+                    Text("When enabled, the AI will speak its response aloud using text-to-speech. Takes effect on next message.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(FazmColors.textTertiary)
+                }
+            }
         }
     }
 
@@ -496,36 +526,6 @@ struct SettingsContentView: View {
                             .scaledFont(size: 12)
                             .foregroundColor(FazmColors.textTertiary)
                     }
-                }
-            }
-
-            // Voice Response (TTS) card
-            settingsCard(settingId: "aichat.voiceresponse") {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .scaledFont(size: 16)
-                            .foregroundColor(FazmColors.purplePrimary)
-
-                        Text("Voice Response")
-                            .scaledFont(size: 15, weight: .semibold)
-                            .foregroundColor(FazmColors.textPrimary)
-
-                        Spacer()
-
-                        Toggle("", isOn: $voiceResponseEnabled)
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .labelsHidden()
-                            .onChange(of: voiceResponseEnabled) { _, newValue in
-                                AnalyticsManager.shared.settingToggled(setting: "voice_response", enabled: newValue)
-                                Task { await chatProvider?.restartBridgeForVoiceResponse() }
-                            }
-                    }
-
-                    Text("When enabled, the AI will speak its response aloud using text-to-speech. Takes effect on next message.")
-                        .scaledFont(size: 12)
-                        .foregroundColor(FazmColors.textTertiary)
                 }
             }
 
