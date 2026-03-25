@@ -463,12 +463,27 @@ class ChatToolExecutor {
             let extractor = AutofillExtractor()
             let profile = extractor.extractAll()
 
-            log("Browser profile raw counts: addresses=\(profile.addresses.count), formFields=\(profile.formFields.count), cards=\(profile.cards.count), tools=\(profile.tools.count), accounts=\(profile.accounts.count), bookmarks=\(profile.bookmarks.count)")
+            let counts = "addresses=\(profile.addresses.count), formFields=\(profile.formFields.count), cards=\(profile.cards.count), tools=\(profile.tools.count), accounts=\(profile.accounts.count), bookmarks=\(profile.bookmarks.count)"
+            log("Browser profile raw counts: \(counts)")
 
             do {
                 let db = try ProfileDatabase()
                 db.ingestProfile(profile)
-                return db.profileText()
+                let profileText = db.profileText()
+
+                // Append extraction metadata so the AI knows what was found vs empty
+                let total = profile.addresses.count + profile.formFields.count + profile.cards.count + profile.tools.count + profile.accounts.count + profile.bookmarks.count
+                var warnings: [String] = []
+                if profile.addresses.count == 0 && profile.formFields.count == 0 { warnings.append("autofill (no saved addresses or form data found)") }
+                if profile.accounts.count == 0 { warnings.append("logins (no saved passwords found)") }
+                if profile.bookmarks.count == 0 { warnings.append("bookmarks") }
+                if profile.tools.count == 0 { warnings.append("history") }
+
+                var meta = "\n\n---\nExtraction summary: \(total) entries total [\(counts)]"
+                if !warnings.isEmpty {
+                    meta += "\nEmpty sources: \(warnings.joined(separator: ", ")) — these browsers may not have this data, or the data hasn't synced yet."
+                }
+                return profileText + meta
             } catch {
                 log("Browser profile DB error: \(error.localizedDescription)")
                 // DB failed but we still have raw data — format inline
@@ -490,13 +505,43 @@ class ChatToolExecutor {
 
     // MARK: - Browser Profile Query
 
+    /// Check if browser profile DB needs re-extraction: missing, stale (>24h), or incomplete.
+    private static func browserProfileNeedsExtraction(dbPath: String) -> String? {
+        let fm = FileManager.default
+
+        if !fm.fileExists(atPath: dbPath) {
+            return "DB not found"
+        }
+
+        // Stale check: re-extract if DB is older than 24 hours
+        if let attrs = try? fm.attributesOfItem(atPath: dbPath),
+           let modified = attrs[.modificationDate] as? Date,
+           Date().timeIntervalSince(modified) > 86400 {
+            return "DB is stale (last updated \(Int(Date().timeIntervalSince(modified) / 3600))h ago)"
+        }
+
+        // Incomplete check: if only history entries exist (no autofill, logins, or bookmarks)
+        if let db = try? ProfileDatabase(path: dbPath) {
+            let hasAutofill = !db.search(tags: ["identity"], limit: 1).isEmpty
+                || !db.search(tags: ["address"], limit: 1).isEmpty
+                || !db.search(tags: ["payment"], limit: 1).isEmpty
+            let hasAccounts = !db.search(tags: ["account"], limit: 1).isEmpty
+            // If we have accounts OR autofill data, the extraction was meaningful
+            if !hasAutofill && !hasAccounts {
+                return "DB is incomplete (only history, no autofill or accounts)"
+            }
+        }
+
+        return nil
+    }
+
     /// Query the user's browser profile database (always available, not onboarding-only).
     private static func executeQueryBrowserProfile(_ args: [String: Any]) async -> String {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
         let dbPath = homeDir.appendingPathComponent("ai-browser-profile/memories.db").path
 
-        if !FileManager.default.fileExists(atPath: dbPath) {
-            log("Browser profile DB not found, auto-extracting...")
+        if let reason = browserProfileNeedsExtraction(dbPath: dbPath) {
+            log("Browser profile re-extraction needed: \(reason)")
             let extractResult = await executeExtractBrowserProfile([:])
             guard FileManager.default.fileExists(atPath: dbPath) else {
                 return extractResult.isEmpty ? "Browser profile extraction failed." : extractResult
