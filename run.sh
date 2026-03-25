@@ -401,7 +401,7 @@ open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 # The app touches /tmp/fazm-dev-interaction on user interaction (PTT, bar expand,
 # app activate, etc.) — separate from the main log which background tasks write constantly.
 INTERACTION_MARKER="/tmp/fazm-dev-interaction"
-IDLE_THRESHOLD=120
+IDLE_THRESHOLD=60
 
 # Wait for the app to actually start (open is async)
 sleep 5
