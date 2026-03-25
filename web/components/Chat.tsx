@@ -59,15 +59,6 @@ export default function Chat({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Status bar */}
-      {!isDesktopOnline && (
-        <div className="px-4 py-2 text-center text-xs bg-neutral-900 text-neutral-400 border-b border-neutral-800">
-          {isConnected
-            ? "Desktop is offline — open Fazm on your computer"
-            : "Connecting..."}
-        </div>
-      )}
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto hide-scrollbar px-4 py-4 space-y-3">
         {messages.length === 0 && isDesktopOnline && (
@@ -144,11 +135,13 @@ export default function Chat({
       <div className="px-4 py-3 border-t border-neutral-800">
         {!isDesktopOnline ? (
           <div className="flex items-center justify-center gap-2 bg-neutral-900 rounded-2xl px-4 py-3 border border-neutral-700">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <div className={`w-2 h-2 rounded-full animate-pulse ${isConnected ? "bg-red-500" : messages.length > 0 ? "bg-red-500" : "bg-yellow-500"}`} />
             <span className="text-sm text-neutral-400">
               {isConnected
                 ? "Desktop offline — open Fazm on your computer"
-                : "Connection lost — reconnecting..."}
+                : messages.length > 0
+                  ? "Connection lost — reconnecting..."
+                  : "Connecting to desktop..."}
             </span>
           </div>
         ) : (
