@@ -145,6 +145,7 @@
     "Knowledge graph data from onboarding is now also saved to Hindsight for long-term memory recall",
     "Added Discovered Tasks tab showing AI-identified tasks from screen analysis",
     "Fixed Claude OAuth sign-in failing on first attempt when not logged in to claude.ai",
-    "Fixed Connect Claude button staying visible after successful authentication"
+    "Fixed Connect Claude button staying visible after successful authentication",
+    "Polished tool call status indicators: shows action verbs instead of technical labels, shortened file paths"
   ]
 }
