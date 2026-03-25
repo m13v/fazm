@@ -716,6 +716,14 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         isResizingProgrammatically = true
 
+        // Force-complete any in-flight _NSWindowTransformAnimation to prevent
+        // accumulation of stale animation objects that can cause use-after-free
+        // crashes (EXC_BAD_ACCESS in _NSWindowTransformAnimation dealloc) in
+        // long-running sessions.
+        if animated {
+            self.setFrame(self.frame, display: false, animate: false)
+        }
+
         // On macOS 26+ (Tahoe), animated setFrame triggers NSHostingView.updateAnimatedWindowSize
         // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
         // causing an infinite constraint update loop (OMI-COMPUTER-1J). Disable implicit animations
@@ -771,35 +779,21 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         if expanded {
             // Expand synchronously so the window is already large enough when
             // SwiftUI re-evaluates body with isHovering=true.
-            // Use a short animation so the size change isn't jarring.
+            // Use animate:false to avoid accumulating _NSWindowTransformAnimation
+            // objects that can cause use-after-free crashes in long-running sessions.
             isResizingProgrammatically = true
-            NSAnimationContext.beginGrouping()
-            NSAnimationContext.current.duration = 0.15
-            NSAnimationContext.current.allowsImplicitAnimation = false
-            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
-            NSAnimationContext.endGrouping()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.isResizingProgrammatically = false
-            }
+            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+            isResizingProgrammatically = false
         } else {
             // Collapse async to avoid blocking SwiftUI body evaluation during unhover.
             let doResize: () -> Void = { [weak self] in
                 guard let self = self else { return }
                 self.isResizingProgrammatically = true
-                NSAnimationContext.beginGrouping()
-                NSAnimationContext.current.duration = 0.2
-                NSAnimationContext.current.allowsImplicitAnimation = false
-                NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeIn)
-                self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
-                NSAnimationContext.endGrouping()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    self?.isResizingProgrammatically = false
-                }
+                self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+                self.isResizingProgrammatically = false
             }
             resizeWorkItem = DispatchWorkItem(block: doResize)
             DispatchQueue.main.async(execute: resizeWorkItem!)
-        }
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
