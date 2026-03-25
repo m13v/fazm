@@ -753,9 +753,11 @@ class ChatProvider: ObservableObject {
             object: nil, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            self.webRelay.stop()
-            let bridge = self.acpBridge
-            Task.detached { await bridge.stop() }
+            MainActor.assumeIsolated {
+                self.webRelay.stop()
+                let bridge = self.acpBridge
+                Task.detached { await bridge.stop() }
+            }
         }
     }
 
@@ -1020,9 +1022,11 @@ class ChatProvider: ObservableObject {
             BrowserExtensionSetup.openURLInChrome(urlString)
             return
         }
+        // NSAppleScript is not Sendable but is safe here — created on main, used exclusively on the background queue.
+        nonisolated(unsafe) let script = appleScript
         DispatchQueue.global(qos: .userInitiated).async {
             var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
+            script.executeAndReturnError(&error)
             if error != nil {
                 DispatchQueue.main.async {
                     BrowserExtensionSetup.openURLInChrome(urlString)
