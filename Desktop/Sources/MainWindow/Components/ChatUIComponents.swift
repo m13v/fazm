@@ -498,7 +498,7 @@ struct ObserverCardStackView: View {
                     .onAppear {
                         if isObserverRunning { pulseOpacity = 0.3 }
                     }
-                    .onChange(of: isObserverRunning) { running in
+                    .onChange(of: isObserverRunning) { _, running in
                         pulseOpacity = running ? 0.3 : 0.7
                     }
 
