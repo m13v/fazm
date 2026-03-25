@@ -338,12 +338,30 @@ class SessionRecordingManager {
         pauseWorkItem?.cancel()
         pauseWorkItem = nil
 
+        // Touch the interaction marker so the run.sh watchdog knows the user is active
+        touchInteractionMarker()
+
         guard let recorder else { return }
         Task {
             let paused = await recorder.isPaused
             guard paused else { return }
             await recorder.resume()
             log("SessionRecording: resumed (\(reason))")
+        }
+    }
+
+    /// Touch a marker file that run.sh's watchdog uses to detect user interaction.
+    /// Separate from the main log which gets written by background tasks constantly.
+    private func touchInteractionMarker() {
+        let path = "/tmp/fazm-dev-interaction"
+        if !FileManager.default.fileExists(atPath: path) {
+            FileManager.default.createFile(atPath: path, contents: nil)
+        } else {
+            // Update modification time
+            try? FileManager.default.setAttributes(
+                [.modificationDate: Date()],
+                ofItemAtPath: path
+            )
         }
     }
 
