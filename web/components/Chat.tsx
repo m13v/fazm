@@ -57,6 +57,20 @@ export default function Chat({
     }
   };
 
+  // Empty + disconnected: center the status in the screen
+  if (messages.length === 0 && !isDesktopOnline) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 px-6">
+        <div className={`w-3 h-3 rounded-full animate-pulse ${isConnected ? "bg-red-500" : "bg-yellow-500"}`} />
+        <span className="text-sm text-neutral-400 text-center">
+          {isConnected
+            ? "Desktop offline — open Fazm on your computer"
+            : "Connecting to desktop..."}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
