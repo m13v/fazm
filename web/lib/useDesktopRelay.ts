@@ -36,6 +36,7 @@ export function useDesktopRelay(token: string | null): RelayHook {
     if (offlineTimer.current) clearTimeout(offlineTimer.current);
     offlineTimer.current = setTimeout(() => {
       setIsDesktopOnline(false);
+      trackEvent("web_desktop_offline");
     }, hasConnected.current ? 5000 : 0);
   }, []);
 
@@ -43,6 +44,7 @@ export function useDesktopRelay(token: string | null): RelayHook {
     if (offlineTimer.current) clearTimeout(offlineTimer.current);
     hasConnected.current = true;
     setIsDesktopOnline(true);
+    trackEvent("web_desktop_online");
   }, []);
 
   // Discover tunnel URL and connect
@@ -169,12 +171,14 @@ export function useDesktopRelay(token: string | null): RelayHook {
               : m
           )
         );
+        trackEvent("web_message_received", { text_length: (msg.text as string)?.length || 0 });
         currentAiMessageId.current = null;
         setIsSending(false);
         break;
       }
 
       case "error": {
+        trackEvent("web_message_error", { error: msg.error || "unknown" });
         setIsSending(false);
         currentAiMessageId.current = null;
         break;
@@ -202,6 +206,7 @@ export function useDesktopRelay(token: string | null): RelayHook {
         sender: "user",
       };
       setMessages((prev) => [...prev, userMsg]);
+      trackEvent("web_message_sent", { text_length: text.length });
 
       wsRef.current.send(
         JSON.stringify({ type: "send_message", text, sessionKey: "main" })
