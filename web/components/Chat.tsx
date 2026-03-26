@@ -129,7 +129,7 @@ export default function Chat({
 
               {/* Message text */}
               <div className="whitespace-pre-wrap break-words">
-                {msg.text}
+                {msg.text.trim()}
                 {msg.isStreaming && (
                   <span className="inline-flex gap-1 ml-1">
                     <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
@@ -211,12 +211,8 @@ export default function Chat({
                 e.preventDefault();
                 if (!isSending && !transcribing) startRecording();
               }}
-              onPointerUp={() => {
-                if (recording) stopRecording();
-              }}
-              onPointerLeave={() => {
-                if (recording) stopRecording();
-              }}
+              onPointerUp={() => stopRecording()}
+              onPointerLeave={() => stopRecording()}
               onContextMenu={(e) => e.preventDefault()}
               disabled={isSending || transcribing}
               className={`w-full flex items-center justify-center gap-3 h-12 rounded-2xl transition-colors text-sm font-medium select-none touch-none ${

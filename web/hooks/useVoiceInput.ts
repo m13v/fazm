@@ -5,8 +5,13 @@ export function useVoiceInput(onTranscript: (text: string) => void) {
   const [transcribing, setTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingRef = useRef(false);
+  const pendingStopRef = useRef(false);
 
   const startRecording = useCallback(async () => {
+    if (recordingRef.current) return;
+    pendingStopRef.current = false;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -15,6 +20,12 @@ export function useVoiceInput(onTranscript: (text: string) => void) {
           autoGainControl: true,
         },
       });
+
+      // If stop was requested while we were waiting for mic permission
+      if (pendingStopRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
 
       // Pick a supported mime type
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -33,6 +44,8 @@ export function useVoiceInput(onTranscript: (text: string) => void) {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        recordingRef.current = false;
+        setRecording(false);
         const blob = new Blob(chunksRef.current, { type: mimeType });
         if (blob.size === 0) return;
 
@@ -57,21 +70,26 @@ export function useVoiceInput(onTranscript: (text: string) => void) {
       };
 
       mediaRecorder.start(100);
+      recordingRef.current = true;
       setRecording(true);
+
+      // If stop was requested during setup, stop immediately
+      if (pendingStopRef.current) {
+        mediaRecorder.stop();
+      }
     } catch (err) {
       console.error("Mic access denied:", err);
+      recordingRef.current = false;
+      setRecording(false);
     }
   }, [onTranscript]);
 
   const stopRecording = useCallback(() => {
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
+    pendingStopRef.current = true;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
   }, []);
-
-  const toggleRecording = useCallback(() => {
-    if (recording) stopRecording();
-    else startRecording();
-  }, [recording, startRecording, stopRecording]);
 
   return { recording, transcribing, startRecording, stopRecording };
 }
