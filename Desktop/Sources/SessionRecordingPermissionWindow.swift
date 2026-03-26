@@ -186,6 +186,16 @@ final class SessionRecordingPermissionWindowController {
     /// Prevent showing the prompt more than once per app session
     private var hasShownThisSession = false
 
+    /// Show the prompt for testing — bypasses the once-per-session guard.
+    func showForTesting() {
+        log("SessionRecordingPermission: triggered via test notification")
+        hasShownThisSession = false
+        show(onPermissionGranted: {
+            log("SessionRecordingPermission: permission granted (test trigger)")
+            SessionRecordingManager.shared.checkFlagAndUpdate()
+        })
+    }
+
     func show(onPermissionGranted: @escaping () -> Void) {
         guard !hasShownThisSession else {
             log("SessionRecordingPermission: already shown this session, skipping")
