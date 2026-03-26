@@ -346,29 +346,6 @@ extension PostHogManager {
         ])
     }
 
-    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
-        track("Notification Repair Triggered", properties: [
-            "reason": reason,
-            "previous_status": previousStatus,
-            "current_status": currentStatus
-        ])
-    }
-
-    func notificationSettingsChecked(
-        authStatus: String,
-        alertStyle: String,
-        soundEnabled: Bool,
-        badgeEnabled: Bool,
-        bannersDisabled: Bool
-    ) {
-        track("Notification Settings Checked", properties: [
-            "auth_status": authStatus,
-            "alert_style": alertStyle,
-            "sound_enabled": soundEnabled,
-            "badge_enabled": badgeEnabled,
-            "banners_disabled": bannersDisabled
-        ])
-    }
 
     // MARK: - App Lifecycle Events
 
