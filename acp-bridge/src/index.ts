@@ -808,7 +808,7 @@ function buildMeta(systemPrompt?: string, sessionKey?: string): Record<string, u
 // --- Observer session: conversation batching ---
 
 const observerBuffer: Array<{ role: string; text: string }> = [];
-const OBSERVER_BATCH_SIZE = 10;       // Send batch every N turn pairs
+const OBSERVER_BATCH_SIZE = 3;        // Send batch every N turn pairs
 
 function bufferObserverTurn(role: string, text: string): void {
   observerBuffer.push({ role, text });
