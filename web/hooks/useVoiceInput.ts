@@ -73,5 +73,5 @@ export function useVoiceInput(onTranscript: (text: string) => void) {
     else startRecording();
   }, [recording, startRecording, stopRecording]);
 
-  return { recording, transcribing, toggleRecording };
+  return { recording, transcribing, startRecording, stopRecording };
 }

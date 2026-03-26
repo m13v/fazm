@@ -24,19 +24,16 @@ export default function Chat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Voice input — push-to-talk
+  // Voice input — press-and-hold to talk, auto-send on release
   const handleVoiceTranscript = useCallback(
     (transcript: string) => {
-      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-      // Switch to text mode so user can see/edit transcript before sending
-      setShowTextInput(true);
-      if (window.matchMedia("(min-width: 768px)").matches) {
-        inputRef.current?.focus();
+      if (transcript.trim()) {
+        onSend(transcript.trim());
       }
     },
-    []
+    [onSend]
   );
-  const { recording, transcribing, toggleRecording } = useVoiceInput(handleVoiceTranscript);
+  const { recording, transcribing, startRecording, stopRecording } = useVoiceInput(handleVoiceTranscript);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -206,27 +203,37 @@ export default function Chat({
             </button>
           </div>
         ) : (
-          /* Voice mode (default) */
+          /* Voice mode (default) — press and hold to talk */
           <div className="space-y-2">
             <button
               type="button"
-              onClick={toggleRecording}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                if (!isSending && !transcribing) startRecording();
+              }}
+              onPointerUp={() => {
+                if (recording) stopRecording();
+              }}
+              onPointerLeave={() => {
+                if (recording) stopRecording();
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={isSending || transcribing}
-              className={`w-full flex items-center justify-center gap-3 h-12 rounded-2xl transition-colors text-sm font-medium ${
+              className={`w-full flex items-center justify-center gap-3 h-12 rounded-2xl transition-colors text-sm font-medium select-none touch-none ${
                 recording
                   ? "bg-red-500 text-white animate-pulse"
                   : transcribing
                     ? "bg-neutral-700 text-white/50 cursor-wait"
-                    : "bg-white text-black hover:bg-neutral-200"
+                    : "bg-white text-black hover:bg-neutral-200 active:bg-neutral-300"
               }`}
-              aria-label={recording ? "Stop recording" : "Start voice input"}
+              aria-label={recording ? "Release to send" : "Hold to talk"}
             >
               {transcribing ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="31.4 31.4" />
                   </svg>
-                  Transcribing...
+                  Sending...
                 </>
               ) : (
                 <>
@@ -237,7 +244,7 @@ export default function Chat({
                       <path d="M12 1a4 4 0 0 0-4 4v7a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4zm-1 18.93A7.01 7.01 0 0 1 5 13h2a5 5 0 0 0 10 0h2a7.01 7.01 0 0 1-6 6.93V22h3v2H8v-2h3v-2.07z" />
                     )}
                   </svg>
-                  {recording ? "Tap to stop" : "Tap to talk"}
+                  {recording ? "Release to send" : "Hold to talk"}
                 </>
               )}
             </button>
