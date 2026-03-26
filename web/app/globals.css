@@ -8,11 +8,17 @@
   --accent: #3b82f6;
 }
 
-body {
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  height: 100dvh;
+  width: 100%;
+  touch-action: pan-x pan-y;
 }
 
 /* Hide scrollbar but allow scrolling */
