@@ -23,15 +23,29 @@ struct SessionRecordingPermissionSheet: View {
                 // Success state
                 Spacer()
                 Image(systemName: "checkmark.circle.fill")
-                    .scaledFont(size: 48)
+                    .font(.system(size: 48))
                     .foregroundColor(.green)
                 Text("Done")
-                    .scaledFont(size: 20, weight: .semibold)
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(FazmColors.textPrimary)
                 Text("Screen recording is now enabled.")
-                    .scaledFont(size: 13)
+                    .font(.system(size: 13))
                     .foregroundColor(FazmColors.textSecondary)
                 Spacer()
+                Button(action: onDismiss) {
+                    Text("OK")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(FazmColors.purplePrimary)
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
             } else {
                 // Header with close button
                 HStack {
@@ -104,6 +118,7 @@ struct SessionRecordingPermissionSheet: View {
                 .padding(.bottom, 16)
             }
         }
+        .frame(width: 340, height: 400)
         .animation(.easeInOut(duration: 0.3), value: state.isGranted)
         .background(FazmColors.backgroundPrimary)
         .preferredColorScheme(.dark)
@@ -221,12 +236,9 @@ final class SessionRecordingPermissionWindowController {
                 self.permissionCheckTimer = nil
                 log("SessionRecordingPermission: permission granted!")
 
-                // Show "Done" state, then auto-close after 2 seconds
+                // Show "Done" state — user clicks OK to dismiss
                 self.state.isGranted = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    self.close()
-                    onGranted()
-                }
+                onGranted()
             }
         }
     }
