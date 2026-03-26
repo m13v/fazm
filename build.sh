@@ -65,6 +65,29 @@ else
     rm -rf "$NODE_TEMP_DIR"
 fi
 
+# Ensure bundled cloudflared exists (for WebRelay tunnel)
+CLOUDFLARED_RESOURCE="Desktop/Sources/Resources/cloudflared"
+if [ -x "$CLOUDFLARED_RESOURCE" ]; then
+    echo "cloudflared binary already exists, skipping download"
+else
+    echo "Downloading cloudflared binary for build..."
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "arm64" ]; then
+        CF_ARCH="arm64"
+    else
+        CF_ARCH="amd64"
+    fi
+    CF_TEMP_DIR="/tmp/cloudflared-$$"
+    mkdir -p "$CF_TEMP_DIR"
+    curl -L -o "$CF_TEMP_DIR/cloudflared.tgz" \
+        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-$CF_ARCH.tgz"
+    tar -xzf "$CF_TEMP_DIR/cloudflared.tgz" -C "$CF_TEMP_DIR"
+    cp "$CF_TEMP_DIR/cloudflared" "$CLOUDFLARED_RESOURCE"
+    chmod +x "$CLOUDFLARED_RESOURCE"
+    echo "Downloaded cloudflared ($CF_ARCH) to $CLOUDFLARED_RESOURCE"
+    rm -rf "$CF_TEMP_DIR"
+fi
+
 # Build release binary
 xcrun swift build -c release --package-path Desktop
 
