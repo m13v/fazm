@@ -277,7 +277,75 @@ fi
 echo "  node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
 # -----------------------------------------------------------------------------
-# Step 1.7: Build ACP Bridge (TypeScript → JavaScript)
+# Step 1.7: Prepare Universal cloudflared binary (for WebRelay tunnel)
+# -----------------------------------------------------------------------------
+echo "[1.7/12] Preparing universal cloudflared binary..."
+
+CLOUDFLARED_RESOURCE="Desktop/Sources/Resources/cloudflared"
+CLOUDFLARED_TEMP_DIR="/tmp/cloudflared-universal-$$"
+
+# Check if current cloudflared is already universal
+if file "$CLOUDFLARED_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
+    echo "  cloudflared is already universal, skipping download"
+else
+    echo "  Creating universal cloudflared binary..."
+
+    mkdir -p "$CLOUDFLARED_TEMP_DIR"
+
+    # Backup current cloudflared if exists
+    if [ -f "$CLOUDFLARED_RESOURCE" ]; then
+        cp "$CLOUDFLARED_RESOURCE" "$CLOUDFLARED_TEMP_DIR/cloudflared.backup"
+    fi
+
+    # Download arm64 cloudflared
+    echo "  Downloading arm64 cloudflared..."
+    curl -L -o "$CLOUDFLARED_TEMP_DIR/cloudflared-arm64.tgz" \
+        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz" || {
+        echo "Error: Failed to download arm64 cloudflared"
+        exit 1
+    }
+    tar -xzf "$CLOUDFLARED_TEMP_DIR/cloudflared-arm64.tgz" -C "$CLOUDFLARED_TEMP_DIR"
+    mv "$CLOUDFLARED_TEMP_DIR/cloudflared" "$CLOUDFLARED_TEMP_DIR/cloudflared-arm64"
+
+    # Download x86_64 cloudflared
+    echo "  Downloading x86_64 cloudflared..."
+    curl -L -o "$CLOUDFLARED_TEMP_DIR/cloudflared-amd64.tgz" \
+        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz" || {
+        echo "Error: Failed to download x86_64 cloudflared"
+        exit 1
+    }
+    tar -xzf "$CLOUDFLARED_TEMP_DIR/cloudflared-amd64.tgz" -C "$CLOUDFLARED_TEMP_DIR"
+    mv "$CLOUDFLARED_TEMP_DIR/cloudflared" "$CLOUDFLARED_TEMP_DIR/cloudflared-amd64"
+
+    # Create universal binary with lipo
+    echo "  Creating universal cloudflared with lipo..."
+    lipo -create "$CLOUDFLARED_TEMP_DIR/cloudflared-arm64" "$CLOUDFLARED_TEMP_DIR/cloudflared-amd64" -output "$CLOUDFLARED_RESOURCE"
+
+    # Make executable and ad-hoc sign
+    chmod +x "$CLOUDFLARED_RESOURCE"
+    xattr -cr "$CLOUDFLARED_RESOURCE"
+    codesign -f -s - "$CLOUDFLARED_RESOURCE"
+
+    # Verify it's universal
+    if file "$CLOUDFLARED_RESOURCE" | grep -q "universal binary"; then
+        echo "  ✓ Universal cloudflared created successfully"
+    else
+        echo "Error: Failed to create universal cloudflared"
+        if [ -f "$CLOUDFLARED_TEMP_DIR/cloudflared.backup" ]; then
+            mv "$CLOUDFLARED_TEMP_DIR/cloudflared.backup" "$CLOUDFLARED_RESOURCE"
+        fi
+        exit 1
+    fi
+
+    # Cleanup temp files
+    rm -rf "$CLOUDFLARED_TEMP_DIR"
+fi
+
+# Show cloudflared architectures
+echo "  cloudflared: $(file "$CLOUDFLARED_RESOURCE" | sed 's/.*: //')"
+
+# -----------------------------------------------------------------------------
+# Step 1.8: Build ACP Bridge (TypeScript → JavaScript)
 # -----------------------------------------------------------------------------
 echo "[1.7/12] Building acp-bridge..."
 

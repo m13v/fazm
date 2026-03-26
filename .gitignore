@@ -61,6 +61,7 @@ scripts/
 **/python_reference/
 Desktop/Sources/Resources/ffmpeg
 Desktop/Sources/Resources/node
+Desktop/Sources/Resources/cloudflared
 
 # Generated browser snapshots (contain PII)
 *-snapshot.md
