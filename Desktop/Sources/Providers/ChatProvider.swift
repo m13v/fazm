@@ -2296,7 +2296,8 @@ class ChatProvider: ObservableObject {
                     Task { await OnboardingChatPersistence.saveMessage(msg) }
                 } else if sessionKey == "floating", !messageText.isEmpty {
                     let msg = messages[index]
-                    Task { await ChatMessageStore.saveMessage(msg, context: "__floating__") }
+                    let sid = floatingChatSessionId
+                    Task { await ChatMessageStore.saveMessage(msg, context: "__floating__", sessionId: sid) }
                 }
             } else {
                 // Message no longer in memory (user switched away from this session).
