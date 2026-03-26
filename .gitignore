@@ -105,3 +105,15 @@ demo/out/
 thread*.md
 Desktop/bin/
 .vercel
+
+# Next.js build output
+**/.next/
+
+# Nested repos / symlinks (not part of this project)
+/Sources/
+/ai-browser-profile-swift-light
+/form-progress
+
+# Playwright snapshots
+*-snapshot.yml
+telegram-snapshot.yml
