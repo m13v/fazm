@@ -1,6 +1,7 @@
 import SwiftUI
 import Sparkle
 import UniformTypeIdentifiers
+import CoreImage
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
