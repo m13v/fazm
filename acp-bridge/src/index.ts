@@ -787,7 +787,7 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
         // The google-cloud-oauth-setup skill stores client_secret.json here after
         // the user creates their personal Google Cloud OAuth app.
         { name: "GOOGLE_CLIENT_SECRET_PATH", value: join(gwsCredsDir, "client_secret.json") },
-        { name: "WORKSPACE_MCP_CREDENTIALS_DIR", value: join(gwsCredsDir, "auth") },
+        { name: "WORKSPACE_MCP_CREDENTIALS_DIR", value: join(homeDir, ".google_workspace_mcp", "credentials") },
       ],
     });
   }
