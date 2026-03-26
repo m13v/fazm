@@ -323,17 +323,6 @@ class ChatToolExecutor {
                 return "pending - user needs to allow microphone access in the system dialog"
             }
 
-        case "notifications":
-            appState.requestNotificationPermission()
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            appState.checkNotificationPermission()
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            if appState.hasNotificationPermission {
-                return "granted"
-            } else {
-                return "pending - user needs to allow notifications in the system dialog"
-            }
-
         case "accessibility":
             appState.triggerAccessibilityPermission()
             try? await Task.sleep(nanoseconds: 2_000_000_000)
