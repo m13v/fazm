@@ -80,6 +80,7 @@ struct SettingsSidebar: View {
     @ObservedObject var appState: AppState
 
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+    @ObservedObject private var founderChatService = FounderChatService.shared
     @State private var searchQuery = ""
     @State private var updateGlowAnimating = false
     @State private var discoveredTasksUnread = 0
@@ -131,7 +132,7 @@ struct SettingsSidebar: View {
                                 isSelected: selectedSection == section,
                                 iconWidth: iconWidth,
                                 showWarning: section == .permissions && appState.hasMissingPermissions,
-                                badgeCount: section == .discoveredTasks ? discoveredTasksUnread : 0,
+                                badgeCount: section == .discoveredTasks ? discoveredTasksUnread : (section == .chatWithUs ? founderChatService.unreadCount : 0),
                                 onTap: {
                                     withAnimation(.easeInOut(duration: 0.15)) {
                                         selectedSection = section
@@ -179,7 +180,10 @@ struct SettingsSidebar: View {
         }
         .frame(width: expandedWidth)
         .background(FazmColors.backgroundPrimary)
-        .onAppear { refreshUnreadCount() }
+        .onAppear {
+            refreshUnreadCount()
+            founderChatService.startPolling()
+        }
         .onReceive(unreadRefreshTimer) { _ in refreshUnreadCount() }
     }
 
@@ -319,6 +323,7 @@ struct SettingsSidebarItem: View {
     private var icon: String {
         switch section {
         case .home: return "house"
+        case .chatWithUs: return "bubble.left.and.bubble.right"
         case .discoveredTasks: return "wand.and.stars"
         case .remoteControl: return "iphone"
         case .general: return "gearshape"
