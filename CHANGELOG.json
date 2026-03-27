@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added confirmation dialog when skipping onboarding and a \"Complete Setup\" banner on the Home page to restart onboarding"
+  ],
   "releases": [
     {
       "version": "1.5.0",
