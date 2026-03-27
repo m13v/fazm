@@ -841,8 +841,15 @@ workflows:
           try:
             with open('CHANGELOG.json') as f:
               data = json.load(f)
-            changes = data.get('releases', [{}])[0].get('changes', [])
-            print('\n'.join('- ' + c for c in changes))
+            # Try versioned release first, then fall back to unreleased
+            changes = []
+            for r in data.get('releases', []):
+              if r.get('version') == '$VERSION':
+                changes = r.get('changes', [])
+                break
+            if not changes:
+              changes = data.get('unreleased', [])
+            print('\n'.join('- ' + c for c in changes) if changes else '- Bug fixes and improvements')
           except:
             print('- Bug fixes and improvements')
           ")
@@ -852,7 +859,14 @@ workflows:
           try:
             with open('CHANGELOG.json') as f:
               data = json.load(f)
-            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
+            changes = []
+            for r in data.get('releases', []):
+              if r.get('version') == '$VERSION':
+                changes = r.get('changes', [])
+                break
+            if not changes:
+              changes = data.get('unreleased', [])
+            print(json.dumps(changes))
           except:
             print('[]')
           ")
