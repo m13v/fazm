@@ -78,8 +78,9 @@ class SessionRecordingManager {
                 chunkDurationSeconds: 60.0,
                 ffmpegPath: ffmpegPath,
                 storageBaseURL: storageDir,
-                deviceId: deviceId
+                deviceId: deviceId,
                 // No backendURL/backendSecret → local-only mode
+                captureMode: .activeWindow  // Only capture the frontmost app for task analysis
             )
 
             let recorder = SessionRecorder(configuration: config)
@@ -240,7 +241,8 @@ class SessionRecordingManager {
                 storageBaseURL: storageDir,
                 deviceId: deviceId,
                 backendURL: backendURL,
-                backendSecret: currentToken  // Temporary: passing Firebase ID token as secret
+                backendSecret: currentToken,  // Temporary: passing Firebase ID token as secret
+                captureMode: .fullDisplay  // Capture entire desktop for analytics
             )
 
             let recorder = SessionRecorder(configuration: config)
