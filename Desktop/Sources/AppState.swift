@@ -705,7 +705,8 @@ class AppState: ObservableObject {
             "hasTriggeredSystemAudio",
             "hasTriggeredAccessibility",
             "hasTriggeredBluetooth",
-            "hasSeenPostOnboardingTutorial"
+            "hasSeenPostOnboardingTutorial",
+            "onboardingWasSkipped"
         ]
         for key in onboardingKeys {
             UserDefaults.standard.removeObject(forKey: key)
