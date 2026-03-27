@@ -676,6 +676,17 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Lightweight restart: re-enter onboarding without signing out or resetting permissions.
+    /// Keeps the user signed in, keeps granted permissions, just clears onboarding completion
+    /// so the user goes through the onboarding chat again.
+    func restartOnboarding() {
+        log("AppState: Restarting onboarding (lightweight — keeping sign-in and permissions)")
+        hasCompletedOnboarding = false
+        UserDefaults.standard.removeObject(forKey: "onboardingWasSkipped")
+        OnboardingChatPersistence.clear()
+        AnalyticsManager.shared.menuBarActionClicked(action: "restart_onboarding")
+    }
+
     /// Reset onboarding state and all TCC permissions, then restart the app
     /// This clears UserDefaults onboarding keys and resets permissions so the user
     /// can go through onboarding again with fresh permission prompts.
