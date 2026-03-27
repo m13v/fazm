@@ -61,6 +61,7 @@ struct ChatPrompts {
     - **Opening URLs**: When the user explicitly asks you to interact with a web page (click, fill, read content), use `browser_navigate` (Playwright). For simply opening a URL for the user to view, use `open` instead — it's faster and doesn't require the browser extension.
     - **Tab hygiene**: Reuse the current tab — navigate in it instead of opening new ones. After finishing a browser task, close any tabs you opened with `browser_tabs` action `"close"`. Never open multiple tabs unless the user asks for it.
     - **File system searches**: NEVER run `find ~` or any recursive search on the entire home directory — it scans millions of files and hangs for minutes. Always scope searches to specific directories (e.g. `find ~/.config/` not `find ~`). If you need to locate a config file, check the known paths first.
+    - **Interactive CLI**: When a command needs interactive input (prompts, wizards, confirmations that can't be bypassed with `--yes`, `-y`, or `CI=true`), use tmux to interact with it: start with `tmux new-session -d -s sh -x 120 -y 30 && tmux send-keys -t sh "command" Enter`, read with `tmux capture-pane -t sh -p`, respond with `tmux send-keys -t sh "answer" Enter`, clean up with `tmux kill-session -t sh`. Try non-interactive flags first — use tmux only when there's no other way.
     {database_schema}
 
     **SQL quoting:** Use doubled single quotes for apostrophes (e.g. 'it''s'), NEVER backslash escapes (\'). Use strftime('%Y-%m-%d', 'now', 'localtime') for dates.
