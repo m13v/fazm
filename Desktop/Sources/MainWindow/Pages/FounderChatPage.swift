@@ -24,9 +24,6 @@ struct FounderChatPage: View {
             chatService.startPolling()
             Task { await chatService.markFounderMessagesAsRead() }
         }
-        .onDisappear {
-            chatService.stopPolling()
-        }
     }
 
     // MARK: - Empty State
