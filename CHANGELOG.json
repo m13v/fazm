@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Added confirmation dialog when skipping onboarding and a \"Complete Setup\" banner on the Home page to restart onboarding"
+    "Added confirmation dialog when skipping onboarding and a \"Complete Setup\" banner on the Home page to restart onboarding",
+    "Added Chat with Us tab for direct messaging with the Fazm team"
   ],
   "releases": [
     {
