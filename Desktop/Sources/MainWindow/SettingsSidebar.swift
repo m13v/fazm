@@ -132,7 +132,7 @@ struct SettingsSidebar: View {
                                 isSelected: selectedSection == section,
                                 iconWidth: iconWidth,
                                 showWarning: section == .permissions && appState.hasMissingPermissions,
-                                badgeCount: section == .discoveredTasks ? discoveredTasksUnread : (section == .chatWithUs ? founderChatService.unreadCount : 0),
+                                badgeCount: section == .discoveredTasks ? discoveredTasksUnread : (section == .chatWithFounder ? founderChatService.unreadCount : 0),
                                 onTap: {
                                     withAnimation(.easeInOut(duration: 0.15)) {
                                         selectedSection = section
@@ -323,7 +323,7 @@ struct SettingsSidebarItem: View {
     private var icon: String {
         switch section {
         case .home: return "house"
-        case .chatWithUs: return "bubble.left.and.bubble.right"
+        case .chatWithFounder: return "bubble.left.and.bubble.right"
         case .discoveredTasks: return "wand.and.stars"
         case .remoteControl: return "iphone"
         case .general: return "gearshape"
