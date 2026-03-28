@@ -1,0 +1,1139 @@
+- generic:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - link:
+                    - /url: /
+                    - img
+                - generic:
+                  - generic:
+                    - img
+                  - img
+            - generic:
+              - generic:
+                - list:
+                  - link:
+                    - /url: /me/get-started
+                    - listitem:
+                      - img
+                      - generic: Get started
+                      - generic: 3/6
+                  - link:
+                    - /url: /me/feed
+                    - listitem:
+                      - img
+                      - generic: Feed
+                  - link:
+                    - /url: /me/bookmarks
+                    - listitem:
+                      - img
+                      - generic: Bookmarks
+                  - link:
+                    - /url: /me/analytics
+                    - listitem:
+                      - img
+                      - generic: Analytics
+                  - link:
+                    - /url: /me/notifications
+                    - listitem:
+                      - img
+                      - generic: My alerts
+                  - link:
+                    - /url: /me/api
+                    - listitem:
+                      - img
+                      - generic: API / MCP
+                  - link:
+                    - /url: /me/settings?tab=companyProfile
+                    - listitem:
+                      - img
+                      - generic: Settings
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: Keywords
+                    - button: 💡
+                  - generic:
+                    - button [disabled]:
+                      - img
+                      - generic: Add keywords
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic:
+                          - generic:
+                            - generic: computer use
+                          - generic:
+                            - button:
+                              - img
+                      - button:
+                        - generic:
+                          - generic:
+                            - generic: fazm
+                          - generic:
+                            - button:
+                              - img
+                      - button:
+                        - generic:
+                          - generic:
+                            - generic: opendevin
+                          - generic:
+                            - button:
+                              - img
+                      - button:
+                        - generic:
+                          - generic:
+                            - generic: screenpipe
+                          - generic:
+                            - button:
+                              - img
+                      - button:
+                        - generic:
+                          - generic:
+                            - generic: rewind
+                          - generic:
+                            - button:
+                              - img
+                      - status
+            - generic:
+              - generic:
+                - link:
+                  - /url: https://cal.link/octolens-setup
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - generic: Book a personal walkthrough
+              - generic:
+                - link:
+                  - /url: https://octolens.gitbook.io/octolens/
+                  - img
+                  - generic: Documentation
+              - generic:
+                - link:
+                  - /url: /me/settings?tab=plans
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic: "4535"
+                        - generic: /
+                        - generic: "5000"
+                      - generic: Free Trial
+                    - generic:
+                      - generic: Trial ends in 3 days.
+                      - generic: Upgrade
+      - generic:
+        - generic:
+          - link:
+            - /url: /me/settings?tab=plans
+            - generic:
+              - generic: You've used 91% of the mentions allowed in your free trial.
+              - generic: Upgrade now
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - complementary:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                      - generic:
+                        - button:
+                          - generic:
+                            - img
+                          - generic: For you
+                        - button:
+                          - generic:
+                            - img
+                          - generic: All mentions
+                      - generic:
+                        - generic: Views
+                        - button:
+                          - img
+                          - generic: Add view
+                      - generic:
+                        - button:
+                          - button:
+                            - generic:
+                              - img
+                            - generic: Brand monitoring
+                            - generic:
+                              - button:
+                                - img
+                        - button:
+                          - button:
+                            - generic:
+                              - img
+                            - generic: Crisis management
+                            - generic:
+                              - button:
+                                - img
+                        - button:
+                          - button:
+                            - generic:
+                              - img
+                            - generic: Industry insights
+                            - generic:
+                              - button:
+                                - img
+                        - button:
+                          - button:
+                            - generic:
+                              - img
+                            - generic: Competitor intelligence
+                            - generic:
+                              - button:
+                                - img
+                        - button:
+                          - button:
+                            - generic:
+                              - img
+                            - generic: Buy intent
+                            - generic:
+                              - button:
+                                - img
+                        - status
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - banner:
+                            - generic:
+                              - button:
+                                - generic:
+                                  - img
+                              - generic:
+                                - heading [level=1]: For you
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                  - text: Export
+                              - generic:
+                                - generic:
+                                  - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - img
+                              - generic: Advanced filter (3)
+                              - button:
+                                - img
+                            - generic:
+                              - img
+                              - generic: english
+                              - button:
+                                - img
+                            - button:
+                              - img
+                              - generic: Add filter
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - combobox:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                        - text: All time
+                                      - img
+                              - generic:
+                                - button
+                                - generic: Only unread
+                    - generic:
+                      - main:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic:
+                                                - generic:
+                                                  - generic: computer use
+                                                - generic: ","
+                                              - generic:
+                                                - generic:
+                                                  - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 32 minutes ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@ajibola_motion claude computer use has been surprisingly good for repetitive stuff. I've been building a macOS agent (fazm.ai/) that uses accessibility APIs instead of screenshots and the speed difference is wild, like 10x faster for most workflows. gonna check out dimension too"
+                                        - generic:
+                                          - paragraph: The post directly mentions Fazm, its website, and discusses its technology (macOS agent, accessibility APIs vs. screenshots) in the context of desktop automation.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Positive
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: User Feedback
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic:
+                                            - generic: r/modelcontextpro...
+                                        - generic:
+                                          - generic: an hour ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: Deep_Ad1959
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: sure thing! it's called fazm, https://github.com/m13v/fazm - macOS native, uses accessibility APIs for element targeting instead of screenshots. the dynamic content stuff was definitely the hardest part, ended up building a polling approach that waits for the accessibility tree to stabilize before i...
+                                        - generic:
+                                          - paragraph: The post directly discusses Fazm, its technical implementation, and seeks to compare notes with another developer on similar challenges, indicating direct relevance.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Product Question
+                                      - generic:
+                                        - img
+                                        - generic: User Feedback
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: computer use
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: an hour ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: thomaa2031
+                                            - generic: (2 followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: Trying out Anthropic’s new Claude tool- Computer Use - which has been widely claimed to be the open claw destroyer. But from what I’ve prompted so far it can barely do any tasks at all… I don’t know if it was all the warnings in the instructions or this thing ain’t working… twitter.com/thomaa2031...
+                                        - generic:
+                                          - paragraph: The post discusses a competitor's AI agent 'Computer Use' tool, which directly aligns with Fazm's market of AI computer agents for desktop control.
+                                      - generic:
+                                        - generic:
+                                          - img
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Negative
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: User Feedback
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: an hour ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@JDAutoPilot @ManusAI if you're bootstrapping, try Claude Code directly - Manus is actually built on top of it so you skip the middleman and save on credits. for desktop automation on mac, been building fazm.ai/ which might help too"
+                                        - generic:
+                                          - paragraph: User is building and mentioning Fazm for desktop automation on Mac, directly relevant to the product offering.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "your agent doesn't know your stack - but your browser does Chrome/Firefox/Safari all store history in SQLite. visit_count reveals what matters - not what someone said matters. schema + SQL + Python: fazm.ai/blog/agent-memory-browser-data-sqlite-frequency"
+                                        - generic:
+                                          - paragraph: The post directly references Fazm's blog and discusses agent memory and browser data, which is highly relevant to Fazm's AI computer agent.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic:
+                                            - generic: r/AI_Agents
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: Deep_Ad1959
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "wrote up the full implementation with Chrome/Firefox/Safari SQLite schemas, SQL frequency ranking queries, and a Python ingestion script: https://fazm.ai/blog/agent-memory-browser-data-sqlite-frequency"
+                                        - generic:
+                                          - paragraph: The post directly links to a blog post on fazm.ai, indicating it's content produced by or directly related to Fazm.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Promotional Post
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "agents don't lie on purpose. they pattern-complete. \"success\" is more probable than describing failure. fix: log a prediction before every action. diff before/after. file hash, exit code, a11y tree. the failure clusters become obvious. fazm.ai/blog/agent-journal-catching-lies-prediction-errors"
+                                        - generic:
+                                          - paragraph: The post directly links to Fazm's blog, discusses AI agent behavior, and provides insights relevant to desktop AI agents, aligning with Fazm's product.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "parallel tool calling: 3-4x faster for independent APIs, but breaks desktop agents. reason: accessibility tree refs go stale after any UI action. batch writes predict state that doesn't exist yet. rule: batch reads, sequential writes breakdown: fazm.ai/blog/agent-cli-framework-sequential-vs-batch"
+                                        - generic:
+                                          - paragraph: The post directly links to a blog post on fazm.ai, discussing technical aspects of desktop agents, which is highly relevant to Fazm's product.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "every agent failure in production: the agent didn't know something project-specific fix: a CLAUDE.md that accumulates across sessions - naming conventions, arch decisions, API quirks git blame on a memory file is underrated debugging fazm.ai/blog/agent-legacy-claude-md-memory-system"
+                                        - generic:
+                                          - paragraph: The post directly links to fazm.ai and discusses agent failures and memory systems, which is highly relevant to Fazm's AI computer agent product.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: the agent economy has a trust deficit Air Canada argued their chatbot was a "separate entity" - court said liability is not avoided by automating it. AI incidents up 21% YoY. only 13% of orgs run fully autonomous agents. fazm.ai/blog/agent-economy-trust-deficit
+                                        - generic:
+                                          - paragraph: The post directly links to a Fazm blog post discussing trust in the AI agent economy, which is highly relevant to the company's domain.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: rewind
+                                          - generic: in
+                                          - generic:
+                                            - generic: r/macapps
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: Squiffered
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: Very interesting. Love that it’s open source. I was actually a huge fan of Rewind and thought they had potential to be acquired by Apple. Imagine my disappointment when they pivoted to AI pendants and became Limitless, eventually being acquired by Meta 😓 I still think Apple will build this feature...
+                                        - generic:
+                                          - paragraph: The post discusses a competitor (Rewind) in the desktop AI agent space and its strategic moves, which is highly relevant for Fazm's market analysis.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Negative
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: User Feedback
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "most agent memory systems hoard everything mem0: 26K tokens/convo with full context vs 1.8K with pruning. 90% waste. wrote up LRU, frequency scoring, and relevance decay with python code key insight: 20 focused facts beats 500 stale ones every time fazm.ai/blog/agent-memory-filters-aggressive-pr..."
+                                        - generic:
+                                          - paragraph: The post directly references fazm.ai and discusses agent memory systems, which is highly relevant to Fazm's AI computer agent product.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 2 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: two agents, same model, same tools, same prompt. one asks what logging library you use. the other reaches for the right one because it watched 40 similar tasks. capabilities are table stakes. identity is what actually makes an agent useful. fazm.ai/blog/agent-capabilities-not-identity
+                                        - generic:
+                                          - paragraph: The post directly mentions Fazm and links to a blog post, indicating engagement with the company's content and industry discussion.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Promotional Post
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic:
+                                            - generic: r/ChatGPTCoding
+                                        - generic:
+                                          - generic: 3 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: No-Neighborhood-7229
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: Fazm?
+                                        - generic:
+                                          - paragraph: The post directly mentions "Fazm" which suggests potential user interest or inquiry about the product.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: screenpipe
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 3 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: screen_pipe
+                                            - generic: (1.1K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@Hrvtuirvw_ which app was that? screenpipe mostly uses accessibility which extracts exact text, feel free to open issue on gh and I'd fix it github.com/screenpipe/screenpipe"
+                                        - generic:
+                                          - paragraph: The post discusses a competitor, Screenpipe, and its use of accessibility for text extraction, which is relevant to Fazm's desktop automation capabilities.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: User Feedback
+                                      - generic:
+                                        - img
+                                        - generic: Bug Report
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: computer use
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 3 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: nagusubra
+                                            - generic: (273 followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: Ahhhh I see, yea, I do it like once and get tired lol I wish Claude gave free users a trial limit for the computer use in Claude desktop. I believe you can do this with CLaude Dekstop on storyboard -> create visual media for content -> post on different platforms, but Claude dektop is locked behind...
+                                        - generic:
+                                          - paragraph: The post discusses a competitor's AI agent with 'computer use' capabilities, which is directly relevant to Fazm's product space.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Negative
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: User Feedback
+                                      - generic:
+                                        - img
+                                        - generic: Product Question
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 4 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@StouderRory feel this. being tied to one provider hurts when things break. model-agnostic is the way — we built fazm.ai/ with that mindset, swap models anytime so you're never stuck"
+                                        - generic:
+                                          - paragraph: The post directly mentions Fazm.ai in a context related to its value proposition (model-agnostic AI agents).
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Positive
+                                      - generic:
+                                        - img
+                                        - generic: Promotional Post
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 5 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@MichaelFr777man @cryptopunk7213 exactly this. been building fazm.ai/ for native macOS control, uses accessibility APIs to interact with any app directly instead of just browser tabs. still early but the gap between browser agents and full desktop control is wild"
+                                        - generic:
+                                          - paragraph: The post directly mentions Fazm, describes its functionality for native macOS control, and highlights its key differentiator over browser-only agents.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 5 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@victorbass85900 @FastCompany the privacy part is the real issue imo. everything running through their cloud sandbox when you could just hit the API directly. been building a local-first macOS agent (fazm.ai/) for exactly this reason, all processing stays on your machine"
+                                        - generic:
+                                          - paragraph: The post directly mentions Fazm, highlights its local-first processing for privacy, and positions it as a solution for desktop-wide automation on macOS, which aligns with the company's core value proposition.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Competitor Mention
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - img
+                                      - generic:
+                                        - generic:
+                                          - generic: Mention of
+                                          - generic:
+                                            - generic:
+                                              - generic: fazm
+                                          - generic: in
+                                          - generic: Twitter
+                                        - generic:
+                                          - generic: 5 hours ago
+                                          - generic:
+                                            - generic: by
+                                            - generic:
+                                              - button: m13v_
+                                            - generic: (1.3K followers)
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - paragraph: "@StouderRory The screenshot round-trip dependency is the Achilles heel. Building fazm.ai/ on native macOS accessibility APIs for exactly this reason, no pixel matching means way less fragility when things shift on screen."
+                                        - generic:
+                                          - paragraph: The post directly mentions Fazm and explains its technical approach (native macOS accessibility APIs) in contrast to common pain points in desktop automation.
+                                    - generic:
+                                      - button:
+                                        - img
+                                        - generic: Neutral
+                                      - generic:
+                                        - img
+                                        - generic: Industry Insights
+                                      - generic:
+                                        - img
+                                        - generic: Own Brand Mention
+  - list
+  - alert
+  - dialog "AI Suggestions Beta 8" [ref=e22]:
+    - generic [ref=e3]:
+      - heading "AI Suggestions Beta 8" [level=2] [ref=e23]:
+        - img [ref=e5]
+        - text: AI Suggestions
+        - generic [ref=e8]: Beta
+        - generic [ref=e24]: "8"
+      - paragraph [ref=e9]: We detected potential optimizations to reduce irrelevant mentions across your keywords.
+    - generic [ref=e10]:
+      - generic [ref=e25]:
+        - generic [ref=e26]: Total mentions per keyword
+        - img [ref=e29]:
+          - generic [ref=e33]:
+            - generic [ref=e36]: computer use
+            - generic [ref=e39]: rewind
+            - generic [ref=e42]: fazm
+            - generic [ref=e45]: screenpipe
+            - generic [ref=e48]: opendevin
+          - generic [ref=e50]:
+            - generic [ref=e52]: "0"
+            - generic [ref=e54]: "650"
+            - generic [ref=e56]: "1300"
+            - generic [ref=e58]: "2600"
+      - generic [ref=e74]: 8 suggestions for 3 keywords
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - button "Previous" [ref=e78] [cursor=pointer]:
+            - img [ref=e79]
+            - text: Previous
+          - generic [ref=e81]: Suggestion 1 of 8
+          - button "Next" [ref=e82] [cursor=pointer]:
+            - text: Next
+            - img [ref=e83]
+        - generic [ref=e85]:
+          - heading "Add required terms to computer use (2,483 mentions)" [level=3] [ref=e86]:
+            - generic [ref=e87]: Add required terms
+            - generic [ref=e88]: to
+            - generic [ref=e90]: computer use
+            - generic [ref=e91]: (2,483 mentions)
+          - paragraph [ref=e92]: Many irrelevant posts use 'computer use' in a generic sense (hardware, habits, ergonomics). Requiring at least one AI/agent-related term ensures posts are about the AI capability Fazm tracks.
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - generic [ref=e96]: Posts must ALSO include
+              - radiogroup [ref=e97]:
+                - generic [ref=e98]:
+                  - radio "ANY OF" [checked] [ref=e99] [cursor=pointer]:
+                    - img [ref=e101]
+                  - generic [ref=e103] [cursor=pointer]: ANY OF
+                - generic [ref=e104]:
+                  - radio "ALL OF" [ref=e105] [cursor=pointer]
+                  - generic [ref=e106] [cursor=pointer]: ALL OF
+            - generic [ref=e107]:
+              - generic [ref=e108]:
+                - text: AI
+                - button [ref=e109] [cursor=pointer]:
+                  - img [ref=e110]
+              - generic [ref=e113]:
+                - text: agent
+                - button [ref=e114] [cursor=pointer]:
+                  - img [ref=e115]
+              - generic [ref=e118]:
+                - text: claude
+                - button [ref=e119] [cursor=pointer]:
+                  - img [ref=e120]
+              - generic [ref=e123]:
+                - text: anthropic
+                - button [ref=e124] [cursor=pointer]:
+                  - img [ref=e125]
+              - generic [ref=e128]:
+                - text: LLM
+                - button [ref=e129] [cursor=pointer]:
+                  - img [ref=e130]
+              - generic [ref=e133]:
+                - text: automation
+                - button [ref=e134] [cursor=pointer]:
+                  - img [ref=e135]
+              - generic [ref=e138]:
+                - text: desktop
+                - button [ref=e139] [cursor=pointer]:
+                  - img [ref=e140]
+              - generic [ref=e143]:
+                - text: GUI
+                - button [ref=e144] [cursor=pointer]:
+                  - img [ref=e145]
+              - generic [ref=e148]:
+                - text: agentic
+                - button [ref=e149] [cursor=pointer]:
+                  - img [ref=e150]
+              - generic [ref=e153]:
+                - text: model
+                - button [ref=e154] [cursor=pointer]:
+                  - img [ref=e155]
+              - textbox [ref=e158]
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - img [ref=e161]
+              - paragraph [ref=e164]: high
+            - generic [ref=e165]:
+              - button "Dismiss" [ref=e166] [cursor=pointer]:
+                - img [ref=e167]
+                - text: Dismiss
+              - button "Accept" [ref=e170] [cursor=pointer]:
+                - img [ref=e171]
+                - text: Accept
+    - button "Close" [active] [ref=e18] [cursor=pointer]:
+      - img [ref=e19]
+      - generic [ref=e21]: Close
+  - generic:
+    - generic:
+      - generic:
+        - button "Open chat"
+  - generic: "650"
