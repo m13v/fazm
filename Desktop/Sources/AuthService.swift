@@ -199,8 +199,8 @@ class AuthService: NSObject {
             throw AuthError.invalidResponse
         }
 
-        log("AuthService: Opening Google OAuth URL in Chrome")
-        BrowserExtensionSetup.openURLInChrome(authURL.absoluteString)
+        log("AuthService: Opening Google OAuth URL in default browser")
+        NSWorkspace.shared.open(authURL)
 
         // 4. Wait for the callback on localhost (capture the auth code)
         let authCode: String
