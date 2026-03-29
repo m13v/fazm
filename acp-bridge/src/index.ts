@@ -521,6 +521,10 @@ const MAX_IMAGE_TURNS = 20;
 let activeSessionId = "";
 let activeAbort: AbortController | null = null;
 let interruptRequested = false;
+/** Sessions that were interrupted (timeout/cancel) and may be in a broken state.
+ *  When reusing such a session, we apply a TTFT watchdog — if ACP doesn't respond
+ *  within 30s, the session is discarded and a fresh one is created. */
+const interruptedSessions = new Set<string>();
 let isInitialized = false;
 let authMethods: AuthMethod[] = [];
 let authResolve: (() => void) | null = null;
@@ -1810,6 +1814,10 @@ async function main(): Promise<void> {
         if (activeAbort) activeAbort.abort();
         if (activeSessionId) {
           acpNotify("session/cancel", { sessionId: activeSessionId });
+          // Mark this session as potentially broken — ACP may not accept new
+          // prompts after a cancel that interrupted a tool call mid-flight.
+          interruptedSessions.add(activeSessionId);
+          logErr(`Session ${activeSessionId} marked as interrupted (will apply TTFT watchdog on next reuse)`);
         }
         break;
 
