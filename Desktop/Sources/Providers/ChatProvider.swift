@@ -799,7 +799,12 @@ class ChatProvider: ObservableObject {
             }
         }
 
-        webRelay.start()
+        // Defer start to avoid blocking main thread during init
+        // (killOrphanedCloudflared uses waitUntilExit which pumps the run loop,
+        //  causing AttributeGraph crash if called during SwiftUI view init)
+        Task { @MainActor in
+            webRelay.start()
+        }
     }
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
