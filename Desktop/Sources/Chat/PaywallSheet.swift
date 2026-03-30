@@ -164,7 +164,7 @@ final class PaywallWindowController {
         let controller = self
         let content = PaywallWindowContent(
             chatProvider: chatProvider,
-            onDismiss: {
+            onDismiss: { @MainActor in
                 chatProvider.showPaywall = false
                 controller.close()
             }
