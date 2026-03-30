@@ -187,11 +187,7 @@ class SessionRecordingManager {
     private func startRecording() {
 
         guard ScreenCaptureService.checkPermission() else {
-            log("SessionRecording: no screen recording permission, showing prompt")
-            SessionRecordingPermissionWindowController.shared.show { [weak self] in
-                log("SessionRecording: permission granted via prompt, retrying start")
-                self?.startRecording()
-            }
+            log("SessionRecording: no screen recording permission, skipping (user can grant via Settings > Permissions)")
             return
         }
 
