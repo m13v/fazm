@@ -105,6 +105,11 @@ struct DesktopHomeView: View {
                 ClaudeAuthWindowController.shared.show(chatProvider: viewModelContainer.chatProvider)
             }
         }
+        .onReceive(viewModelContainer.chatProvider.$showPaywall) { show in
+            if show {
+                PaywallWindowController.shared.show(chatProvider: viewModelContainer.chatProvider)
+            }
+        }
         .onAppear {
             log("DesktopHomeView: View appeared - hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
             DispatchQueue.main.async {
