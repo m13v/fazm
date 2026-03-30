@@ -4,7 +4,8 @@
     "Added Chat with Founder tab for direct messaging with the Fazm team",
     "Fixed Sparkle auto-updates breaking when Python MCP server writes cache files into the app bundle",
     "Added animated glowing overlay when Fazm controls the browser, showing a status pill and visual effects",
-    "Fixed a crash during app startup caused by SwiftUI re-entrancy in WebRelay initialization"
+    "Fixed a crash during app startup caused by SwiftUI re-entrancy in WebRelay initialization",
+    "Fixed infinite retry loop when AI sessions encounter persistent errors"
   ],
   "releases": [
     {
