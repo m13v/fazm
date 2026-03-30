@@ -143,7 +143,7 @@ class AuthService: NSObject {
                     if let creationDate = user.metadata.creationDate {
                         UserDefaults.standard.set(creationDate, forKey: "fazm_firebase_creation_date")
                     }
-                    SubscriptionService.shared.syncTrialStartWithFirebase()
+
                     // If we don't have a token yet, get one from Firebase
                     if self.idToken == nil {
                         do {
