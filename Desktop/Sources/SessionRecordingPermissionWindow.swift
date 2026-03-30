@@ -149,6 +149,19 @@ final class SessionRecordingPermissionWindowController {
         })
     }
 
+    /// Show the prompt from the sidebar widget — always opens (user-initiated).
+    func showFromSidebar(onPermissionGranted: @escaping () -> Void) {
+        log("SessionRecordingPermission: triggered from sidebar")
+        // If already visible, just bring to front
+        if let existing = window, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        // User-initiated — bypass the once-per-session guard
+        showWindow(onPermissionGranted: onPermissionGranted)
+    }
+
     func show(onPermissionGranted: @escaping () -> Void) {
         guard !hasShownThisSession else {
             log("SessionRecordingPermission: already shown this session, skipping")
@@ -162,6 +175,10 @@ final class SessionRecordingPermissionWindowController {
             return
         }
 
+        showWindow(onPermissionGranted: onPermissionGranted)
+    }
+
+    private func showWindow(onPermissionGranted: @escaping () -> Void) {
         // Reset state for new prompt
         state = SessionRecordingPermissionState()
 
