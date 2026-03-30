@@ -139,6 +139,8 @@ class AuthService: NSObject {
                 guard let self = self else { return }
                 if let user = user {
                     log("AuthService: Firebase auth state changed - user signed in: \(user.uid)")
+                    // Sync trial start with Firebase account creation date
+                    SubscriptionService.shared.syncTrialStartWithFirebase()
                     // If we don't have a token yet, get one from Firebase
                     if self.idToken == nil {
                         do {
