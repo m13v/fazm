@@ -138,7 +138,7 @@ private struct PaywallWindowContent: View {
             },
             onDismiss: onDismiss
         )
-        .onReceive(chatProvider.$showPaywall.dropFirst()) { show in
+        .onReceive(chatProvider.$showPaywall.removeDuplicates().dropFirst()) { show in
             if !show {
                 onDismiss()
             }
@@ -165,6 +165,10 @@ final class PaywallWindowController {
         let content = PaywallWindowContent(
             chatProvider: chatProvider,
             onDismiss: { @MainActor in
+                guard chatProvider.showPaywall else {
+                    controller.close()
+                    return
+                }
                 chatProvider.showPaywall = false
                 controller.close()
             }
