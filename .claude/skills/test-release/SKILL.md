@@ -1,85 +1,87 @@
 # test-release: Smoke Test a Fazm Release
 
-Smoke test a Fazm release on **both** the local production app and the MacStadium remote machine. Use after promoting a release to beta or stable, or when the user says "test the release", "smoke test", "verify the build works".
+Smoke test a Fazm release. Use when the user says "test the release", "smoke test", or "verify the build works".
 
-**This skill does NOT build anything.** It tests the shipped product that users receive via Sparkle auto-update.
+**This skill does NOT build anything.** It tests the shipped product via Sparkle auto-update.
+
+## Channel → Machine Mapping
+
+| Channel | Test machine | `update_channel` | Sparkle sees |
+|---------|-------------|-------------------|-------------|
+| **staging** | MacStadium remote | `staging` | staging + beta |
+| **beta** | Local (`/Applications/Fazm.app`) | default (beta) | beta |
+| **stable** | Both | — | all |
+
+**NEVER change the remote machine's `update_channel`.** It must stay `staging`. The local machine defaults to `beta` (no override needed).
+
+**NEVER promote to the next channel yourself.** Each promotion (staging→beta→stable) requires explicit user approval. Only test the channel that was just promoted.
 
 ## Prerequisites
 
-- The release must already be promoted (registered in Firestore on beta or stable channel)
-- The production Fazm app must be installed locally (`/Applications/Fazm.app`)
-- MacStadium remote machine must be reachable (`./scripts/macstadium/ssh.sh`)
+- The release must be registered in Firestore on the channel being tested
+- For staging tests: MacStadium remote must be reachable (`./scripts/macstadium/ssh.sh`)
+- For beta tests: production Fazm app must be installed locally (`/Applications/Fazm.app`)
 
-## Flow
+## Test Queries
 
-### Step 1: Trigger Update on Local Machine
-
-1. Open the production Fazm app: `open -a "Fazm"`
-2. Use `macos-use` MCP to click the "Update Available" button in the sidebar (or Settings > About > "Check for Updates")
-3. Sparkle shows the update dialog — verify it shows the correct version and release notes
-4. **Do NOT check "Automatically download and install updates"** — we want to manually verify each step
-5. Click "Install Update" and wait for the app to restart
-6. After restart, verify the new version in the title bar or About screen
-
-### Step 2: Send Test Queries on Local Machine
-
-Send each query via distributed notification. Wait 15 seconds between queries for the AI to respond. After each query, check `/private/tmp/fazm.log` for errors.
+Send each query via distributed notification. Wait 15 seconds between queries. After each, check logs for errors.
 
 ```bash
-# Query 1: Basic chat (AI responds at all)
+# Query 1: Basic chat
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "What is 2+2?"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 
-# Query 2: Memory recall (memory pipeline works)
+# Query 2: Memory recall
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "What do you remember about me?"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 
-# Query 3: Tool use / Google Workspace (MCP tools connected)
+# Query 3: Tool use / Google Workspace
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "What events do I have on my calendar today?"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 
-# Query 4: File system tool use
+# Query 4: File system
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "List the files on my Desktop"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 ```
 
+For remote queries, wrap in: `./scripts/macstadium/ssh.sh "xcrun swift -e '...'"` (escape inner quotes).
+
 After each query:
-- Check logs for errors: `grep -i "error\|fail\|crash\|unauthorized\|401" /private/tmp/fazm.log | tail -5`
-- Check the AI actually responded: `grep -i "AGENT_BRIDGE\|response\|completed" /private/tmp/fazm.log | tail -10`
+- Errors: `grep -i "error\|fail\|crash\|unauthorized\|401" /private/tmp/fazm.log | tail -5`
+- Response: `grep -i "Prompt completed\|Chat response complete" /private/tmp/fazm.log | tail -5`
 
-### Step 3: Update and Test on MacStadium Remote Machine
+## Flow: Staging Test (remote)
 
-1. Check Fazm is running: `./scripts/macstadium/ssh.sh "pgrep -la Fazm"` (launch if needed)
-2. Use `macos-use-remote` MCP to click "Update Available" or navigate to Settings > About > "Check for Updates"
-3. Verify update dialog shows correct version, click "Install Update" (do NOT auto-update)
-4. After restart, verify version, then send the same 4 test queries via SSH:
-   ```bash
-   ./scripts/macstadium/ssh.sh "xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init(\"com.fazm.testQuery\"), object: nil, userInfo: [\"text\": \"YOUR_QUERY\"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'"
-   ```
-5. Check remote logs: `./scripts/macstadium/ssh.sh "grep -iE 'error|fail|crash|completed' /tmp/fazm.log | tail -10"`
+1. Verify remote channel: `./scripts/macstadium/ssh.sh "defaults read com.fazm.app update_channel"` — must be `staging`
+2. Check Fazm is running: `./scripts/macstadium/ssh.sh "pgrep -la Fazm"` (launch if needed)
+3. Use `macos-use-remote` MCP to navigate to Settings > About > "Check for Updates"
+4. Sparkle shows update dialog — verify correct version. **Do NOT check "Automatically download and install updates"**
+5. Click "Install Update", wait for restart, verify new version
+6. Send 4 test queries via SSH, check remote logs after each
+7. Check Sentry: `./scripts/sentry-release.sh --version X.Y.Z`
 
-### Step 5: Check Sentry
+## Flow: Beta Test (local)
 
-After all queries are sent, check Sentry for new errors in this release version:
-```bash
-./scripts/sentry-release.sh
-```
+1. Open production app: `open -a "Fazm"`
+2. Navigate to Settings > About > "Check for Updates" via `macos-use` MCP
+3. Sparkle shows update dialog — verify correct version. **Do NOT check "Automatically download and install updates"**
+4. Click "Install Update", wait for restart, verify new version
+5. Send 4 test queries locally, check `/private/tmp/fazm.log` after each
+6. Check Sentry: `./scripts/sentry-release.sh --version X.Y.Z`
 
-### Step 6: Report Results
+## Report Results
 
-Report a summary table:
-
-| Test | Local | Remote |
-|------|-------|--------|
-| App updated to vX.Y.Z | pass/fail | pass/fail |
-| Basic chat ("2+2") | pass/fail | pass/fail |
-| Memory recall | pass/fail | pass/fail |
-| Tool use (calendar) | pass/fail | pass/fail |
-| File system (Desktop) | pass/fail | pass/fail |
-| Sentry errors | 0 new / N new | — |
+| Test | Machine | Result |
+|------|---------|--------|
+| App updated to vX.Y.Z | local/remote | pass/fail |
+| Basic chat ("2+2") | local/remote | pass/fail |
+| Memory recall | local/remote | pass/fail |
+| Tool use (calendar) | local/remote | pass/fail |
+| File system (Desktop) | local/remote | pass/fail |
+| Sentry errors | — | 0 new / N new |
 
 **pass** = AI responded without errors in logs
 **fail** = no response, error in logs, or crash
 
 ## What Counts as a Failure
 
-- **Sparkle update fails** — this is a hard failure. Do NOT work around it with manual ZIP install. If Sparkle can't update, the test fails. Common cause: broken code signature from `__pycache__` files written inside the app bundle.
+- **Sparkle update fails** — hard failure. Do NOT work around with manual ZIP install. Common cause: broken code signature from `__pycache__` files written inside the app bundle.
 - App doesn't update (Sparkle error, appcast not serving correct version)
 - Query gets no AI response within 60 seconds
 - Logs show `error`, `crash`, `unauthorized`, `401`, or `failed` during the query

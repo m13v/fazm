@@ -137,9 +137,19 @@ This script automatically:
 
 If verification fails, **immediately roll back** using the rollback skill (`.claude/skills/rollback/SKILL.md`).
 
-### Step 7: Smoke test the release
+### Step 7: Smoke test the staging release
 
-After promoting to beta or stable, **always run the `test-release` skill** (`/test-release`). This sends test queries to both the local production app and the MacStadium remote machine to verify the AI responds correctly. See `.claude/skills/test-release/SKILL.md` for details.
+After the build completes and is registered on **staging**, run `/test-release` on the **remote MacStadium machine only** (staging channel). See `.claude/skills/test-release/SKILL.md`.
+
+**Do NOT promote to beta.** Report staging test results and wait for the user to say "promote to beta".
+
+### Step 8: Promote and test beta (only when user says so)
+
+After the user explicitly approves, run `./scripts/promote_release.sh <tag>` to promote staging → beta. Then run `/test-release` on the **local machine** (beta channel).
+
+**Do NOT promote to stable.** Report beta test results and wait for the user to say "promote to stable".
+
+Each promotion (staging → beta → stable) is a separate decision that **requires explicit user approval**.
 
 ## What release.sh Does (12 Steps)
 

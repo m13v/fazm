@@ -1,11 +1,17 @@
 {
   "unreleased": [
-    "Added confirmation dialog when skipping onboarding and a \"Complete Setup\" banner on the Home page to restart onboarding",
+    "Added Fazm Pro subscription with Stripe checkout and paywall for expired trials",
+    "Added voice response speed control with adjustable playback slider",
+    "Added welcome and safety introduction step to onboarding chat",
+    "Added animated glowing overlay when Fazm controls the browser",
+    "Added subscription status card in Account section",
+    "Added confirmation dialog when skipping onboarding and a Complete Setup banner",
     "Added Chat with Founder tab for direct messaging with the Fazm team",
-    "Fixed Sparkle auto-updates breaking when Python MCP server writes cache files into the app bundle",
-    "Added animated glowing overlay when Fazm controls the browser, showing a status pill and visual effects",
-    "Fixed a crash during app startup caused by SwiftUI re-entrancy in WebRelay initialization",
-    "Fixed infinite retry loop when AI sessions encounter persistent errors"
+    "Added TTFT watchdog to detect and recover from unresponsive AI sessions",
+    "Fixed Sparkle auto-updates breaking when Python MCP server writes cache files",
+    "Fixed a crash during app startup caused by SwiftUI re-entrancy in WebRelay",
+    "Fixed infinite retry loop when AI sessions encounter persistent errors",
+    "Fixed main thread blocking in orphaned cloudflared cleanup"
   ],
   "releases": [
     {
