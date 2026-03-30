@@ -11,7 +11,8 @@
     "Fixed Sparkle auto-updates breaking when Python MCP server writes cache files",
     "Fixed a crash during app startup caused by SwiftUI re-entrancy in WebRelay",
     "Fixed infinite retry loop when AI sessions encounter persistent errors",
-    "Fixed main thread blocking in orphaned cloudflared cleanup"
+    "Fixed main thread blocking in orphaned cloudflared cleanup",
+    "Show updating spinner in sidebar and floating bar while Sparkle downloads the update"
   ],
   "releases": [
     {
