@@ -140,7 +140,6 @@ private struct PaywallWindowContent: View {
                 Task {
                     try? await SubscriptionService.shared.openCheckout()
                 }
-                onDismiss()
             },
             onDismiss: onDismiss
         )
