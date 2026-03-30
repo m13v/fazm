@@ -13,8 +13,13 @@ const __dirname2 = typeof __dirname !== 'undefined' ? __dirname : dirname(fileUR
 const overlayScript = readFileSync(join(__dirname2, 'browser-overlay-init.js'), 'utf-8');
 
 export default async function ({ page }: { page: any }) {
+  console.error('[fazm-overlay] init-page script running, page URL:', page.url());
   // Register for all future navigations
   await page.context().addInitScript(overlayScript);
+  console.error('[fazm-overlay] addInitScript registered');
   // Inject on current page immediately
-  await page.evaluate(overlayScript).catch(() => {});
+  await page.evaluate(overlayScript).catch((e: any) => {
+    console.error('[fazm-overlay] evaluate error:', e.message);
+  });
+  console.error('[fazm-overlay] evaluate completed');
 }
