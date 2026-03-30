@@ -307,6 +307,8 @@ struct AIResponseView: View {
 
             Spacer()
 
+            VoiceMuteButton()
+
             ReportIssueButton(isHanging: isHanging)
 
             CopyConversationButton(
@@ -936,6 +938,40 @@ struct MessageWithCopyButton<Content: View>: View {
                 .transition(.opacity)
             }
         }
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+    }
+}
+
+// MARK: - Voice Mute Button
+
+/// Inline toggle to mute/unmute voice responses (TTS).
+struct VoiceMuteButton: View {
+    @AppStorage("voiceResponseEnabled") private var voiceResponseEnabled = true
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            voiceResponseEnabled.toggle()
+            AnalyticsManager.shared.settingToggled(setting: "voice_response", enabled: voiceResponseEnabled)
+            // Stop any currently playing audio when muting
+            if !voiceResponseEnabled {
+                ChatToolExecutor.stopTTSPlayback()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: voiceResponseEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(voiceResponseEnabled ? .secondary : .orange)
+                if isHovered {
+                    Text(voiceResponseEnabled ? "Mute voice" : "Unmute voice")
+                        .scaledFont(size: 11)
+                        .foregroundColor(voiceResponseEnabled ? .secondary : .orange)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
