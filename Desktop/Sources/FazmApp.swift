@@ -154,6 +154,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Configure Firebase and AuthService
         AuthService.shared.configure()
 
+        // Initialize subscription service early to fetch account creation date
+        _ = SubscriptionService.shared
+
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(FazmApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
