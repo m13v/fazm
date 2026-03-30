@@ -399,6 +399,9 @@ class ChatProvider: ObservableObject {
     private var acpBridgeStarted = false
     private var vertexTokenManager: VertexTokenManager?
 
+    /// Whether the paywall should be shown (blocks AI response until subscription)
+    @Published var showPaywall = false
+
     /// Whether the ACP bridge requires authentication (shown as sheet in UI)
     @Published var isClaudeAuthRequired = false
     @Published var claudeAuthTimedOut = false
@@ -1976,6 +1979,9 @@ class ChatProvider: ObservableObject {
         errorMessage = nil
         pendingRetryMessage = trimmedText
 
+        // Track daily message count for paywall
+        SubscriptionService.shared.incrementMessageCount()
+
         // Track user message sent
         AnalyticsManager.shared.chatMessageSent(
             messageLength: trimmedText.count,
@@ -2332,6 +2338,17 @@ class ChatProvider: ObservableObject {
             // backend copy into the local message rather than appending a duplicate.
             isSending = false
             isStopping = false
+
+            // Show paywall if trial expired and free message limit exceeded.
+            // Refresh subscription status from backend first to catch recent payments.
+            if SubscriptionService.shared.isTrialExpired
+                && SubscriptionService.shared.dailyMessageCount > 3 {
+                await SubscriptionService.shared.refreshStatus()
+                if SubscriptionService.shared.shouldShowPaywall() {
+                    showPaywall = true
+                }
+            }
+
             await applyPendingBridgeModeSwitch()
             if stoppedForBrowserSetup {
                 // Keep pendingRetryMessage so retryPendingQuery() can re-send it
