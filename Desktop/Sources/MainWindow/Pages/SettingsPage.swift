@@ -121,7 +121,7 @@ struct SettingsContentView: View {
     @AppStorage("devModeEnabled") private var devModeEnabled = false
 
     // Voice Response (TTS) settings
-    @AppStorage("voiceResponseEnabled") private var voiceResponseEnabled = false
+    @AppStorage("voiceResponseEnabled") private var voiceResponseEnabled = true
     @AppStorage("voiceResponseSpeed") private var voiceResponseSpeed: Double = 1.0
 
     // Browser Extension settings
