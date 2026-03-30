@@ -10,11 +10,11 @@ final class ToastManager {
     private var panel: NSPanel?
     private var dismissTask: Task<Void, Never>?
 
-    func show(_ message: String, duration: TimeInterval = 4) {
+    func show(_ message: String, icon: String = "arrow.2.circlepath", duration: TimeInterval = 4) {
         dismissTask?.cancel()
         panel?.close()
 
-        let hosting = NSHostingView(rootView: ToastView(message: message))
+        let hosting = NSHostingView(rootView: ToastView(message: message, icon: icon))
         hosting.sizingOptions = .minSize
 
         let size = hosting.fittingSize
@@ -68,10 +68,11 @@ final class ToastManager {
 
 private struct ToastView: View {
     let message: String
+    var icon: String = "arrow.2.circlepath"
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "arrow.2.circlepath")
+            Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
             Text(message)
                 .font(.system(size: 13, weight: .medium))
