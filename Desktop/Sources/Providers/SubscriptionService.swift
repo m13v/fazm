@@ -24,36 +24,72 @@ final class SubscriptionService {
     private let trialDays = 30
     let freeMessagesPerDay = 3
 
-    /// Date the user's trial started — uses Firebase account creation date (actual signup)
-    /// when available, falling back to first app launch for users not yet signed in.
+    /// Date the user's trial started — uses Firebase account creation date (actual signup).
+    /// Returns cached value if available; otherwise falls back to now (fetchAccountCreationDate
+    /// will correct it asynchronously on launch).
     var trialStartDate: Date {
         let key = "fazm_trial_start_date"
         if let stored = UserDefaults.standard.object(forKey: key) as? Date {
             return stored
         }
-        // Use persisted Firebase creation date (saved during sign-in)
-        if let creationDate = UserDefaults.standard.object(forKey: "fazm_firebase_creation_date") as? Date {
-            UserDefaults.standard.set(creationDate, forKey: key)
-            return creationDate
-        }
-        // Fallback: first time this code runs (pre-signup)
+        // Fallback: set to now; fetchAccountCreationDate() will correct it shortly
         let now = Date()
         UserDefaults.standard.set(now, forKey: key)
         return now
     }
 
-    /// Call after sign-in to update trial start to the actual account creation date.
-    func syncTrialStartWithFirebase() {
-        guard let creationDate = UserDefaults.standard.object(forKey: "fazm_firebase_creation_date") as? Date else {
-            log("SubscriptionService: syncTrialStart skipped — no Firebase creation date stored")
+    /// Fetches the user's Firebase account creation date via REST API and updates trial start.
+    /// Called on every launch to ensure trial start reflects the actual signup date.
+    func fetchAccountCreationDate() async {
+        let key = "fazm_trial_start_date"
+
+        // Get the ID token and Firebase API key
+        guard let idToken = try? await AuthService.shared.getIdToken(forceRefresh: false) else {
+            log("SubscriptionService: fetchAccountCreationDate skipped — no ID token")
             return
         }
-        let key = "fazm_trial_start_date"
-        let current = UserDefaults.standard.object(forKey: key) as? Date
-        // Only update if Firebase date is earlier (user signed up before this code existed)
-        if current == nil || creationDate < current! {
-            UserDefaults.standard.set(creationDate, forKey: key)
-            log("SubscriptionService: synced trial start to Firebase creation date: \(creationDate)")
+        let firebaseApiKey = Self.env("FIREBASE_API_KEY")
+        guard !firebaseApiKey.isEmpty else {
+            log("SubscriptionService: fetchAccountCreationDate skipped — no FIREBASE_API_KEY")
+            return
+        }
+
+        // Query Firebase Auth REST API for user info
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=\(firebaseApiKey)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["idToken": idToken])
+        request.timeoutInterval = 10
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                log("SubscriptionService: fetchAccountCreationDate failed — HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                return
+            }
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let users = json["users"] as? [[String: Any]],
+                  let user = users.first,
+                  let createdAtMs = user["createdAt"] as? String,
+                  let createdAtMsInt = Double(createdAtMs) else {
+                log("SubscriptionService: fetchAccountCreationDate — could not parse response")
+                return
+            }
+
+            let creationDate = Date(timeIntervalSince1970: createdAtMsInt / 1000.0)
+            let current = UserDefaults.standard.object(forKey: key) as? Date
+
+            // Update if no stored date or Firebase date is earlier
+            if current == nil || creationDate < current! {
+                UserDefaults.standard.set(creationDate, forKey: key)
+                log("SubscriptionService: trial start set to account creation date: \(creationDate)")
+            } else {
+                log("SubscriptionService: trial start already correct (\(current!))")
+            }
+        } catch {
+            log("SubscriptionService: fetchAccountCreationDate error: \(error.localizedDescription)")
         }
     }
 
@@ -107,8 +143,11 @@ final class SubscriptionService {
         self.currentPeriodEnd = UserDefaults.standard.object(forKey: "fazm_sub_period_end") as? Date
         // Touch trialStartDate to ensure it's set on first run
         _ = trialStartDate
-        // Refresh from backend in background
-        Task { await refreshStatus() }
+        // Fetch account creation date and refresh subscription in background
+        Task {
+            await fetchAccountCreationDate()
+            await refreshStatus()
+        }
     }
 
     // MARK: - Open Checkout
