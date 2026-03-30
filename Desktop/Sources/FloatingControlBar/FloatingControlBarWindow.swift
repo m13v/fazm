@@ -1884,6 +1884,9 @@ class FloatingControlBarManager {
             } else {
                 barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
             }
+        } else if provider.showPaywall {
+            // Paywall blocked the query — don't show an error message
+            return
         } else if provider.needsBrowserExtensionSetup || provider.pendingRetryMessage != nil {
             // Browser extension setup interrupted the query — retry is pending,
             // don't show a spurious error message.
