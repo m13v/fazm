@@ -2,7 +2,8 @@
   "unreleased": [
     "Added confirmation dialog when skipping onboarding and a \"Complete Setup\" banner on the Home page to restart onboarding",
     "Added Chat with Founder tab for direct messaging with the Fazm team",
-    "Fixed Sparkle auto-updates breaking when Python MCP server writes cache files into the app bundle"
+    "Fixed Sparkle auto-updates breaking when Python MCP server writes cache files into the app bundle",
+    "Added animated glowing overlay when Fazm controls the browser, showing a status pill and visual effects"
   ],
   "releases": [
     {
