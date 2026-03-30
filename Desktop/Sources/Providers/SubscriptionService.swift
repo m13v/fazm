@@ -6,9 +6,15 @@ import AppKit
 final class SubscriptionService {
     static let shared = SubscriptionService()
 
-    private(set) var isActive = false
-    private(set) var status = "none" // "active", "trialing", "past_due", "canceled", "none"
-    private(set) var currentPeriodEnd: Date?
+    private(set) var isActive: Bool {
+        didSet { UserDefaults.standard.set(isActive, forKey: "fazm_sub_active") }
+    }
+    private(set) var status: String { // "active", "trialing", "past_due", "canceled", "none"
+        didSet { UserDefaults.standard.set(status, forKey: "fazm_sub_status") }
+    }
+    private(set) var currentPeriodEnd: Date? {
+        didSet { UserDefaults.standard.set(currentPeriodEnd, forKey: "fazm_sub_period_end") }
+    }
 
     private let backendUrl: String
     private let deviceId: String
@@ -16,7 +22,7 @@ final class SubscriptionService {
     // MARK: - Trial & Paywall
 
     private let trialDays = 30
-    private let freeMessagesPerDay = 3
+    let freeMessagesPerDay = 3
 
     /// Date the user first launched the app (persisted in UserDefaults).
     var firstLaunchDate: Date {
@@ -73,8 +79,14 @@ final class SubscriptionService {
     private init() {
         self.backendUrl = Self.env("FAZM_BACKEND_URL").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         self.deviceId = Self.getDeviceId()
+        // Restore cached subscription state
+        self.isActive = UserDefaults.standard.bool(forKey: "fazm_sub_active")
+        self.status = UserDefaults.standard.string(forKey: "fazm_sub_status") ?? "none"
+        self.currentPeriodEnd = UserDefaults.standard.object(forKey: "fazm_sub_period_end") as? Date
         // Touch firstLaunchDate to ensure it's set on first run
         _ = firstLaunchDate
+        // Refresh from backend in background
+        Task { await refreshStatus() }
     }
 
     // MARK: - Open Checkout
