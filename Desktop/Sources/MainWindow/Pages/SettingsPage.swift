@@ -145,7 +145,7 @@ struct SettingsContentView: View {
         case permissions = "Permissions"
         case general = "General"
         case advanced = "Advanced"
-        case about = "About"
+        case about = "Account"
     }
 
     enum AdvancedSubsection: String, CaseIterable {
@@ -1805,6 +1805,59 @@ struct SettingsContentView: View {
                     }
                 } message: {
                     Text("You will be signed out of Fazm.")
+                }
+            }
+
+            // Subscription card
+            settingsCard(settingId: "about.subscription") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Image(systemName: SubscriptionService.shared.isActive ? "checkmark.seal.fill" : "clock.fill")
+                            .scaledFont(size: 16)
+                            .foregroundColor(SubscriptionService.shared.isActive ? FazmColors.success : FazmColors.purplePrimary)
+                            .frame(width: 24, height: 24)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(SubscriptionService.shared.isActive ? "Fazm Pro" : (SubscriptionService.shared.isTrialExpired ? "Free Plan" : "Free Trial"))
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+
+                            if SubscriptionService.shared.isActive {
+                                if let end = SubscriptionService.shared.currentPeriodEnd {
+                                    Text("Renews \(end.formatted(date: .abbreviated, time: .omitted))")
+                                        .scaledFont(size: 13)
+                                        .foregroundColor(FazmColors.textTertiary)
+                                }
+                            } else if !SubscriptionService.shared.isTrialExpired {
+                                let daysLeft = max(0, 30 - (Calendar.current.dateComponents([.day], from: SubscriptionService.shared.firstLaunchDate, to: Date()).day ?? 0))
+                                Text("\(daysLeft) days remaining in free trial")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            } else {
+                                Text("\(SubscriptionService.shared.freeMessagesPerDay) free messages per day")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+
+                        if !SubscriptionService.shared.isActive {
+                            Button(action: {
+                                AnalyticsManager.shared.subscriptionUpgradeTapped(source: "settings")
+                                Task { try? await SubscriptionService.shared.openCheckout() }
+                            }) {
+                                Text("Upgrade")
+                                    .scaledFont(size: 13, weight: .semibold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .background(FazmColors.purplePrimary)
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             }
 
