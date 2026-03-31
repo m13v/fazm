@@ -543,7 +543,8 @@ class AnalyticsManager {
         cacheReadTokens: Int = 0,
         cacheWriteTokens: Int = 0,
         queryText: String = "",
-        ttftMs: Int? = nil
+        ttftMs: Int? = nil,
+        responseText: String = ""
     ) {
         var props: [String: Any] = [
             "duration_ms": durationMs,
@@ -559,6 +560,9 @@ class AnalyticsManager {
         ]
         if !queryText.isEmpty {
             props["query_text"] = String(queryText.prefix(1000))
+        }
+        if !responseText.isEmpty {
+            props["response_text"] = String(responseText.prefix(5000))
         }
         if let ttftMs = ttftMs {
             props["ttft_ms"] = ttftMs
