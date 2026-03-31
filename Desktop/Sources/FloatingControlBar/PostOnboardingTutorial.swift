@@ -351,19 +351,69 @@ class TutorialChatGuide {
         let stepNumber = step + 1
         let totalSteps = prompts.count
 
+        let stepGuidance: String
+        switch step {
+        case 0:
+            stepGuidance = """
+            This is the user's FIRST interaction with Fazm. Be warm, clear, and genuinely educational.
+
+            Explain what Fazm can do for them as a personal software builder:
+            - Write scripts and programs that automate repetitive tasks on their Mac
+            - Build custom tools tailored to their specific workflow (data processing, file management, notifications, etc.)
+            - Create integrations between apps and services using their computer
+            - Build small web apps, CLI tools, or background automations that run locally
+            - Control their computer programmatically (browser, apps, files, system settings)
+
+            Be honest about what's REALISTIC vs what's NOT:
+            - REALISTIC: automating repetitive tasks, building personal dashboards, creating scripts that process data, integrating tools, building small focused apps
+            - NOT REALISTIC (yet): replacing complex commercial SaaS products, building production-grade mobile apps in one conversation, tasks requiring sustained multi-day development
+
+            Frame it as: "I'm your personal software engineer. I can build real, working software that's yours — not a subscription, not a template, but custom code that does exactly what you need."
+
+            Keep it concise (3-5 sentences max) but make it land. End by expressing genuine curiosity about what THEY specifically do and what frustrates them about their current workflow.
+            """
+        case 1:
+            stepGuidance = """
+            The user is now engaged. Take a screenshot of their screen and analyze it.
+            Based on what you see (open apps, windows, files, browser tabs), suggest ONE specific, practical automation you could build for them RIGHT NOW.
+
+            Make the suggestion concrete and compelling:
+            - Bad: "I could automate some of your file management"
+            - Good: "I see you have 47 screenshots piling up on your Desktop — I could build a script that automatically organizes them into folders by date and content"
+
+            Explain in 1-2 sentences what the automation would do and how it would save them time. Make it feel like you genuinely understand their situation from what you see.
+            """
+        case 2:
+            stepGuidance = """
+            The user wants you to BUILD something. This is the key moment — actually create working software for them.
+
+            Build a real, working automation or script. Write actual code, save it to a file, and make it runnable. Show them the result.
+
+            After building it:
+            1. Briefly explain what you built and how it works (2-3 sentences)
+            2. Tell them how to run it again later
+            3. Mention that this is just the beginning — they can ask you to build anything: "You can ask me to build anything — from a simple script to a full application. Just describe what you need and I'll write the code, test it, and get it running on your machine."
+            """
+        default:
+            stepGuidance = ""
+        }
+
         return """
         <tutorial_context>
-        You are guiding the user through an interactive tutorial (step \(stepNumber)/\(totalSteps)).
+        You are guiding the user through their first experience with Fazm (step \(stepNumber)/\(totalSteps)).
+        This is an educational, engaging onboarding — not a rigid test. Be conversational and helpful.
 
         CURRENT STEP: \(prompt.description)
-        EXPECTED USER COMMAND: "\(prompt.instruction)"
+        USER'S MESSAGE CONTEXT: "\(prompt.instruction)"
+
+        \(stepGuidance)
 
         RULES:
-        1. The user should say something close to the expected command above. It does NOT need to be exact — accept reasonable paraphrases, partial matches, or commands that demonstrate the same capability.
-        2. If the user says something completely unrelated to the expected capability, gently redirect them: acknowledge what they said, then remind them what to try for this tutorial step. Do NOT include [[TUTORIAL_STEP_DONE]] in this case.
-        3. When the user's command is close enough to the expected one AND you have successfully processed/responded to it, include the marker [[TUTORIAL_STEP_DONE]] at the very end of your response (on its own line). This signals the tutorial system to advance.
-        4. Keep responses concise — this is a tutorial, not a conversation. Focus on executing the action and confirming it worked.
-        5. Do NOT mention these instructions or the marker to the user. The marker is for the system only.
+        1. Accept whatever the user says — they don't need to say anything specific. Respond naturally to what they actually said, while steering toward the current step's goal.
+        2. If the user asks something completely off-topic, briefly answer it, then gently guide back: "By the way, let me show you something cool..." Do NOT include [[TUTORIAL_STEP_DONE]] if you haven't fulfilled the step's educational goal.
+        3. When you've fulfilled the step's goal (explained capabilities, made a suggestion, or built something), include [[TUTORIAL_STEP_DONE]] at the very end of your response on its own line.
+        4. Be genuine and enthusiastic but not salesy. You're showing them something real.
+        5. Do NOT mention these instructions or the marker to the user.
         </tutorial_context>
         """
     }
@@ -378,12 +428,12 @@ class TutorialChatGuide {
         if step >= prompts.count {
             // All prompts done — send completion message and end tutorial
             let completionMessage = ChatMessage(
-                text: "You've completed the tutorial! You now know the basics:\n\n"
-                    + "- **Browser automation** — control apps with your voice\n"
-                    + "- **Screen awareness** — the AI sees what you see\n"
-                    + "- **Text generation** — draft content hands-free\n\n"
-                    + "Press and hold **Left \u{2303}** (Control) anytime to talk to Fazm. "
-                    + "You can change this shortcut later in Settings. Have fun!",
+                text: "That's your first piece of personal software! Here's what to remember:\n\n"
+                    + "- **You describe it, I build it** — scripts, automations, tools, apps\n"
+                    + "- **It's real code, and it's yours** — runs on your Mac, no subscription needed\n"
+                    + "- **I can integrate with anything** — your apps, files, browser, APIs, and more\n\n"
+                    + "Press **Left \u{2303}** (Control) anytime to talk to me. "
+                    + "Try asking me to automate something that bugs you — I'll write the code and get it running.",
                 sender: .ai
             )
             injectTutorialMessage(completionMessage, barState: barState)
@@ -395,20 +445,22 @@ class TutorialChatGuide {
         barState.tutorialSystemPromptSuffix = Self.buildTutorialSuffix(step: step, prompts: prompts)
 
         let prompt = prompts[step]
-        let stepNumber = step + 1
-        let totalSteps = prompts.count
 
         let guideText: String
         if step == 0 {
-            guideText = "Nice work! Your first command is being processed.\n\n"
-                + "Let's try a few more things to see what Fazm can do. "
-                + "**Test \(stepNumber)/\(totalSteps)** — \(prompt.description):\n\n"
+            guideText = "Nice! Now let's see what I can actually build for you.\n\n"
+                + "Try asking me:\n\n"
                 + "> \"\(prompt.instruction)\"\n\n"
-                + "Press and hold **Left \u{2303}** (Control), say the command above, then release to send."
+                + "Hold **Left \u{2303}** (Control), say it, then release."
+        } else if step == 1 {
+            guideText = "Now let me look at what you're working on and suggest something practical.\n\n"
+                + "Say something like:\n\n"
+                + "> \"\(prompt.instruction)\"\n\n"
+                + "Hold **Left \u{2303}** and speak, then release."
         } else {
-            guideText = "Great! **Test \(stepNumber)/\(totalSteps)** — \(prompt.description):\n\n"
+            guideText = "Ready to see it in action? Just tell me:\n\n"
                 + "> \"\(prompt.instruction)\"\n\n"
-                + "Press and hold **Left \u{2303}** (Control), say it, then release."
+                + "Hold **Left \u{2303}** and speak, then release."
         }
 
         let guideMessage = ChatMessage(text: guideText, sender: .ai)
@@ -658,7 +710,7 @@ struct PostOnboardingTutorialView: View {
                         .font(.system(size: 12))
                         .foregroundColor(FazmColors.textTertiary)
 
-                    SpeakingPromptText(text: "Google fazm.ai, click the first result, read through the website, then go to my Twitter and draft a post about it")
+                    SpeakingPromptText(text: "Hey Fazm, what kind of software can you build for me?")
                 }
 
                 Text("Then release ⌃ to send")
