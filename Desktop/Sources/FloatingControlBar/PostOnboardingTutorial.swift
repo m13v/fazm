@@ -251,18 +251,19 @@ class TutorialChatGuide {
     private var stepDoneMarkerSeen = false
 
     /// Fallback prompts used when no onboarding data is available.
+    /// These guide a conversational, educational first session — not rigid test commands.
     static let defaultPrompts: [(instruction: String, description: String)] = [
         (
-            "Open Chrome and search for 'best productivity apps 2026'",
-            "browser automation — opening apps and searching the web"
+            "What kind of software and automations can you actually build for me?",
+            "capability discovery — understanding what Fazm can create"
         ),
         (
-            "Take a screenshot and describe what you see on my screen",
-            "screen awareness — understanding what's on your display"
+            "What's something you could automate for me right now based on what you see on my screen?",
+            "practical suggestion — identifying a real automation opportunity"
         ),
         (
-            "Write a short email draft about rescheduling a meeting to tomorrow at 3pm",
-            "text generation — drafting content for you"
+            "Go ahead and build that for me",
+            "hands-on creation — experiencing personal software being built"
         ),
     ]
 
@@ -305,26 +306,26 @@ class TutorialChatGuide {
         // Build personalized prompts based on what we know
         var prompts = defaultPrompts
 
-        // Step 1: Browser automation — personalize the search query
+        // Step 1: Capability discovery — personalize based on their work
         if let project = projectNodes.first {
             prompts[0] = (
-                "Open Chrome and search for '\(project.label) latest news'",
-                "browser automation — opening apps and searching the web"
+                "What kind of software and automations can you build for me around \(project.label)?",
+                "capability discovery — understanding what Fazm can create for their work"
             )
         }
 
-        // Step 2: Screen awareness — always useful as-is (screenshot + describe)
+        // Step 2: Practical suggestion — always uses screen context
 
-        // Step 3: Text generation — personalize based on user's work context
-        if let colleague = personNodes.first(where: { $0.nodeId != "user" }) {
+        // Step 3: Hands-on — personalize the "build" prompt
+        if let tool = toolNodes.first {
             prompts[2] = (
-                "Write a short message to \(colleague.label) about catching up this week",
-                "text generation — drafting content for you"
+                "Build me a small automation that helps with \(tool.label)",
+                "hands-on creation — experiencing personal software being built"
             )
-        } else if let tool = toolNodes.first {
+        } else if let colleague = personNodes.first(where: { $0.nodeId != "user" }) {
             prompts[2] = (
-                "Write a short note about my progress on \(tool.label) today",
-                "text generation — drafting content for you"
+                "Build me something useful — maybe a script or automation for my daily workflow",
+                "hands-on creation — experiencing personal software being built"
             )
         }
 
