@@ -180,6 +180,16 @@ class ChatToolExecutor {
             with: "datetime('now')",
             options: .regularExpression
         )
+        // Sanitize FTS5 MATCH terms: wrap each MATCH argument in double quotes
+        // to force literal interpretation. Without this, user input like "e-horyzont"
+        // is parsed as FTS5 column prefix syntax (column `e`, term `horyzont`),
+        // and words like AND/OR/NOT are treated as FTS5 operators instead of literals.
+        sanitized = sanitized.replacingOccurrences(
+            of: #"MATCH\s+'([^']+)'"#,
+            with: #"MATCH '"$1"'"#,
+            options: .regularExpression
+        )
+
         upper = sanitized.uppercased()
 
         // Auto-convert INSERTs into knowledge graph / profile tables to use OR REPLACE
