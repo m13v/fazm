@@ -15,7 +15,8 @@
     "Show updating spinner in sidebar and floating bar while Sparkle downloads the update",
     "Voice response is now on by default with a mute button in the floating dialog header",
     "Fixed built-in Claude not working for new users due to API key fetch race condition",
-    "Redesigned first-session tutorial to educate users about building personal software and automations"
+    "Redesigned first-session tutorial to educate users about building personal software and automations",
+    "Added one-time claude_cli_credentials_detected analytics event when existing Claude CLI credentials are found at first launch"
   ],
   "releases": [
     {
