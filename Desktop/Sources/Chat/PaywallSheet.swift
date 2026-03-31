@@ -253,7 +253,7 @@ final class PaywallWindowController {
         if let screen = mouseScreen {
             let sf = screen.visibleFrame
             let x = sf.origin.x + (sf.width - 400) / 2
-            let y = sf.origin.y + (sf.height - 520) / 2
+            let y = sf.origin.y + (sf.height - 560) / 2
             window.setFrame(NSRect(x: x, y: y, width: 400, height: 560), display: true)
         } else {
             window.center()
