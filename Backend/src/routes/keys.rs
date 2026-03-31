@@ -28,7 +28,9 @@ pub async fn get_keys(
         tracing::info!(device_id = %auth.device_id, uid = ?auth.firebase_uid, "Global builtin key kill switch active");
         true
     } else {
-        let uid_blocked = auth.firebase_uid.as_ref()
+        let uid_blocked = auth
+            .firebase_uid
+            .as_ref()
             .map(|uid| config.builtin_key_blocklist.contains(uid))
             .unwrap_or(false);
         let device_blocked = config.builtin_key_blocklist.contains(&auth.device_id);
