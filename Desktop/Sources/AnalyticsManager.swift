@@ -97,6 +97,51 @@ class AnalyticsManager {
         }
     }
 
+    // MARK: - Post-Onboarding Tutorial Events
+
+    func tutorialShown() {
+        PostHogManager.shared.track("Tutorial Shown")
+    }
+
+    func tutorialOverlayStepCompleted(step: String) {
+        PostHogManager.shared.track("Tutorial Overlay Step Completed", properties: ["step": step])
+    }
+
+    func tutorialSkipped(step: String, phase: String) {
+        PostHogManager.shared.track("Tutorial Skipped", properties: ["step": step, "phase": phase])
+    }
+
+    func tutorialOverlayCompleted() {
+        PostHogManager.shared.track("Tutorial Overlay Completed")
+    }
+
+    func tutorialSilenceReset() {
+        PostHogManager.shared.track("Tutorial Silence Reset")
+    }
+
+    func tutorialChatGuideStarted() {
+        PostHogManager.shared.track("Tutorial Chat Guide Started")
+    }
+
+    func tutorialChatStepCompleted(step: Int, description: String) {
+        PostHogManager.shared.track("Tutorial Chat Step Completed", properties: [
+            "step": step,
+            "description": description
+        ])
+    }
+
+    func tutorialChatGuidanceInjected(step: Int) {
+        PostHogManager.shared.track("Tutorial Chat Guidance Injected", properties: ["step": step])
+    }
+
+    func tutorialCompleted() {
+        PostHogManager.shared.track("Tutorial Completed")
+    }
+
+    func tutorialReplayed() {
+        PostHogManager.shared.track("Tutorial Replayed")
+    }
+
     // MARK: - Onboarding Events
 
     func onboardingStarted() {
