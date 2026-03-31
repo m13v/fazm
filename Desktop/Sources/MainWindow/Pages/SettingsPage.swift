@@ -2395,6 +2395,17 @@ struct SettingsContentView: View {
         }
     }
 
+    // MARK: - Transcription Helpers
+
+    private var languageOptions: [(String, String)] {
+        AssistantSettings.supportedLanguages.map { ($0.code, $0.name) }
+    }
+
+    private func restartTranscriptionIfNeeded() {
+        // Restart PTT transcription service if needed to apply new language settings
+        // The next PTT activation will pick up the new language from AssistantSettings
+    }
+
 }
 
 #Preview {
