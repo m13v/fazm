@@ -2412,7 +2412,13 @@ class ChatProvider: ObservableObject {
 
             // Analytics: track query completion
             let durationMs = Int(Date().timeIntervalSince(queryStartTime) * 1000)
-            let responseLength = messages.first(where: { $0.id == aiMessageId })?.text.count ?? 0
+            // Use the final messageText (already resolved above from either the messages array
+            // or queryResult.text fallback) rather than re-looking up from messages which may
+            // have been evicted. Also check queryResult.text as a second source of truth.
+            let responseLength = max(messageText.count, queryResult.text.count)
+            if responseLength == 0 {
+                log("ChatProvider: WARNING — response_length=0 on successful query (outputTokens=\(queryResult.outputTokens), messageText.count=\(messageText.count), queryResult.text.count=\(queryResult.text.count))")
+            }
             AnalyticsManager.shared.chatAgentQueryCompleted(
                 durationMs: durationMs,
                 toolCallCount: toolNames.count,
