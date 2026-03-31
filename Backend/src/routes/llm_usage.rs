@@ -1,9 +1,4 @@
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 
