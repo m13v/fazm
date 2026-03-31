@@ -186,7 +186,7 @@ class ChatToolExecutor {
         // and words like AND/OR/NOT are treated as FTS5 operators instead of literals.
         sanitized = sanitized.replacingOccurrences(
             of: #"MATCH\s+'([^']+)'"#,
-            with: #"MATCH '"$1"'"#,
+            with: "MATCH '\"$1\"'",
             options: .regularExpression
         )
 
