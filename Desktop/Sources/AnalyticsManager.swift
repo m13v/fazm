@@ -722,6 +722,10 @@ class AnalyticsManager {
         PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
     }
 
+    func claudeCliCredentialsDetected() {
+        PostHogManager.shared.claudeCliCredentialsDetected()
+    }
+
     // MARK: - Settings State
 
     func trackSettingsState(screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool) {
