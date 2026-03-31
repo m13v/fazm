@@ -137,3 +137,4 @@ curl -s -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
 - ALWAYS reply to the user. ALWAYS send the report to Matt. Never skip these steps.
 - The thread may contain outbound "newsletter" or "broadcast" emails (e.g., "Fazm now watches your screen", "Your Fazm download link", campaign blasts). These are NOT real replies to the user. Ignore them when deciding whether to reply. You MUST still send a personal reply.
 - If the email is noise (auto-reply, DMARC, spam), skip steps 2-4 but still mark as processed.
+- **Fazm vs OMI:** Fazm is a spin-off from the OMI team, but it is a DIFFERENT company. Fazm is not OMI and not part of OMI. Do NOT say they are the same company or the same team.
