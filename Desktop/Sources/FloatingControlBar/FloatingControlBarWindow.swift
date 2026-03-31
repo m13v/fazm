@@ -1290,6 +1290,67 @@ class FloatingControlBarManager {
             }
         }
 
+        // Debug: programmatically run the full tutorial chat guide (skip overlay)
+        // Trigger: xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testTutorial"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.fazm.testTutorial"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let barState = self.barState, let window = self.window, let provider = self.chatProvider else { return }
+                log("FloatingControlBarManager: Starting programmatic tutorial test (skipping overlay)")
+
+                // Reset tutorial state
+                TutorialChatGuide.shared.finish(barState: barState)
+                PostOnboardingTutorialManager.shared.dismiss()
+
+                // Start the chat guide directly (bypass overlay)
+                TutorialChatGuide.shared.start(barState: barState)
+
+                // Wait for prompts to load, then auto-send each step's query
+                try? await Task.sleep(for: .seconds(2))
+
+                let prompts = barState.tutorialPrompts.isEmpty ? TutorialChatGuide.defaultPrompts : barState.tutorialPrompts
+
+                for (i, prompt) in prompts.enumerated() {
+                    guard barState.isTutorialChatActive else {
+                        log("FloatingControlBarManager: Tutorial test — chat guide ended early at step \(i)")
+                        break
+                    }
+
+                    log("FloatingControlBarManager: Tutorial test — sending step \(i): \(prompt.instruction)")
+
+                    // Capture screenshot before showing the bar
+                    self.captureScreenshotEarly()
+
+                    // Show the bar and send the query
+                    if !window.isVisible { self.show() }
+                    window.state.displayedQuery = prompt.instruction
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        window.state.showingAIResponse = true
+                    }
+                    window.showAIConversation()
+
+                    await self.sendAIQuery(prompt.instruction, barWindow: window, provider: provider)
+
+                    // Wait for the AI to finish responding (poll isAILoading)
+                    var waited = 0
+                    while barState.isAILoading, waited < 300 {
+                        try? await Task.sleep(for: .seconds(1))
+                        waited += 1
+                    }
+
+                    log("FloatingControlBarManager: Tutorial test — step \(i) response complete (waited \(waited)s)")
+
+                    // Brief pause before next step's guidance injection + query
+                    try? await Task.sleep(for: .seconds(3))
+                }
+
+                log("FloatingControlBarManager: Tutorial test — all steps complete")
+            }
+        }
+
         // Debug: send a text query via distributed notification
         // Trigger: xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "your query here"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
         DistributedNotificationCenter.default().addObserver(
