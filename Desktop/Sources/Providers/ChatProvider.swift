@@ -845,6 +845,20 @@ class ChatProvider: ObservableObject {
                 acpBridgeStarted = false
             }
         }
+
+        // Even if bridge is running, check if it started in the wrong mode.
+        // This happens when keys weren't available at first launch (cold start timeout,
+        // missing env vars) and the bridge fell back to personalOAuth.
+        if acpBridgeStarted && bridgeMode == "builtin" && acpBridge.mode.isPersonalOAuth {
+            await KeyService.shared.ensureKeys()
+            if let key = KeyService.shared.anthropicAPIKey, !key.isEmpty {
+                log("ChatProvider: API key now available — restarting bridge in bundledKey mode (was personalOAuth fallback)")
+                await acpBridge.stop()
+                acpBridge = createBridge()
+                acpBridgeStarted = false
+            }
+        }
+
         guard !acpBridgeStarted else { return true }
 
         // Ensure API keys are fetched before checking availability
