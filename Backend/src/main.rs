@@ -26,7 +26,7 @@ async fn main() {
 
     let config = Arc::new(Config::from_env());
     let port = config.port;
-    let tunnel_registry = relay::new_tunnel_registry();
+    let tunnel_registry = relay::new_tunnel_registry(config.clone());
 
     // Authed routes (require shared secret)
     let authed_routes = Router::new()
