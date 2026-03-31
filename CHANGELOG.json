@@ -13,7 +13,8 @@
     "Fixed infinite retry loop when AI sessions encounter persistent errors",
     "Fixed main thread blocking in orphaned cloudflared cleanup",
     "Show updating spinner in sidebar and floating bar while Sparkle downloads the update",
-    "Voice response is now on by default with a mute button in the floating dialog header"
+    "Voice response is now on by default with a mute button in the floating dialog header",
+    "Fixed built-in Claude not working for new users due to API key fetch race condition"
   ],
   "releases": [
     {
