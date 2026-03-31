@@ -338,6 +338,22 @@ final class WebRelay: ObservableObject {
         }
     }
 
+    // MARK: - Heartbeat
+
+    /// Re-registers the tunnel URL every 60s so the backend's in-memory map
+    /// survives Cloud Run instance restarts / deploys.
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled, let self, let url = self.tunnelUrl else { break }
+                log("WebRelay: heartbeat re-registering tunnel")
+                self.registerTunnel(url: url)
+            }
+        }
+    }
+
     // MARK: - Backend Registration
 
     private func registerTunnel(url: String) {
