@@ -52,7 +52,7 @@ for i in $(seq 0 $((NUM_CHATS - 1))); do
     # Immediately claim this chat by resetting unread_by_founder to 0
     # Prevents duplicate spawns if the Claude session finishes before next poll
     "$NODE_BIN" -e "
-      const { getDb } = require('./inbox/scripts/firestore-helpers');
+      const { getDb } = require('$SCRIPTS_DIR/firestore-helpers');
       getDb().collection('founder_chats').doc('$UID_VAL').update({ unread_by_founder: 0 })
         .then(() => console.log('Claimed chat for $UID_VAL'))
         .catch(e => console.error('Claim error:', e.message));
