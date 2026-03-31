@@ -24,6 +24,11 @@ Send a text query to the floating bar (no voice/UI needed):
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "your query here"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 ```
 
+Run the full tutorial programmatically (skips overlay, auto-sends all 3 steps). See `test-tutorial` skill for details:
+```bash
+xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testTutorial"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+```
+
 ### SQLite Database & Active User
 Messages are stored in `~/Library/Application Support/Fazm/users/<UUID>/fazm.db` (both prod and dev share this directory). To find the active user for the currently running build:
 
