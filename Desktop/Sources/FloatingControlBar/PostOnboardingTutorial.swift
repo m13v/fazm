@@ -10,6 +10,15 @@ enum TutorialStep: Int, CaseIterable {
     case pressKey = 1
     case speaking = 2
     case done = 3
+
+    var analyticsName: String {
+        switch self {
+        case .selectMic: return "selectMic"
+        case .pressKey: return "pressKey"
+        case .speaking: return "speaking"
+        case .done: return "done"
+        }
+    }
 }
 
 // MARK: - TutorialViewModel
@@ -81,6 +90,7 @@ class PostOnboardingTutorialManager {
 
         positionLeftOfBar(tutorialWindow)
         log("PostOnboardingTutorial: show() — window frame=\(tutorialWindow.frame), barFrame=\(FloatingControlBarManager.shared.barWindowFrame ?? .zero)")
+        AnalyticsManager.shared.tutorialShown()
 
         // Re-position when step changes (content size changes)
         viewModel.$step
@@ -137,6 +147,7 @@ class PostOnboardingTutorialManager {
                     // If user presses PTT while on mic step, advance to speaking
                     if isListening {
                         self.viewModel.stopPulse()
+                        AnalyticsManager.shared.tutorialOverlayStepCompleted(step: "selectMic")
                         withAnimation(.easeInOut(duration: 0.3)) {
                             self.viewModel.step = .speaking
                         }
@@ -144,6 +155,7 @@ class PostOnboardingTutorialManager {
                 case .pressKey:
                     if isListening {
                         self.viewModel.stopPulse()
+                        AnalyticsManager.shared.tutorialOverlayStepCompleted(step: "pressKey")
                         withAnimation(.easeInOut(duration: 0.3)) {
                             self.viewModel.step = .speaking
                         }
@@ -156,12 +168,15 @@ class PostOnboardingTutorialManager {
                             guard let self, let barState else { return }
                             if barState.isSilenceOverlayVisible {
                                 // No speech detected — reset to mic selection
+                                AnalyticsManager.shared.tutorialSilenceReset()
                                 withAnimation(.easeInOut(duration: 0.3)) {
                                     self.viewModel.step = .selectMic
                                 }
                             } else {
                                 // Speech detected — hide overlay and transition to guided chat
                                 // Don't mark as completed yet — that happens when the chat guide finishes
+                                AnalyticsManager.shared.tutorialOverlayStepCompleted(step: "speaking")
+                                AnalyticsManager.shared.tutorialOverlayCompleted()
                                 self.hideOverlay()
                                 // Show pulsating send button hint (focus is handled by PushToTalkManager)
                                 barState.showSendButtonHint = true
@@ -198,6 +213,7 @@ class PostOnboardingTutorialManager {
 
     /// Dismiss the tutorial and mark it as completed (user explicitly skipped or finished).
     func dismiss() {
+        AnalyticsManager.shared.tutorialSkipped(step: viewModel.step.analyticsName, phase: "overlay")
         UserDefaults.standard.set(true, forKey: userDefaultsKey)
         hideOverlay()
     }
@@ -210,6 +226,7 @@ class PostOnboardingTutorialManager {
 
     /// Force-replay the tutorial (for debugging / demos).
     func replay(barState: FloatingControlBarState) {
+        AnalyticsManager.shared.tutorialReplayed()
         // Tear down any existing tutorial immediately (no animation)
         cancellables.removeAll()
         viewModel.stopPulse()
@@ -271,6 +288,7 @@ class TutorialChatGuide {
 
     /// Start the tutorial chat guide after the overlay tutorial's first successful voice interaction.
     func start(barState: FloatingControlBarState) {
+        AnalyticsManager.shared.tutorialChatGuideStarted()
         barState.isTutorialChatActive = true
         barState.tutorialChatStep = 0
         // The first voice query is already in flight when start() is called,
@@ -496,6 +514,10 @@ class TutorialChatGuide {
 
                 // Advance to next step
                 barState.tutorialWaitingForResponse = false
+                let completedStep = barState.tutorialChatStep
+                let prompts = barState.tutorialPrompts
+                let desc = completedStep < prompts.count ? prompts[completedStep].description : "unknown"
+                AnalyticsManager.shared.tutorialChatStepCompleted(step: completedStep, description: desc)
                 barState.tutorialChatStep += 1
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self, weak barState] in
                     guard let self, let barState, barState.isTutorialChatActive else { return }
@@ -666,6 +688,7 @@ struct PostOnboardingTutorialView: View {
                     .padding(.top, 2)
 
                 Button {
+                    AnalyticsManager.shared.tutorialOverlayStepCompleted(step: "selectMic")
                     viewModel.startPulse()
                     withAnimation(.easeInOut(duration: 0.3)) {
                         viewModel.step = .pressKey
