@@ -58,7 +58,7 @@ Based on the category:
 
 Send a reply via:
 ```bash
-node ~/omi-analytics/scripts/send-email.js \
+node ~/analytics/scripts/send-email.js \
   --to "USER_EMAIL" \
   --subject "Re: ORIGINAL_SUBJECT" \
   --body "YOUR_REPLY" \
@@ -82,7 +82,7 @@ Reply guidelines:
 After handling the email, send a report to matt@mediar.ai:
 
 ```bash
-node ~/omi-analytics/scripts/send-email.js \
+node ~/analytics/scripts/send-email.js \
   --to "matt@mediar.ai" \
   --subject "FAZM Inbox: RE_SUBJECT — FROM_EMAIL" \
   --body "REPORT_BODY" \
@@ -129,7 +129,7 @@ curl -s -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
 ## Important notes
 
 - You are running in the FAZM repo at ~/fazm/. The codebase is Swift (macOS desktop app).
-- The send-email script is in ~/omi-analytics/scripts/ — it needs the omi-analytics .env.production.local for RESEND_API_KEY and DATABASE_URL.
+- The send-email script is in ~/analytics/scripts/ — it needs the analytics .env.production.local for RESEND_API_KEY and DATABASE_URL.
 - If you make code changes, do NOT commit or push. Just make the changes and report them.
 - Always reply to the user. Always send the report to Matt. Never skip these steps.
 - If the email is noise (auto-reply, DMARC, spam), skip steps 2-4 but still mark as processed.
