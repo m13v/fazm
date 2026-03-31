@@ -547,6 +547,14 @@ class AnalyticsManager {
         PostHogManager.shared.track("chat_agent_error", properties: props)
     }
 
+    func chatMessageDropped(messageLength: Int, reason: String) {
+        let props: [String: Any] = [
+            "message_length": messageLength,
+            "reason": reason,
+        ]
+        PostHogManager.shared.track("chat_message_dropped", properties: props)
+    }
+
     // MARK: - Conversation Events (Additional)
 
     func conversationReprocessed(conversationId: String, appId: String) {
