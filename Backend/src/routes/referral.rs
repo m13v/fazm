@@ -711,7 +711,9 @@ async fn count_referred_users(
     Ok(count)
 }
 
-/// Grant a free month to the referrer by applying a 100% off coupon to their next invoice
+/// Grant a free month to the referrer by adding a credit to their Stripe customer balance.
+/// Uses customer balance (not coupons) because the subscription uses flexible billing mode.
+/// The credit ($49) is automatically applied to the next invoice by Stripe.
 async fn grant_free_month(
     client: &reqwest::Client,
     config: &Config,
@@ -742,58 +744,37 @@ async fn grant_free_month(
         .and_then(|c| c["id"].as_str())
         .ok_or_else(|| "Referrer has no Stripe customer".to_string())?;
 
-    // Find their active subscription
+    // Add a $49 credit to the customer balance (negative amount = credit)
+    // Stripe automatically applies customer balance credits to the next invoice
     let resp = client
-        .get("https://api.stripe.com/v1/subscriptions")
-        .bearer_auth(stripe_secret)
-        .query(&[("customer", customer_id), ("status", "active"), ("limit", "1")])
-        .send()
-        .await
-        .map_err(|e| format!("Stripe sub list error: {e}"))?;
-
-    let body: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
-
-    let sub_id = body["data"]
-        .as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|s| s["id"].as_str())
-        .ok_or_else(|| "Referrer has no active subscription".to_string())?;
-
-    // Create a one-time 100% off coupon for the next invoice
-    let resp = client
-        .post("https://api.stripe.com/v1/coupons")
+        .post(format!(
+            "https://api.stripe.com/v1/customers/{customer_id}/balance_transactions"
+        ))
         .bearer_auth(stripe_secret)
         .form(&[
-            ("percent_off", "100"),
-            ("duration", "once"),
-            ("name", "Referral reward — 1 month free"),
-            ("metadata[type]", "referral_reward"),
-            ("metadata[referrer_uid]", referrer_uid),
+            ("amount", "-4900"), // -$49.00 (negative = credit)
+            ("currency", "usd"),
+            ("description", "Referral reward — 1 month free"),
         ])
         .send()
         .await
-        .map_err(|e| format!("Stripe coupon create error: {e}"))?;
-
-    let coupon: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
-    let coupon_id = coupon["id"]
-        .as_str()
-        .ok_or_else(|| "No coupon ID".to_string())?;
-
-    // Apply the coupon as a discount on the subscription
-    let resp = client
-        .post(format!("https://api.stripe.com/v1/subscriptions/{sub_id}"))
-        .bearer_auth(stripe_secret)
-        .form(&[("coupon", coupon_id)])
-        .send()
-        .await
-        .map_err(|e| format!("Stripe apply coupon error: {e}"))?;
+        .map_err(|e| format!("Stripe balance credit error: {e}"))?;
 
     if !resp.status().is_success() {
         let err = resp.text().await.unwrap_or_default();
-        return Err(format!("Stripe coupon apply failed: {err}"));
+        return Err(format!("Stripe balance credit failed: {err}"));
     }
 
-    tracing::info!(customer = %customer_id, coupon = %coupon_id, "Applied referral reward coupon");
+    let txn: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
+    let txn_id = txn["id"].as_str().unwrap_or("unknown");
+    let ending_balance = txn["ending_balance"].as_i64().unwrap_or(0);
+
+    tracing::info!(
+        customer = %customer_id,
+        transaction = %txn_id,
+        ending_balance_cents = ending_balance,
+        "Applied referral reward — $49 credit"
+    );
     Ok(())
 }
 
