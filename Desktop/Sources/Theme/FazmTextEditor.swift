@@ -23,7 +23,7 @@ struct FazmTextEditor: NSViewRepresentable {
 
     // Appearance
     var fontSize: CGFloat = 13
-    var textColor: NSColor = .white
+    var textColor: NSColor = .labelColor
     var lineFragmentPadding: CGFloat = 0
     var textContainerInset: NSSize = NSSize(width: 0, height: 8)
 
