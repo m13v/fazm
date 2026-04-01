@@ -825,6 +825,8 @@ struct AIResponseView: View {
             .background(FazmColors.overlayForeground.opacity(0.1))
             .cornerRadius(8)
 
+            PushToTalkButton(isListening: state.isVoiceListening, iconSize: 16, frameSize: 24)
+
             if (isLoading || currentMessage?.isStreaming == true) && followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button(action: {
                     isStopping = true
