@@ -504,6 +504,25 @@ class AnalyticsManager {
         PostHogManager.shared.track("paywall_referral_tapped")
     }
 
+    func referralCodeGenerated(code: String) {
+        PostHogManager.shared.track("referral_code_generated", properties: ["code": code])
+    }
+
+    func referralLinkCopied(code: String) {
+        PostHogManager.shared.track("referral_link_copied", properties: ["code": code])
+    }
+
+    func referralSignupTracked(code: String) {
+        PostHogManager.shared.track("referral_signup_tracked", properties: ["code": code])
+    }
+
+    func referralMessageValidated(count: Int, completed: Bool) {
+        PostHogManager.shared.track("referral_message_validated", properties: [
+            "message_count": count,
+            "completed": completed,
+        ])
+    }
+
     func paywallFounderCallTapped() {
         PostHogManager.shared.track("paywall_founder_call_tapped")
     }
