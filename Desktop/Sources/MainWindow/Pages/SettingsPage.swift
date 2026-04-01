@@ -689,6 +689,39 @@ struct SettingsContentView: View {
                 }
             }
 
+            // Appearance
+            settingsCard(settingId: "general.appearance") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "circle.lefthalf.filled")
+                            .scaledFont(size: 16, weight: .medium)
+                            .foregroundColor(FazmColors.purplePrimary)
+                            .frame(width: 12)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Appearance")
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+                            Text("Choose light, dark, or match your system setting.")
+                                .scaledFont(size: 13)
+                                .foregroundColor(FazmColors.textTertiary)
+                        }
+
+                        Spacer()
+                    }
+
+                    Picker("", selection: Binding(
+                        get: { AppearanceManager.shared.appearanceMode },
+                        set: { AppearanceManager.shared.appearanceMode = $0 }
+                    )) {
+                        ForEach(AppearanceMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+
             // Background Style
 
             // Voice Response (TTS) card
