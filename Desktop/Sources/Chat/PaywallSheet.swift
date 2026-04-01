@@ -403,7 +403,6 @@ final class PaywallWindowController {
         window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.appearance = NSAppearance(named: .darkAqua)
 
         let mouseScreen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
             ?? NSScreen.main ?? NSScreen.screens.first
