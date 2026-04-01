@@ -70,29 +70,73 @@ Fazm is a spin-off from the OMI team, but it is a DIFFERENT company. Fazm is not
 
 ## Investigation workflow
 
-Based on the category:
+**You MUST investigate thoroughly before replying to bug reports.** A quick grep and a guess is not investigation. Users deserve real answers grounded in real data.
 
-**Bug report:**
-1. Search the FAZM codebase for relevant code (Glob, Grep, Read)
-2. Check git log for recent changes to related files
-3. Check Sentry for matching error patterns if applicable
-4. Check PostHog for the user's event history if they have a posthog_distinct_id
-5. Determine: is this a known issue? Can you identify the root cause?
+### Bug reports (MANDATORY - do ALL of these)
 
-**Feature request:**
+#### 1. Check Sentry for this user's errors
+```bash
+./scripts/sentry-logs.sh USER_EMAIL
+```
+Returns crashes, errors, breadcrumbs for the user. Saved to `local/sentry-logs/`. Check if the reported bug matches any Sentry events.
+
+#### 2. Check PostHog for this user's activity
+```bash
+curl -s -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
+  "https://us.posthog.com/api/projects/331630/events/?properties=%5B%7B%22key%22%3A%22email%22%2C%22value%22%3A%22USER_EMAIL%22%2C%22type%22%3A%22person%22%7D%5D&orderBy=%5B%22-timestamp%22%5D&limit=50"
+```
+If you have a posthog_distinct_id, use `person_id=ID` instead. Look for: app version, last activity, error events, feature usage.
+
+#### 3. Check if the bug affects other users
+```bash
+./scripts/sentry-release.sh          # New issues in latest version
+./scripts/sentry-release.sh --all    # All issues including carryover
+```
+Search for the same error pattern. Note how many users are affected. This context is critical for the report to Matt.
+
+#### 4. Search the codebase for root cause
+Use Glob, Grep, Read to find relevant source files. Then:
+```bash
+git log --oneline -20 -- path/to/relevant/file.swift
+git blame path/to/file.swift | head -50
+```
+Understand the code path. Don't guess - read the actual implementation.
+
+#### 5. Try to reproduce locally (for significant bugs)
+```bash
+# Build and run the dev app
+./run.sh
+
+# Send a test query to trigger the behavior
+xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testQuery"), object: nil, userInfo: ["text": "test query here"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+
+# Check dev logs for errors
+tail -100 /private/tmp/fazm-dev.log | grep -i "error\|fail\|crash"
+```
+Do this for bugs where the root cause isn't clear from Sentry/code review. Skip for simple or already-understood issues.
+
+#### 6. Check backend logs (if the bug involves server communication)
+```bash
+./scripts/logs.sh 50 "relevant_keyword"
+```
+
+#### 7. Fix it if you can
+For small, safe changes: make the fix (do NOT commit or push). Note the exact files and lines changed for the report.
+
+For complex bugs or major features: document findings (root cause, relevant files, complexity).
+
+### Feature requests
 1. Search the codebase to understand current behavior
-2. Assess complexity: is this a small tweak or a major feature?
+2. Assess complexity: small tweak or major feature?
+3. Check PostHog for how many users use the related feature (if applicable)
 
-**Question:**
-1. Find the relevant code/feature in the codebase
-2. Understand how it works so you can explain it clearly
+### Questions
+1. Find the relevant code/feature
+2. Read and understand it so you can explain accurately
+3. Don't guess - if you're not sure, say so
 
-**For bugs you can fix (small, safe changes):**
-- Make the fix in the source code (do NOT commit or push)
-- Note exactly what you changed and why
-
-**For bugs you cannot fix or major features:**
-- Document your findings (root cause, relevant files, complexity estimate)
+### Feedback / greetings
+No investigation needed. Just reply.
 
 ## Report to Matt
 
@@ -110,14 +154,25 @@ node ~/analytics/scripts/send-email.js \
 
 The report MUST include:
 1. **Who:** user name/email
-2. **What they said:** brief summary
+2. **What they said:** 1-2 sentence summary
 3. **Category:** bug / feature / question / feedback / greeting / noise
-4. **What you did:** investigation summary, any code changes made (with file paths)
-5. **What you replied:** the exact text you sent them
-6. **Action needed from Matt:** None / Review code changes / Discuss feature / Escalation needed
+4. **Investigation results:** For bugs, this is the most important section. Include:
+   - Sentry findings (errors found or "no errors in Sentry for this user")
+   - PostHog findings (app version, recent activity, or "no PostHog data found")
+   - Whether other users are affected (Sentry issue count)
+   - Relevant source files and what you found in the code
+   - Root cause if identified, or best hypothesis if not
+5. **Code changes:** files edited with paths, or "none"
+6. **What you replied:** the exact text you sent the user
+7. **Action needed from Matt:** None / Review code changes / Discuss feature / Escalation needed
+
+For significant bugs or features, be detailed in investigation results. Matt needs the full picture without re-investigating himself.
 
 ## Important notes
 
 - You are running in the FAZM repo at ~/fazm/. The codebase is Swift (macOS desktop app).
 - If you make code changes, do NOT commit or push. Just make the changes and report them.
 - If the user asks something you genuinely don't know, say so honestly. Don't make things up.
+- Env vars (DATABASE_URL, RESEND_API_KEY, POSTHOG_PERSONAL_API_KEY) are loaded by the shell orchestrator. They should be available in your environment.
+- The send-email script is at ~/analytics/scripts/send-email.js.
+- App logs: dev at /private/tmp/fazm-dev.log, prod at /private/tmp/fazm.log.
