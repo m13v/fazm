@@ -1778,14 +1778,21 @@ class FloatingControlBarManager {
         chatCancellable?.cancel()
         chatCancellable = nil
 
-        // Show the detached window with its own state copy
+        // Transfer the ACP session from "floating" to a unique detached key.
+        // This lets the detached window continue the same ACP conversation,
+        // while the floating bar's "floating" key is cleared for a fresh session.
+        let detachedSessionKey = "detached-\(UUID().uuidString)"
+        provider.transferSession(fromKey: "floating", toKey: detachedSessionKey)
+
+        // Show the detached window with its own state copy and session key
         DetachedChatWindowController.shared.show(
             chatHistory: chatHistory,
             displayedQuery: displayedQuery,
             currentAIMessage: currentAIMessage,
             isAILoading: isAILoading,
             chatProvider: provider,
-            messageCountBefore: messageCountBefore
+            messageCountBefore: messageCountBefore,
+            sessionKey: detachedSessionKey
         )
 
         // Clear floating bar state so closeAIConversation doesn't snapshot stale data
@@ -1797,9 +1804,6 @@ class FloatingControlBarManager {
 
         // Close the floating bar conversation and collapse back to pill
         window.closeAIConversation()
-
-        // Reset ACP session so the next floating bar interaction starts fresh
-        window.onResetSession?()
     }
 
     /// Re-send the pending message that was interrupted by browser extension setup.
