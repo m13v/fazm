@@ -1,7 +1,9 @@
 {
   "unreleased": [
     "Added pop-out button to open chat in a separate window that behaves like a normal Mac window",
-    "Improved knowledge graph performance: capped visible nodes to 100, debounced updates, and replaced text rendering with lightweight textures"
+    "Improved knowledge graph performance: capped visible nodes to 100, debounced updates, and replaced text rendering with lightweight textures",
+    "Added pop-out button to detach chat into a separate resizable window that continues the same conversation",
+    "Added pop-out button to detach chat into a separate resizable window that continues the same conversation"
   ],
   "releases": [
     {
