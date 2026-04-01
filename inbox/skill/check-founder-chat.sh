@@ -98,6 +98,18 @@ PROMPT_EOF
         echo "[$(date)] Claude exited with code $EXIT_CODE" >> "$SESSION_LOG"
         if [ $EXIT_CODE -ne 0 ]; then
             echo "[$(date)] WARNING: Claude session for $EMAIL exited with code $EXIT_CODE" >> "$LOG_DIR/founder-chat.log"
+            # Re-set unread so the message gets retried on next poll
+            NODE_PATH="$HOME/analytics/node_modules" "$HOME/.nvm/versions/node/v20.19.4/bin/node" \
+                "$HOME/fazm/inbox/scripts/unclaim-chat.js" "$UID_VAL" >> "$LOG_DIR/founder-chat.log" 2>&1
+            echo "[$(date)] Unclaimed chat for $EMAIL (will retry)" >> "$LOG_DIR/founder-chat.log"
+        fi
+        # Also check if Claude produced meaningful output (more than just the startup line)
+        LINE_COUNT=$(wc -l < "$SESSION_LOG" 2>/dev/null || echo "0")
+        if [ "$LINE_COUNT" -le 2 ] && [ "$EXIT_CODE" -eq 0 ]; then
+            echo "[$(date)] WARNING: Claude session for $EMAIL produced no output (possible rate limit)" >> "$LOG_DIR/founder-chat.log"
+            NODE_PATH="$HOME/analytics/node_modules" "$HOME/.nvm/versions/node/v20.19.4/bin/node" \
+                "$HOME/fazm/inbox/scripts/unclaim-chat.js" "$UID_VAL" >> "$LOG_DIR/founder-chat.log" 2>&1
+            echo "[$(date)] Unclaimed chat for $EMAIL (will retry)" >> "$LOG_DIR/founder-chat.log"
         fi
         rm -f "$PROMPT_FILE" "$PID_FILE"
     ) &
