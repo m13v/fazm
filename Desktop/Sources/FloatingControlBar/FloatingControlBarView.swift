@@ -99,8 +99,8 @@ struct FloatingControlBarView: View {
                         .frame(width: 14, height: 14)
                         .allowsHitTesting(false)
                 }
-                .padding(.top, 8)
-                .padding(.trailing, 16)
+                .padding(.top, 12)
+                .padding(.trailing, 18)
             }
         }
         .clipped()
