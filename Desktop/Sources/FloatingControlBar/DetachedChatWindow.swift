@@ -224,22 +224,25 @@ struct DetachedChatView: View {
 
 // MARK: - DetachedChatWindowController
 
-/// Singleton that manages the detached chat window lifecycle.
+/// Manages multiple detached chat windows, each with its own ACP session.
 @MainActor
 class DetachedChatWindowController {
     static let shared = DetachedChatWindowController()
 
-    private var window: DetachedChatWindow?
-    private var chatCancellable: AnyCancellable?
-    private var compactCancellable: AnyCancellable?
-    /// Unique session key for the current detached window's ACP session
-    private var sessionKey: String?
+    /// Per-window state: the window, its ACP session key, and Combine subscriptions.
+    private struct WindowEntry {
+        let window: DetachedChatWindow
+        var sessionKey: String
+        var chatCancellable: AnyCancellable?
+        var compactCancellable: AnyCancellable?
+    }
 
-    var isShowing: Bool { window?.isVisible ?? false }
+    private var entries: [ObjectIdentifier: WindowEntry] = [:]
 
-    /// Pop out the current floating bar conversation into a detached window.
-    /// Creates its own FloatingControlBarState so the floating bar can reset to new chat.
-    /// The sessionKey identifies this detached window's ACP session for continuity.
+    var isShowing: Bool { entries.values.contains { $0.window.isVisible } }
+
+    /// Pop out the current floating bar conversation into a new detached window.
+    /// Each call creates a separate window with its own ACP session.
     func show(
         chatHistory: [FloatingChatExchange],
         displayedQuery: String,
@@ -249,15 +252,6 @@ class DetachedChatWindowController {
         messageCountBefore: Int,
         sessionKey: String
     ) {
-        // Reuse or create the window
-        if let existing = window {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
-        self.sessionKey = sessionKey
-
         // Create a fresh state for the detached window, copying conversation data
         let detachedState = FloatingControlBarState()
         detachedState.chatHistory = chatHistory
@@ -268,22 +262,24 @@ class DetachedChatWindowController {
         detachedState.showingAIResponse = true
 
         let win = DetachedChatWindow(state: detachedState)
+        let winId = ObjectIdentifier(win)
 
-        win.onSendFollowUp = { [weak self] message in
-            self?.sendQuery(message)
+        win.onSendFollowUp = { [weak self, weak win] message in
+            guard let win else { return }
+            self?.sendQuery(message, for: win)
         }
 
-        win.onNewChat = { [weak self, weak detachedState, weak chatProvider] in
-            guard let self, let state = detachedState, let provider = chatProvider else { return }
+        win.onNewChat = { [weak self, weak win, weak detachedState, weak chatProvider] in
+            guard let self, let win, let state = detachedState, let provider = chatProvider else { return }
             state.chatHistory = []
             state.displayedQuery = ""
             state.currentAIMessage = nil
             state.isAILoading = false
             state.aiInputText = ""
             state.clearQueue()
-            // Generate a new session key for the fresh chat
-            let oldKey = self.sessionKey
-            self.sessionKey = "detached-\(UUID().uuidString)"
+            let id = ObjectIdentifier(win)
+            let oldKey = self.entries[id]?.sessionKey
+            self.entries[id]?.sessionKey = "detached-\(UUID().uuidString)"
             Task { @MainActor in
                 if let oldKey {
                     await provider.resetSession(key: oldKey)
@@ -330,28 +326,38 @@ class DetachedChatWindowController {
             chatProvider?.handleObserverCardAction(activityId: activityId, action: action)
         }
 
-        win.onWindowClose = { [weak self] in
-            self?.chatCancellable?.cancel()
-            self?.chatCancellable = nil
-            self?.compactCancellable?.cancel()
-            self?.compactCancellable = nil
-            self?.sessionKey = nil
-            self?.window = nil
+        win.onWindowClose = { [weak self, weak win] in
+            guard let self, let win else { return }
+            let id = ObjectIdentifier(win)
+            self.entries[id]?.chatCancellable?.cancel()
+            self.entries[id]?.compactCancellable?.cancel()
+            self.entries.removeValue(forKey: id)
         }
 
         win.setupViews()
-        self.window = win
 
-        // Subscribe to ChatProvider messages for streaming updates in the detached window
-        subscribeToChatProvider(chatProvider, state: detachedState, messageCountBefore: messageCountBefore)
+        var entry = WindowEntry(window: win, sessionKey: sessionKey)
+        // Subscribe to ChatProvider messages for streaming updates
+        subscribeToChatProvider(chatProvider, state: detachedState, messageCountBefore: messageCountBefore, entry: &entry)
+        entries[winId] = entry
+
+        // Offset new windows so they don't stack directly on top of each other
+        if entries.count > 1 {
+            let offset = CGFloat((entries.count - 1) * 30)
+            var frame = win.frame
+            frame.origin.x += offset
+            frame.origin.y -= offset
+            win.setFrame(frame, display: false)
+        }
 
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Send a follow-up query from the detached window.
-    private func sendQuery(_ message: String) {
-        guard let win = window, let sessionKey = sessionKey else { return }
+    /// Send a follow-up query from a specific detached window.
+    private func sendQuery(_ message: String, for win: DetachedChatWindow) {
+        let winId = ObjectIdentifier(win)
+        guard let sessionKey = entries[winId]?.sessionKey else { return }
         let state = win.state
         let provider = FloatingControlBarManager.shared.chatProvider
         guard let provider else { return }
@@ -372,7 +378,26 @@ class DetachedChatWindowController {
             }
         }
 
-        subscribeToChatProvider(provider, state: state, messageCountBefore: messageCountBefore)
+        entries[winId]?.chatCancellable?.cancel()
+        entries[winId]?.chatCancellable = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak state] messages in
+                guard let state else { return }
+                guard messages.count > messageCountBefore,
+                      let aiMessage = messages.last,
+                      aiMessage.sender == .ai else { return }
+                state.currentAIMessage = aiMessage
+                if aiMessage.isStreaming {
+                    state.isAILoading = false
+                    if !state.showingAIResponse {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            state.showingAIResponse = true
+                        }
+                    }
+                } else {
+                    state.isAILoading = false
+                }
+            }
 
         Task { @MainActor in
             await provider.sendMessage(
@@ -387,9 +412,9 @@ class DetachedChatWindowController {
     }
 
     /// Subscribe to ChatProvider.$messages for streaming response updates.
-    private func subscribeToChatProvider(_ provider: ChatProvider, state: FloatingControlBarState, messageCountBefore: Int) {
-        chatCancellable?.cancel()
-        chatCancellable = provider.$messages
+    private func subscribeToChatProvider(_ provider: ChatProvider, state: FloatingControlBarState, messageCountBefore: Int, entry: inout WindowEntry) {
+        entry.chatCancellable?.cancel()
+        entry.chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak state] messages in
                 guard let state else { return }
@@ -410,8 +435,8 @@ class DetachedChatWindowController {
                 }
             }
 
-        compactCancellable?.cancel()
-        compactCancellable = provider.$isCompacting
+        entry.compactCancellable?.cancel()
+        entry.compactCancellable = provider.$isCompacting
             .receive(on: DispatchQueue.main)
             .sink { [weak state] isCompacting in
                 state?.isCompacting = isCompacting
@@ -419,7 +444,9 @@ class DetachedChatWindowController {
     }
 
     func close() {
-        window?.close()
-        window = nil
+        for entry in entries.values {
+            entry.window.close()
+        }
+        entries.removeAll()
     }
 }
