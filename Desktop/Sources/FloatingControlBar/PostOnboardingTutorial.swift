@@ -610,7 +610,6 @@ class PostOnboardingTutorialWindow: NSWindow {
             defer: false
         )
 
-        self.appearance = NSAppearance(named: .vibrantDark)
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = true
