@@ -38,7 +38,7 @@ struct FloatingBackgroundModifier: ViewModifier {
                 ZStack {
                     VisualEffectView(material: .fullScreenUI, blendingMode: .behindWindow, alphaValue: 0.6)
                         .opacity(useSolid ? 0 : 1)
-                    Color(nsColor: NSColor(white: 0.12, alpha: 1.0))
+                    FazmColors.backgroundSecondary
                         .opacity(useSolid ? 1 : 0)
                 }
                 .animation(.easeInOut(duration: 0.25), value: useSolid)
@@ -47,7 +47,7 @@ struct FloatingBackgroundModifier: ViewModifier {
             .animation(.easeInOut(duration: 0.25), value: cornerRadius)
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
+                    .strokeBorder(FazmColors.overlayBorder.opacity(0.5), lineWidth: 1)
                     .animation(.easeInOut(duration: 0.25), value: cornerRadius)
             )
     }
@@ -66,7 +66,7 @@ struct FloatingLoadingSpinner: View {
     var body: some View {
         Circle()
             .trim(from: 0.1, to: 0.9)
-            .stroke(Color.white, lineWidth: 2)
+            .stroke(FazmColors.overlayForeground, lineWidth: 2)
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
             .onAppear { isSpinning = true }
             .animation(
