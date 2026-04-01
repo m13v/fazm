@@ -42,6 +42,7 @@ struct AIResponseView: View {
     var onClearQueue: (() -> Void)?
     var onReorderQueue: ((IndexSet, Int) -> Void)?
     var onStopAgent: (() -> Void)?
+    var onPopOut: (() -> Void)?
     var onConnectClaude: (() -> Void)?
     var onObserverCardAction: ((Int64, String) -> Void)?
 
@@ -327,6 +328,10 @@ struct AIResponseView: View {
                 userInput: userInput,
                 currentMessage: currentMessage
             )
+
+            if let onPopOut {
+                PopOutButton(action: onPopOut)
+            }
 
             if let onNewChat {
                 NewChatButton(action: onNewChat)
@@ -981,6 +986,31 @@ struct VoiceMuteButton: View {
                         .transition(.opacity)
                 }
             }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+    }
+}
+
+// MARK: - Pop Out Button
+
+struct PopOutButton: View {
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 10))
+                if isHovered {
+                    Text("Pop out")
+                        .scaledFont(size: 11)
+                        .transition(.opacity)
+                }
+            }
+            .foregroundColor(.secondary)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
