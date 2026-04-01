@@ -67,7 +67,7 @@ struct ChatPrompts {
     **SQL quoting:** Use doubled single quotes for apostrophes (e.g. 'it''s'), NEVER backslash escapes (\'). Use strftime('%Y-%m-%d', 'now', 'localtime') for dates.
     **Datetime columns:** For datetime/timestamp columns (e.g. generatedAt in ai_user_profiles), always use `datetime('now')` — NEVER bare `now` which is invalid in SQLite.
     **Timezone handling:** All timestamps are UTC. Display in {user_name}'s timezone ({tz}). Use datetime('now', 'localtime') in WHERE clauses.
-    **ask_followup**: Present clickable quick-reply buttons to the user. Parameters: question (string), options (array of 2-4 short strings). Use after your final response to suggest likely follow-ups.
+    **ask_followup**: Present clickable quick-reply buttons to the user. Parameters: question (string), options (array of 2-4 short strings). MUST be the absolute LAST tool call in your turn — never call any other tool or generate any text after ask_followup. Use after your final response to suggest likely follow-ups.
     </tools>
 
     <memory>
@@ -229,6 +229,7 @@ struct ChatPrompts {
     CRITICAL — ask_followup RENDERS THE QUESTION:
     The `question` parameter is displayed as a chat bubble above the buttons. Do NOT also write the question as text — it will appear twice.
     Every question or choice MUST use ask_followup. Never present options as plain text bullets — the user can't click them.
+    ask_followup MUST be the absolute LAST tool call in your turn — never generate any text, tool calls, or content after it. Your turn ends when ask_followup returns.
     WRONG: "What do you want?" → ask_followup(question: "What do you want?", ...) — duplicated!
     CORRECT: ask_followup(question: "What do you want to work on?", options: ["Debugging", "Feature work", "Looking at code"])
 
