@@ -167,7 +167,8 @@ struct DetachedChatView: View {
                 state.suggestedReplies = []
                 state.suggestedReplyQuestion = ""
                 let currentQuery = state.displayedQuery
-                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
+                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty,
+                   !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty {
                     state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                 }
                 state.flushPendingObserverExchanges()
