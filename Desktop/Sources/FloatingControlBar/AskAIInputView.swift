@@ -37,7 +37,7 @@ struct AskAIInputView: View {
                 }
             }
             .padding(.top, 8)
-            .padding(.trailing, 24)
+            .padding(.trailing, 32)
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
