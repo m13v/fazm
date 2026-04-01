@@ -67,8 +67,8 @@ struct FloatingControlBarView: View {
                             .frame(width: 14, height: 14)
                             .allowsHitTesting(false)
                     }
-                    .padding(.top, 4)
-                    .padding(.trailing, 4)
+                    .padding(.top, 6)
+                    .padding(.trailing, 8)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
