@@ -40,7 +40,7 @@ struct FloatingControlBarView: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
+                        .strokeBorder(FazmColors.overlayBorder.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
@@ -60,7 +60,7 @@ struct FloatingControlBarView: View {
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
                             .frame(width: 16, height: 16)
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                            .overlay(Circle().strokeBorder(FazmColors.overlayForeground.opacity(0.2), lineWidth: 0.5))
                         Text("esc")
                             .font(.system(size: 9))
                             .foregroundColor(.secondary)
@@ -79,9 +79,9 @@ struct FloatingControlBarView: View {
                 } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(FazmColors.overlayForeground.opacity(0.7))
                         .frame(width: 22, height: 22)
-                        .background(Color.white.opacity(0.12))
+                        .background(FazmColors.overlayForeground.opacity(0.12))
                         .cornerRadius(5)
                 }
                 .buttonStyle(.plain)
@@ -95,7 +95,7 @@ struct FloatingControlBarView: View {
                     ResizeHandleView(targetWindow: window)
                         .frame(width: 20, height: 20)
                     ResizeGripShape()
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(FazmColors.overlayForeground.opacity(0.3))
                         .frame(width: 14, height: 14)
                         .allowsHitTesting(false)
                 }
@@ -164,7 +164,7 @@ struct FloatingControlBarView: View {
     /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
         RoundedRectangle(cornerRadius: 2)
-            .fill(updaterViewModel.updateAvailable ? FazmColors.purplePrimary : Color.white.opacity(0.5))
+            .fill(updaterViewModel.updateAvailable ? FazmColors.purplePrimary : FazmColors.overlayForeground.opacity(0.5))
             .frame(width: 28, height: 4)
             .shadow(
                 color: updaterViewModel.updateAvailable
@@ -224,13 +224,13 @@ struct FloatingControlBarView: View {
             HStack(spacing: 3) {
                 Text(title)
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(.white)
+                    .foregroundColor(FazmColors.overlayForeground)
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isOn.wrappedValue ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                    .fill(isOn.wrappedValue ? FazmColors.overlayForeground.opacity(0.3) : FazmColors.overlayForeground.opacity(0.1))
                     .frame(width: 26, height: 15)
                     .overlay(alignment: isOn.wrappedValue ? .trailing : .leading) {
                         Circle()
-                            .fill(.white)
+                            .fill(FazmColors.overlayForeground)
                             .frame(width: 11, height: 11)
                             .padding(2)
                     }
@@ -251,14 +251,14 @@ struct FloatingControlBarView: View {
         HStack(spacing: 3) {
             Text(title)
                 .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(.white)
+                .foregroundColor(FazmColors.overlayForeground)
             ForEach(keys, id: \.self) { key in
                 Text(key)
                     .scaledFont(size: 9)
-                    .foregroundColor(.white)
+                    .foregroundColor(FazmColors.overlayForeground)
                     .frame(minWidth: 15, minHeight: 15)
                     .padding(.horizontal, 3)
-                    .background(Color.white.opacity(0.1))
+                    .background(FazmColors.overlayForeground.opacity(0.1))
                     .cornerRadius(3)
             }
         }
@@ -270,7 +270,7 @@ struct FloatingControlBarView: View {
                 // Transcribing loading indicator
                 ProgressView()
                     .controlSize(.small)
-                    .tint(.white)
+                    .tint(FazmColors.overlayForeground)
             } else {
                 // Animated audio level bars — uses ObservedObject to avoid
                 // re-rendering the conversation view on every level change.
@@ -281,7 +281,7 @@ struct FloatingControlBarView: View {
                     spacing: 2,
                     maxHeight: 20,
                     minHeight: 3,
-                    color: .white
+                    color: FazmColors.overlayForeground
                 )
             }
 
@@ -343,10 +343,10 @@ struct FloatingControlBarView: View {
                         Text("⌘N")
                             .scaledFont(size: 9)
                             .padding(.horizontal, 3)
-                            .background(Color.white.opacity(0.1))
+                            .background(FazmColors.overlayForeground.opacity(0.1))
                             .cornerRadius(3)
                     }
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(FazmColors.overlayForeground.opacity(0.5))
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 8)
