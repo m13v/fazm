@@ -1002,8 +1002,8 @@ struct PopOutButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: "macwindow.badge.plus")
-                    .font(.system(size: 10))
+                PopOutIcon()
+                    .frame(width: 12, height: 12)
                 if isHovered {
                     Text("Pop out")
                         .scaledFont(size: 11)
@@ -1015,6 +1015,44 @@ struct PopOutButton: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
+    }
+}
+
+struct PopOutIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let w = size.width
+            let h = size.height
+
+            // Back window (lower-left)
+            let backRect = RoundedRectangle(cornerRadius: w * 0.08)
+            let backPath = backRect.path(in: CGRect(
+                x: 0, y: h * 0.3,
+                width: w * 0.6, height: w * 0.6
+            ))
+            context.stroke(backPath, with: .foreground, lineWidth: 1.2)
+
+            // Front window (upper-right)
+            let frontRect = RoundedRectangle(cornerRadius: w * 0.08)
+            let frontPath = frontRect.path(in: CGRect(
+                x: w * 0.28, y: h * 0.05,
+                width: w * 0.6, height: w * 0.6
+            ))
+            context.stroke(frontPath, with: .foreground, lineWidth: 1.2)
+
+            // Arrow line
+            var arrowLine = Path()
+            arrowLine.move(to: CGPoint(x: w * 0.42, y: h * 0.58))
+            arrowLine.addLine(to: CGPoint(x: w * 0.78, y: h * 0.22))
+            context.stroke(arrowLine, with: .foreground, lineWidth: 1.4)
+
+            // Arrow head
+            var arrowHead = Path()
+            arrowHead.move(to: CGPoint(x: w * 0.6, y: h * 0.2))
+            arrowHead.addLine(to: CGPoint(x: w * 0.8, y: h * 0.2))
+            arrowHead.addLine(to: CGPoint(x: w * 0.8, y: h * 0.4))
+            context.stroke(arrowHead, with: .foreground, lineWidth: 1.4)
+        }
     }
 }
 
