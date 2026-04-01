@@ -38,6 +38,19 @@ struct FloatingControlBarView: View {
                         aiInputView
                     }
                 }
+                .overlay(alignment: .topTrailing) {
+                    ZStack {
+                        ResizeHandleView(targetWindow: window)
+                            .frame(width: 20, height: 20)
+                        ResizeGripShape()
+                            .foregroundStyle(FazmColors.overlayForeground.opacity(0.3))
+                            .frame(width: 14, height: 14)
+                            .allowsHitTesting(false)
+                    }
+                    .padding(.top, 4)
+                    .padding(.trailing, 4)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .strokeBorder(FazmColors.overlayBorder.opacity(0.5), lineWidth: 1)
