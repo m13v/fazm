@@ -260,6 +260,8 @@ class DetachedChatWindowController {
             return
         }
 
+        self.sessionKey = sessionKey
+
         // Create a fresh state for the detached window, copying conversation data
         let detachedState = FloatingControlBarState()
         detachedState.chatHistory = chatHistory
@@ -275,16 +277,21 @@ class DetachedChatWindowController {
             self?.sendQuery(message)
         }
 
-        win.onNewChat = { [weak detachedState, weak chatProvider] in
-            guard let state = detachedState, let provider = chatProvider else { return }
+        win.onNewChat = { [weak self, weak detachedState, weak chatProvider] in
+            guard let self, let state = detachedState, let provider = chatProvider else { return }
             state.chatHistory = []
             state.displayedQuery = ""
             state.currentAIMessage = nil
             state.isAILoading = false
             state.aiInputText = ""
             state.clearQueue()
+            // Generate a new session key for the fresh chat
+            let oldKey = self.sessionKey
+            self.sessionKey = "detached-\(UUID().uuidString)"
             Task { @MainActor in
-                await provider.resetSession(key: "floating")
+                if let oldKey {
+                    await provider.resetSession(key: oldKey)
+                }
             }
         }
 
@@ -332,6 +339,7 @@ class DetachedChatWindowController {
             self?.chatCancellable = nil
             self?.compactCancellable?.cancel()
             self?.compactCancellable = nil
+            self?.sessionKey = nil
             self?.window = nil
         }
 
@@ -347,7 +355,7 @@ class DetachedChatWindowController {
 
     /// Send a follow-up query from the detached window.
     private func sendQuery(_ message: String) {
-        guard let win = window else { return }
+        guard let win = window, let sessionKey = sessionKey else { return }
         let state = win.state
         let provider = FloatingControlBarManager.shared.chatProvider
         guard let provider else { return }
@@ -376,7 +384,7 @@ class DetachedChatWindowController {
                 model: ShortcutSettings.shared.selectedModel,
                 systemPromptSuffix: nil,
                 systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent,
-                sessionKey: "floating"
+                sessionKey: sessionKey
             )
             state.isAILoading = false
         }
