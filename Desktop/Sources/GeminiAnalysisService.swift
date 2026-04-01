@@ -27,9 +27,11 @@ actor GeminiAnalysisService {
 
         CRITICAL: If you see terminal, IDE, or browser activity that looks automated (fast typing, command sequences, file edits happening rapidly), call `read_dev_log` or `get_active_sessions` FIRST to check whether Fazm's AI agent is already doing that work. Do NOT suggest automating something that is already being automated by the agent. This is the most common false positive — avoid it.
 
-        Before deciding, consider using `query_database` to:
-        - Check recent chat messages: `SELECT sender, messageText, createdAt FROM chat_messages ORDER BY createdAt DESC LIMIT 10`
-        - Check previously discovered tasks to avoid duplicates: `SELECT content, status FROM observer_activity WHERE type='gemini_analysis' ORDER BY createdAt DESC LIMIT 5`
+        MANDATORY — before making any decision, you MUST run these two queries:
+        1. Check previously discovered tasks: `SELECT content, status, createdAt FROM observer_activity WHERE type='gemini_analysis' ORDER BY createdAt DESC LIMIT 10`
+        2. Check recent chat messages: `SELECT sender, messageText, createdAt FROM chat_messages ORDER BY createdAt DESC LIMIT 10`
+
+        If the observer_activity query returns tasks that are similar to what you'd suggest (same app, same type of work, same general activity), return NO_TASK. Users find it annoying to be shown the same suggestion repeatedly. A task is "similar" if it involves the same application AND the same category of work — even if the specific details differ. For example, if a previous task was about "refactoring route files in VS Code" and you'd suggest "updating middleware files in VS Code", those are similar (same app, same category: code editing). Err on the side of NO_TASK when in doubt about similarity.
 
         ## Decision Criteria
 
@@ -43,6 +45,7 @@ actor GeminiAnalysisService {
         - An AI agent could realistically do it 5x faster than the user
         - The AI agent's known weaknesses (slower at visual tasks, can't do real-time interaction) won't make it slower
         - The task is NOT already being handled by Fazm's AI agent (check with tools if unsure)
+        - The task has NOT been previously suggested (you checked observer_activity above — if a similar task exists there, return NO_TASK)
         - The task is relevant to the user's goals and current work context
 
         AI agents are FASTER at: bulk text processing, searching codebases, running shell commands, filling forms with known data, writing boilerplate code, data transformation, file operations across many files, research, lookups.
