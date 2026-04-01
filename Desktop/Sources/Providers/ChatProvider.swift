@@ -1002,6 +1002,38 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Transfer the ACP session from one key to another without resetting it.
+    /// Used when popping out the floating bar conversation to a detached window —
+    /// the detached window continues the same ACP session under a new key,
+    /// while the floating bar's key is cleared so the next query starts fresh.
+    func transferSession(fromKey: String, toKey: String) {
+        // Move the saved ACP session ID to the new key
+        let sessionIdKey = "acpSessionId_\(toKey)_\(bridgeMode)"
+        if fromKey == "floating" {
+            if let savedId = UserDefaults.standard.string(forKey: floatingSessionIdKey) {
+                UserDefaults.standard.set(savedId, forKey: sessionIdKey)
+                log("ChatProvider: Transferred session ID \(savedId) from '\(fromKey)' to '\(toKey)'")
+            } else if let pendingId = pendingFloatingResume {
+                UserDefaults.standard.set(pendingId, forKey: sessionIdKey)
+                log("ChatProvider: Transferred pending resume ID \(pendingId) from '\(fromKey)' to '\(toKey)'")
+            }
+            // Clear the floating key so next floating query starts fresh
+            UserDefaults.standard.removeObject(forKey: floatingSessionIdKey)
+            UserDefaults.standard.set(true, forKey: Self.floatingChatClearedKey)
+            pendingFloatingResume = nil
+            messages = []
+            pendingMessages.removeAll()
+            floatingChatSessionId = UUID().uuidString
+        }
+    }
+
+    /// Get the saved ACP session ID for a detached session key, consuming it for resume.
+    func detachedSessionResumeId(for key: String) -> String? {
+        let sessionIdKey = "acpSessionId_\(key)_\(bridgeMode)"
+        let id = UserDefaults.standard.string(forKey: sessionIdKey)
+        return id
+    }
+
     /// Start Claude OAuth authentication
     /// Opens the OAuth URL (provided by the bridge) in Chrome (where the user's sessions live).
     /// The bridge handles the full OAuth flow: local callback server, token exchange,
@@ -1992,6 +2024,13 @@ class ChatProvider: ObservableObject {
             pendingFloatingResume = nil
             log("ChatProvider: Using saved floating session ID for resume: \(pendingResume)")
         }
+        // Auto-resume detached chat sessions
+        if let key = sessionKey, key.hasPrefix("detached-"), resume == nil {
+            if let savedId = detachedSessionResumeId(for: key) {
+                resume = savedId
+                log("ChatProvider: Using saved detached session ID for resume: \(savedId)")
+            }
+        }
 
         // Pre-query guard: check if builtin cost cap is reached
         if bridgeMode == "builtin" && builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
@@ -2437,6 +2476,9 @@ class ChatProvider: ObservableObject {
                 }
                 if sessionKey == "floating" {
                     UserDefaults.standard.set(queryResult.sessionId, forKey: floatingSessionIdKey)
+                } else if let key = sessionKey, key.hasPrefix("detached-") {
+                    let detachedIdKey = "acpSessionId_\(key)_\(bridgeMode)"
+                    UserDefaults.standard.set(queryResult.sessionId, forKey: detachedIdKey)
                 }
             }
 
