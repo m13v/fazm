@@ -87,6 +87,7 @@ PROMPT_EOF
     # Spawn Claude in background
     SESSION_LOG="$LOG_DIR/chat-session-${UID_VAL}-$(date +%Y%m%d_%H%M%S).log"
     (
+        set +e  # Don't exit on error — we need cleanup to run
         cd "$HOME/fazm"
         echo "[$(date)] Starting Claude session for $EMAIL" >> "$SESSION_LOG"
         gtimeout 1200 claude \
@@ -96,7 +97,7 @@ PROMPT_EOF
         EXIT_CODE=$?
         echo "[$(date)] Claude exited with code $EXIT_CODE" >> "$SESSION_LOG"
         if [ $EXIT_CODE -ne 0 ]; then
-            log "WARNING: Claude session for $EMAIL exited with code $EXIT_CODE"
+            echo "[$(date)] WARNING: Claude session for $EMAIL exited with code $EXIT_CODE" >> "$LOG_DIR/founder-chat.log"
         fi
         rm -f "$PROMPT_FILE" "$PID_FILE"
     ) &
