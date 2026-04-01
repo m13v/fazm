@@ -73,6 +73,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     var onSendQuery: ((String) -> Void)?
     var onInterruptAndFollowUp: ((String) -> Void)?
     var onStopAgent: (() -> Void)?
+    var onPopOut: (() -> Void)?
     var onResetSession: (() -> Void)?
     var onConnectClaude: (() -> Void)?
     var onObserverCardAction: ((Int64, String) -> Void)?
@@ -234,6 +235,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onClearQueue: { [weak self] in self?.onClearQueue?() },
             onReorderQueue: { [weak self] source, dest in self?.onReorderQueue?(source, dest) },
             onStopAgent: { [weak self] in self?.onStopAgent?() },
+            onPopOut: { [weak self] in self?.onPopOut?() },
             onConnectClaude: { [weak self] in self?.onConnectClaude?() },
             onObserverCardAction: { [weak self] activityId, action in self?.onObserverCardAction?(activityId, action) }
         ).environmentObject(state)
@@ -447,7 +449,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    private func removeGlobalClickOutsideMonitor() {
+    func removeGlobalClickOutsideMonitor() {
         if let monitor = globalClickOutsideMonitor {
             NSEvent.removeMonitor(monitor)
             globalClickOutsideMonitor = nil
@@ -1169,6 +1171,10 @@ class FloatingControlBarManager {
             chatProvider?.stopAgent()
         }
 
+        barWindow.onPopOut = { [weak self] in
+            self?.popOutToWindow()
+        }
+
         barWindow.onResetSession = { [weak chatProvider] in
             guard let provider = chatProvider else { return }
             Task { @MainActor in
@@ -1744,6 +1750,54 @@ class FloatingControlBarManager {
     /// Close the AI conversation panel (used by PTT when no transcript was captured).
     func closeAIConversation() {
         window?.closeAIConversation()
+    }
+
+    /// Pop the current conversation out into a separate, normal macOS window.
+    func popOutToWindow() {
+        guard let window = window, let provider = chatProvider else { return }
+        let state = window.state
+
+        log("FloatingControlBarManager: Popping out conversation to detached window")
+        AnalyticsManager.shared.floatingBarAskFazmClosed()
+
+        // Remove monitors before hiding the floating bar conversation
+        window.removeGlobalClickOutsideMonitor()
+        window.suppressClickOutsideDismiss = false
+        state.isCollapsed = false
+
+        // Show the detached window with the shared state — conversation carries over
+        DetachedChatWindowController.shared.show(
+            state: state,
+            chatProvider: provider,
+            onSendQuery: { [weak self, weak window, weak provider] message in
+                guard let self, let barWindow = window, let provider else { return }
+                Task { @MainActor in
+                    await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+                }
+            }
+        )
+
+        // Collapse the floating bar back to its pill without clearing conversation state
+        // (the detached window now owns the display of this conversation)
+        chatCancellable?.cancel()
+        chatCancellable = nil
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            state.showingAIConversation = false
+            state.showingAIResponse = false
+        }
+
+        let size = FloatingControlBarWindow.minBarSize
+        let restoreOrigin = NSPoint(
+            x: window.frame.midX - size.width / 2,
+            y: window.frame.origin.y
+        )
+        window.styleMask.remove(.resizable)
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0.35
+        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0.0, 0.2, 1.0)
+        window.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
+        NSAnimationContext.endGrouping()
     }
 
     /// Re-send the pending message that was interrupted by browser extension setup.
