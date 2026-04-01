@@ -85,7 +85,6 @@ struct DesktopHomeView: View {
         }
         .background(FazmColors.backgroundPrimary)
         .frame(minWidth: 900, minHeight: 600)
-        .preferredColorScheme(.dark)
         .tint(FazmColors.purplePrimary)
         // Observe ChatProvider flags
         .onReceive(viewModelContainer.chatProvider.$needsBrowserExtensionSetup) { needs in
@@ -115,7 +114,6 @@ struct DesktopHomeView: View {
             DispatchQueue.main.async {
                 for window in NSApp.windows {
                     if window.title.hasPrefix("Fazm") {
-                        window.appearance = NSAppearance(named: .darkAqua)
                         window.minSize = NSSize(width: 900, height: 600)
                     }
                 }
