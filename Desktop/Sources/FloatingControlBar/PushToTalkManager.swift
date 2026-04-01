@@ -427,6 +427,7 @@ class PushToTalkManager: ObservableObject {
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
     updateBarState()
+    uiOverrideState = nil
   }
 
   private func showMicrophonePermissionDeniedAlert() {
@@ -523,7 +524,7 @@ class PushToTalkManager: ObservableObject {
         return
       }
 
-      barState?.audioLevel.transcript = "Transcribing..."
+      effectiveBarState?.audioLevel.transcript = "Transcribing..."
 
       Task {
         do {
@@ -595,7 +596,7 @@ class PushToTalkManager: ObservableObject {
       }
       // Only show silence overlay if PTT was held for at least 3 seconds
       if holdDuration >= 3.0 {
-        barState?.showSilenceOverlay()
+        effectiveBarState?.showSilenceOverlay()
       }
       return
     }
@@ -603,24 +604,31 @@ class PushToTalkManager: ObservableObject {
     if pttOpenedChat {
       // PTT already opened the chat and synced live transcript — just finalize the text
       log("PushToTalkManager: finalizing PTT transcript in open chat (\(query.count) chars): \(query)")
-      let isShowingResponse = barState?.showingAIResponse == true
+      let targetState = effectiveBarState
+      let isShowingResponse = targetState?.showingAIResponse == true
       if !isShowingResponse {
-        barState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
+        targetState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
       }
       pttOpenedChat = false
-      // Activate app first (async), then focus and set pending text so SwiftUI @FocusState works
-      NSApp.activate(ignoringOtherApps: true)
-      FloatingControlBarManager.shared.focusInputField()
+      if uiOverrideState == nil {
+        // Keyboard PTT — activate app and focus floating bar input
+        NSApp.activate(ignoringOtherApps: true)
+        FloatingControlBarManager.shared.focusInputField()
+      }
       if isShowingResponse {
         // Set pendingFollowUpText after activation so the onChange handler's
         // isFollowUpFocused=true is honored (requires active app)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-          self?.barState?.pendingFollowUpText = query
+          self?.effectiveBarState?.pendingFollowUpText = query
         }
       }
     } else {
       log("PushToTalkManager: inserting transcription into input (\(query.count) chars): \(query)")
-      FloatingControlBarManager.shared.openAIInputWithQuery(query)
+      if uiOverrideState == nil {
+        FloatingControlBarManager.shared.openAIInputWithQuery(query)
+      } else {
+        effectiveBarState?.aiInputText = query
+      }
     }
   }
 
