@@ -235,6 +235,7 @@ class DetachedChatWindowController {
         var sessionKey: String
         var chatCancellable: AnyCancellable?
         var compactCancellable: AnyCancellable?
+        var dequeueCancellable: AnyCancellable?
     }
 
     private var entries: [ObjectIdentifier: WindowEntry] = [:]
@@ -331,15 +332,23 @@ class DetachedChatWindowController {
             let id = ObjectIdentifier(win)
             self.entries[id]?.chatCancellable?.cancel()
             self.entries[id]?.compactCancellable?.cancel()
+            self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
         }
 
         win.setupViews()
 
         var entry = WindowEntry(window: win, sessionKey: sessionKey)
-        // Subscribe to ChatProvider messages for streaming updates
-        subscribeToChatProvider(chatProvider, state: detachedState, messageCountBefore: messageCountBefore, entry: &entry)
         entries[winId] = entry
+        // Subscribe to ChatProvider messages for streaming updates
+        subscribeToResponse(provider: chatProvider, state: detachedState, winId: winId, messageCountBefore: messageCountBefore)
+        // Subscribe to compacting state
+        entries[winId]?.compactCancellable?.cancel()
+        entries[winId]?.compactCancellable = chatProvider.$isCompacting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak detachedState] isCompacting in
+                detachedState?.isCompacting = isCompacting
+            }
 
         // Offset new windows so they don't stack directly on top of each other
         if entries.count > 1 {
@@ -364,9 +373,29 @@ class DetachedChatWindowController {
 
         if provider.isSending {
             provider.enqueueMessage(message)
+            // Listen for when this message is dequeued so we can set up the response subscriber
+            entries[winId]?.dequeueCancellable?.cancel()
+            entries[winId]?.dequeueCancellable = NotificationCenter.default
+                .publisher(for: .chatProviderDidDequeue)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self, weak state, weak win] notification in
+                    guard let self, let state, let win else { return }
+                    let id = ObjectIdentifier(win)
+                    // Set up the response subscriber now that our message is being sent
+                    let countBefore = provider.messages.count
+                    self.subscribeToResponse(provider: provider, state: state, winId: id, messageCountBefore: countBefore)
+                    // One-shot: cancel after first dequeue
+                    self.entries[id]?.dequeueCancellable?.cancel()
+                    self.entries[id]?.dequeueCancellable = nil
+                }
             return
         }
 
+        startQuery(message: message, for: win, winId: winId, sessionKey: sessionKey, state: state, provider: provider)
+    }
+
+    /// Start sending a query immediately (provider is not busy).
+    private func startQuery(message: String, for win: DetachedChatWindow, winId: ObjectIdentifier, sessionKey: String, state: FloatingControlBarState, provider: ChatProvider) {
         let messageCountBefore = provider.messages.count
         state.suggestedReplies = []
         state.suggestedReplyQuestion = ""
@@ -378,6 +407,22 @@ class DetachedChatWindowController {
             }
         }
 
+        subscribeToResponse(provider: provider, state: state, winId: winId, messageCountBefore: messageCountBefore)
+
+        Task { @MainActor in
+            await provider.sendMessage(
+                message,
+                model: ShortcutSettings.shared.selectedModel,
+                systemPromptSuffix: nil,
+                systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent,
+                sessionKey: sessionKey
+            )
+            state.isAILoading = false
+        }
+    }
+
+    /// Subscribe to ChatProvider messages for streaming response updates.
+    private func subscribeToResponse(provider: ChatProvider, state: FloatingControlBarState, winId: ObjectIdentifier, messageCountBefore: Int) {
         entries[winId]?.chatCancellable?.cancel()
         entries[winId]?.chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
@@ -398,50 +443,8 @@ class DetachedChatWindowController {
                     state.isAILoading = false
                 }
             }
-
-        Task { @MainActor in
-            await provider.sendMessage(
-                message,
-                model: ShortcutSettings.shared.selectedModel,
-                systemPromptSuffix: nil,
-                systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent,
-                sessionKey: sessionKey
-            )
-            state.isAILoading = false
-        }
     }
 
-    /// Subscribe to ChatProvider.$messages for streaming response updates.
-    private func subscribeToChatProvider(_ provider: ChatProvider, state: FloatingControlBarState, messageCountBefore: Int, entry: inout WindowEntry) {
-        entry.chatCancellable?.cancel()
-        entry.chatCancellable = provider.$messages
-            .receive(on: DispatchQueue.main)
-            .sink { [weak state] messages in
-                guard let state else { return }
-                guard messages.count > messageCountBefore,
-                      let aiMessage = messages.last,
-                      aiMessage.sender == .ai else { return }
-
-                state.currentAIMessage = aiMessage
-                if aiMessage.isStreaming {
-                    state.isAILoading = false
-                    if !state.showingAIResponse {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            state.showingAIResponse = true
-                        }
-                    }
-                } else {
-                    state.isAILoading = false
-                }
-            }
-
-        entry.compactCancellable?.cancel()
-        entry.compactCancellable = provider.$isCompacting
-            .receive(on: DispatchQueue.main)
-            .sink { [weak state] isCompacting in
-                state?.isCompacting = isCompacting
-            }
-    }
 
     func close() {
         for entry in entries.values {
