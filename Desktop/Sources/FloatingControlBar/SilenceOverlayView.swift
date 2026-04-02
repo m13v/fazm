@@ -19,7 +19,7 @@ struct SilenceOverlayView: View {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "mic.slash.fill")
                     .foregroundColor(.orange)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                 Text("Didn't catch that — try a different mic?")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.white)
@@ -29,7 +29,7 @@ struct SilenceOverlayView: View {
                     onDismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
+                        .scaledFont(size: 9, weight: .semibold)
                         .foregroundColor(.white.opacity(0.6))
                         .frame(width: 16, height: 16)
                 }
@@ -42,13 +42,13 @@ struct SilenceOverlayView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "mic.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                     Text(selectedDeviceName)
                         .scaledFont(size: 12)
                         .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9))
+                        .scaledFont(size: 9)
                         .foregroundColor(.white.opacity(0.5))
                 }
                 .foregroundColor(.white)
