@@ -9,7 +9,9 @@
     "Added push-to-talk microphone button next to the send button in chat input",
     "Fixed copy button causing layout shift when hovering over chat messages",
     "Fixed send button and observer cards not visible in light mode",
-    "Fixed settings search to cover all settings across every tab"
+    "Fixed settings search to cover all settings across every tab",
+    "Fixed detached chat window not streaming AI responses",
+    "Fixed floating bar getting stuck in loading state when queries are enqueued while agent is busy"
   ],
   "releases": [
     {
