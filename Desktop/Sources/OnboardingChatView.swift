@@ -340,7 +340,7 @@ struct OnboardingChatView: View {
             HStack(spacing: 12) {
                 TextField(quickReplyOptions.isEmpty ? "Type your message..." : "Or type your own answer...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(FazmColors.textPrimary)
                     .focused($isInputFocused)
                     .padding(12)
@@ -369,7 +369,7 @@ struct OnboardingChatView: View {
                     // Stop button when AI is responding and input is empty
                     Button(action: stopAgent) {
                         Image(systemName: chatProvider.isStopping ? "ellipsis.circle" : "stop.circle.fill")
-                            .font(.system(size: 32))
+                            .scaledFont(size: 32)
                             .foregroundColor(FazmColors.purplePrimary)
                     }
                     .buttonStyle(.plain)
@@ -377,7 +377,7 @@ struct OnboardingChatView: View {
                 } else {
                     Button(action: sendMessage) {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
+                            .scaledFont(size: 32)
                             .foregroundColor(canSend ? FazmColors.purplePrimary : FazmColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -1152,7 +1152,7 @@ struct OnboardingChatBubble: View {
                 if message.sender == .user {
                     // User avatar
                     Image(systemName: "person.fill")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(FazmColors.textSecondary)
                         .frame(width: 32, height: 32)
                         .background(FazmColors.backgroundTertiary)
@@ -1179,7 +1179,7 @@ struct OnboardingToolIndicator: View {
                         .controlSize(.mini)
                 } else {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.green)
                 }
 
@@ -1374,7 +1374,7 @@ struct ExplorationProfileCard: View {
                     if !text.isEmpty {
                         // Toggle button with pulse animation
                         Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
-                            .font(.system(size: 22))
+                            .scaledFont(size: 22)
                             .foregroundColor(FazmColors.purplePrimary)
                             .scaleEffect(pulseScale)
                             .onAppear {
