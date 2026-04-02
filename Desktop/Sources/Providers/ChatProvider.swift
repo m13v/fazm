@@ -2436,13 +2436,17 @@ class ChatProvider: ObservableObject {
 
                 // Persist AI message locally for onboarding restart recovery
                 // Must happen before backend save which replaces the message ID
-                if isOnboarding, !messageText.isEmpty {
-                    let msg = messages[index]
-                    Task { await OnboardingChatPersistence.saveMessage(msg) }
-                } else if sessionKey == "floating", !messageText.isEmpty {
-                    let msg = messages[index]
-                    let sid = floatingChatSessionId
-                    Task { await ChatMessageStore.saveMessage(msg, context: "__floating__", sessionId: sid) }
+                // Re-lookup index after yield — the messages array may have mutated
+                // during the suspension point above (session switch, message clear, etc.)
+                if let freshIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    if isOnboarding, !messageText.isEmpty {
+                        let msg = messages[freshIndex]
+                        Task { await OnboardingChatPersistence.saveMessage(msg) }
+                    } else if sessionKey == "floating", !messageText.isEmpty {
+                        let msg = messages[freshIndex]
+                        let sid = floatingChatSessionId
+                        Task { await ChatMessageStore.saveMessage(msg, context: "__floating__", sessionId: sid) }
+                    }
                 }
             } else {
                 // Message no longer in memory (user switched away from this session).
