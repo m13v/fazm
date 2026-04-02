@@ -398,7 +398,7 @@ struct ObserverCardView: View {
 
                 Text(oneLiner)
                     .scaledFont(size: 11, weight: .regular)
-                    .foregroundColor(.white.opacity(isDenied ? 0.4 : 0.7))
+                    .foregroundColor(FazmColors.overlayForeground.opacity(isDenied ? 0.4 : 0.7))
                     .lineLimit(1)
                     .strikethrough(isDenied)
 
@@ -415,14 +415,14 @@ struct ObserverCardView: View {
                     } label: {
                         Text("Deny")
                             .scaledFont(size: 10, weight: .medium)
-                            .foregroundColor(.white.opacity(0.4))
+                            .foregroundColor(FazmColors.overlayForeground.opacity(0.4))
                     }
                     .buttonStyle(.plain)
                 }
 
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .scaledFont(size: 9)
-                    .foregroundColor(.white.opacity(0.3))
+                    .foregroundColor(FazmColors.overlayForeground.opacity(0.3))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -450,12 +450,12 @@ struct ObserverCardView: View {
                                 } label: {
                                     Text(button.label)
                                         .scaledFont(size: 11, weight: .medium)
-                                        .foregroundColor(.white.opacity(0.7))
+                                        .foregroundColor(FazmColors.overlayForeground.opacity(0.7))
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 4)
                                 }
                                 .buttonStyle(.plain)
-                                .background(Color.white.opacity(0.08))
+                                .background(FazmColors.overlayForeground.opacity(0.08))
                                 .cornerRadius(5)
                             }
                         }
@@ -515,18 +515,18 @@ struct ObserverCardStackView: View {
                 if isObserverRunning && cards.isEmpty {
                     Text("Observer is thinking...")
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(FazmColors.overlayForeground.opacity(0.4))
                 } else {
                     Text("Observer noted \(cards.count) thing\(cards.count == 1 ? "" : "s")")
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(FazmColors.overlayForeground.opacity(0.5))
                 }
 
                 Spacer()
 
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .scaledFont(size: 9)
-                    .foregroundColor(.white.opacity(0.3))
+                    .foregroundColor(FazmColors.overlayForeground.opacity(0.3))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
