@@ -773,6 +773,9 @@ class ChatProvider: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor in
                     guard let self = self else { return }
+                    // Clear saved floating session so the next bridge start creates a fresh
+                    // session with the updated system prompt (voice instructions added/removed).
+                    UserDefaults.standard.removeObject(forKey: self.floatingSessionIdKey)
                     guard self.acpBridgeStarted else { return }
                     log("ChatProvider: Voice response setting changed, stopping bridge (will restart on next query)")
                     await self.acpBridge.stop()
