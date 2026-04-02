@@ -256,7 +256,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
         // Back up the current app bundle before Sparkle replaces it.
         // If the new version crash-loops, the rollback manager will restore this backup.
-        UpdateRollbackManager.backupCurrentApp()
+        // Run on a background thread — ditto copies ~100MB+ and waitUntilExit blocks
+        // the main thread for seconds (FAZM-9K).
+        DispatchQueue.global(qos: .userInitiated).async {
+            UpdateRollbackManager.backupCurrentApp()
+        }
         // Mark that App Management permission is working — don't show the guide again
         UserDefaults.standard.set(true, forKey: "hasSuccessfullyInstalledSparkleUpdate")
         Task { @MainActor in
