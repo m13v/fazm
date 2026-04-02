@@ -76,7 +76,8 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
             onReorderQueue: { [weak self] src, dst in self?.onReorderQueue?(src, dst) },
             onStopAgent: { [weak self] in self?.onStopAgent?() },
             onConnectClaude: { [weak self] in self?.onConnectClaude?() },
-            onObserverCardAction: { [weak self] id, action in self?.onObserverCardAction?(id, action) }
+            onObserverCardAction: { [weak self] id, action in self?.onObserverCardAction?(id, action) },
+            onChangeWorkspace: onChangeWorkspace != nil ? { [weak self] in self?.onChangeWorkspace?() } : nil
         ).environmentObject(state)
 
         let hosting = NSHostingView(rootView: AnyView(
@@ -137,7 +138,6 @@ struct DetachedChatView: View {
     var onConnectClaude: () -> Void
     var onObserverCardAction: (Int64, String) -> Void
     var onChangeWorkspace: (() -> Void)?
-    var workspacePath: String?
 
     var body: some View {
         AIResponseView(
@@ -220,8 +220,7 @@ struct DetachedChatView: View {
             onStopAgent: onStopAgent,
             onConnectClaude: onConnectClaude,
             onObserverCardAction: onObserverCardAction,
-            onChangeWorkspace: onChangeWorkspace,
-            workspacePath: workspacePath
+            onChangeWorkspace: onChangeWorkspace
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .floatingBackground(cornerRadius: 0)
@@ -331,6 +330,38 @@ class DetachedChatWindowController {
 
         win.onObserverCardAction = { [weak chatProvider] activityId, action in
             chatProvider?.handleObserverCardAction(activityId: activityId, action: action)
+        }
+
+        win.onChangeWorkspace = { [weak self, weak win, weak detachedState, weak chatProvider] in
+            guard let self, let win, let state = detachedState, let provider = chatProvider else { return }
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.message = "Select a project directory"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            let newPath = url.path
+            // Update the workspace
+            provider.aiChatWorkingDirectory = newPath
+            provider.workingDirectory = newPath
+            Task { await provider.discoverClaudeConfig() }
+
+            // Reset session for this detached window
+            let id = ObjectIdentifier(win)
+            state.chatHistory = []
+            state.displayedQuery = ""
+            state.currentAIMessage = nil
+            state.isAILoading = false
+            state.aiInputText = ""
+            state.clearQueue()
+            let oldKey = self.entries[id]?.sessionKey
+            self.entries[id]?.sessionKey = "detached-\(UUID().uuidString)"
+            Task { @MainActor in
+                if let oldKey {
+                    await provider.resetSession(key: oldKey)
+                }
+            }
         }
 
         win.onWindowClose = { [weak self, weak win] in
