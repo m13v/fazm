@@ -203,6 +203,8 @@ struct ChatMessage: Identifiable, Equatable {
     var citations: [Citation]
     /// Structured content blocks for AI messages (text interspersed with tool calls)
     var contentBlocks: [ChatContentBlock]
+    /// Which chat session this message belongs to (e.g. "floating", "detached-UUID")
+    var sessionKey: String?
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
@@ -213,7 +215,7 @@ struct ChatMessage: Identifiable, Equatable {
             && lhs.contentBlocks == rhs.contentBlocks
     }
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = []) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], sessionKey: String? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -223,6 +225,7 @@ struct ChatMessage: Identifiable, Equatable {
         self.isSynced = isSynced
         self.citations = citations
         self.contentBlocks = contentBlocks
+        self.sessionKey = sessionKey
     }
 }
 
@@ -2152,7 +2155,8 @@ class ChatProvider: ObservableObject {
             let userMessage = ChatMessage(
                 id: userMessageId,
                 text: trimmedText,
-                sender: .user
+                sender: .user,
+                sessionKey: sessionKey
             )
             messages.append(userMessage)
 
@@ -2180,7 +2184,8 @@ class ChatProvider: ObservableObject {
             id: aiMessageId,
             text: "",
             sender: .ai,
-            isStreaming: true
+            isStreaming: true,
+            sessionKey: sessionKey
         )
         messages.append(aiMessage)
 
