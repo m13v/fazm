@@ -1934,11 +1934,13 @@ class ChatProvider: ObservableObject {
 
     /// Enqueue a message to be sent after the current query finishes.
     /// Does NOT interrupt the current query — it will be picked up automatically.
-    func enqueueMessage(_ text: String) {
+    /// Pass the caller's `sessionKey` so the message runs on the correct session
+    /// (not the currently-active one, which may belong to a different window).
+    func enqueueMessage(_ text: String, sessionKey: String? = nil) {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
-        pendingMessages.append((text: trimmedText, sessionKey: activeSessionKey, userMessageAdded: false))
-        log("ChatProvider: message enqueued (\(pendingMessages.count) pending)")
+        pendingMessages.append((text: trimmedText, sessionKey: sessionKey ?? activeSessionKey, userMessageAdded: false))
+        log("ChatProvider: message enqueued (\(pendingMessages.count) pending), sessionKey=\(sessionKey ?? activeSessionKey ?? "nil")")
     }
 
     /// Interrupt the current query and send a message immediately.
