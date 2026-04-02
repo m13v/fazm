@@ -11,7 +11,7 @@ struct AudioLevelBarsView: View {
     var spacing: CGFloat = 2
     var maxHeight: CGFloat = 20
     var minHeight: CGFloat = 3
-    var color: Color = .white
+    var color: Color = FazmColors.overlayForeground
 
     var body: some View {
         HStack(spacing: spacing) {
@@ -55,7 +55,7 @@ struct ObservedAudioLevelBarsView: View {
     var spacing: CGFloat = 2
     var maxHeight: CGFloat = 20
     var minHeight: CGFloat = 3
-    var color: Color = .white
+    var color: Color = FazmColors.overlayForeground
 
     var body: some View {
         AudioLevelBarsView(
@@ -82,17 +82,17 @@ struct ObservedTranscriptView: View {
         if isVoiceFinalizing {
             Text("Transcribing...")
                 .scaledFont(size: 13)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(FazmColors.overlayForeground.opacity(0.8))
         } else if !audioLevel.transcript.isEmpty {
             Text(audioLevel.transcript)
                 .scaledFont(size: 13)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(FazmColors.overlayForeground.opacity(0.8))
                 .lineLimit(1)
                 .truncationMode(.head)
         } else {
             Text(isVoiceLocked ? "Tap \(pttKeySymbol) to send" : "Release \(pttKeySymbol) to send")
                 .scaledFont(size: 13)
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(FazmColors.overlayForeground.opacity(0.5))
         }
     }
 }
