@@ -18,6 +18,9 @@ extension UserDefaults {
     @objc dynamic var playwrightExtensionToken: String? {
         return string(forKey: "playwrightExtensionToken")
     }
+    @objc dynamic var voiceResponseEnabledKVO: Bool {
+        return bool(forKey: "voiceResponseEnabled")
+    }
 }
 
 
@@ -435,6 +438,7 @@ class ChatProvider: ObservableObject {
     private let maxMessagesInMemory = 200
     private var playwrightExtensionObserver: AnyCancellable?
     private var playwrightTokenObserver: AnyCancellable?
+    private var voiceResponseObserver: AnyCancellable?
 
     // MARK: - Claude Session Detection
 
@@ -758,6 +762,21 @@ class ChatProvider: ObservableObject {
                     } catch {
                         logError("Failed to restart ACP bridge after Playwright token change", error: error)
                     }
+                }
+            }
+
+        // Observe changes to voice response setting — restart bridge so next query
+        // uses the updated system prompt (with or without voice instructions).
+        voiceResponseObserver = UserDefaults.standard.publisher(for: \.voiceResponseEnabledKVO)
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    guard self.acpBridgeStarted else { return }
+                    log("ChatProvider: Voice response setting changed, stopping bridge (will restart on next query)")
+                    await self.acpBridge.stop()
+                    self.acpBridgeStarted = false
                 }
             }
 
