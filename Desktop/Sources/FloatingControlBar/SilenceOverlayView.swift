@@ -59,7 +59,7 @@ struct SilenceOverlayView: View {
             }
             .buttonStyle(.plain)
 
-            AudioLevelBarsSettingsView(level: deviceManager.currentAudioLevel)
+            ObservedAudioLevelBarsSettingsView()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
