@@ -7,7 +7,8 @@
     "Made the default chat window 30% wider and 50% taller",
     "Fixed floating bar overlay buttons (close and resize grip) overflowing outside the inner panel border",
     "Added push-to-talk microphone button next to the send button in chat input",
-    "Fixed copy button causing layout shift when hovering over chat messages"
+    "Fixed copy button causing layout shift when hovering over chat messages",
+    "Fixed send button and observer cards not visible in light mode"
   ],
   "releases": [
     {
