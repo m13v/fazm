@@ -175,14 +175,14 @@ struct OnboardingChatView: View {
             // Header
             HStack {
                 Text("Setting up Fazm")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(FazmColors.textPrimary)
 
                 Spacer()
 
                 Button(action: { showSkipConfirmation = true }) {
                     Text("Skip")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(FazmColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -260,9 +260,9 @@ struct OnboardingChatView: View {
                                 }) {
                                     HStack(spacing: 6) {
                                         Image(systemName: "gear")
-                                            .font(.system(size: 12))
+                                            .scaledFont(size: 12)
                                         Text("Open System Settings")
-                                            .font(.system(size: 13, weight: .medium))
+                                            .scaledFont(size: 13, weight: .medium)
                                     }
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 16)
@@ -282,7 +282,7 @@ struct OnboardingChatView: View {
                                 handleOnboardingComplete()
                             }) {
                                 Text("Continue to App")
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .scaledFont(size: 15, weight: .semibold)
                                     .foregroundColor(.white)
                                     .frame(maxWidth: 220)
                                     .padding(.vertical, 12)
@@ -1184,7 +1184,7 @@ struct OnboardingToolIndicator: View {
                 }
 
                 Text(displayText)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(FazmColors.textTertiary)
             }
 
@@ -1337,7 +1337,7 @@ struct ExplorationProfileCard: View {
                                 .fill(FazmColors.purplePrimary)
                                 .frame(width: 24, height: 24)
                             Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
+                                .scaledFont(size: 11, weight: .bold)
                                 .foregroundColor(.white)
                         }
                     }
@@ -1345,12 +1345,12 @@ struct ExplorationProfileCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(isRunning ? "Learning about you..." : "Your Digital Profile")
-                                .font(.system(size: 14, weight: .semibold))
+                                .scaledFont(size: 14, weight: .semibold)
                                 .foregroundColor(FazmColors.textPrimary)
 
                             if isCompleted && !isExpanded {
                                 Text("Ready")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .scaledFont(size: 10, weight: .bold)
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -1363,7 +1363,7 @@ struct ExplorationProfileCard: View {
 
                         if !text.isEmpty && !isExpanded {
                             Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(FazmColors.textSecondary)
                                 .lineLimit(1)
                         }
@@ -1495,7 +1495,7 @@ struct OnboardingConnectingView: View {
                 .tint(FazmColors.purplePrimary)
 
             Text("Connecting…")
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(FazmColors.textSecondary)
                 .opacity(animating ? 1.0 : 0.5)
                 .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: animating)
@@ -1520,7 +1520,7 @@ struct ExplorationInlineLoader: View {
                     .animation(.easeInOut(duration: 0.3), value: dotCount)
             }
             Text("analyzing")
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
                 .foregroundColor(FazmColors.textTertiary)
         }
         .onReceive(timer) { _ in
