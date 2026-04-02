@@ -42,7 +42,13 @@ final class WebRelay: ObservableObject {
         }
         isStarted = true
         killOrphanedCloudflared()
-        startWsServer()
+        // Resolve the node binary off the main thread — NodeBinaryHelper.verify()
+        // busy-waits (Thread.sleep) spawning `node --version`, blocking for up to 10s (FAZM-9W).
+        let bundle = Bundle.main
+        Task.detached { [weak self] in
+            let nodePath = await self?.resolveNodePath(in: bundle)
+            await self?.startWsServer(nodePath: nodePath)
+        }
     }
 
     func stop() {
@@ -95,10 +101,13 @@ final class WebRelay: ObservableObject {
 
     // MARK: - Node.js WebSocket Server
 
-    private func startWsServer() {
-        // Find the Node binary and ws-relay.js script
-        let bundle = Bundle.main
-        guard let nodePath = findNode(in: bundle) else {
+    /// Resolve the node binary path off the main thread (blocking I/O).
+    nonisolated func resolveNodePath(in bundle: Bundle) -> String? {
+        return findNode(in: bundle)
+    }
+
+    private func startWsServer(nodePath: String?) {
+        guard let nodePath else {
             log("WebRelay: Node.js binary not found, skipping")
             return
         }
@@ -185,7 +194,7 @@ final class WebRelay: ObservableObject {
 
     // MARK: - Find bundled paths
 
-    private func findNode(in bundle: Bundle) -> String? {
+    private nonisolated func findNode(in bundle: Bundle) -> String? {
         // Check bundle first, then system
         let bundlePaths = [
             bundle.resourcePath.map { $0 + "/Fazm_Fazm.bundle/node" },
