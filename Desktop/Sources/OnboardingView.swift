@@ -82,7 +82,7 @@ struct OnboardingView: View {
                             showPrivacySheet = true
                         }) {
                             Text("Privacy Policy")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(.white.opacity(0.4))
                         }
                         .buttonStyle(.plain)
@@ -139,9 +139,9 @@ struct OnboardingView: View {
     private func graphHintItem(icon: String, label: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
             Text(label)
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
         }
         .foregroundColor(.white.opacity(0.5))
     }
