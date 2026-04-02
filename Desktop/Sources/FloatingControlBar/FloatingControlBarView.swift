@@ -45,12 +45,12 @@ struct FloatingControlBarView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "xmark")
-                                .font(.system(size: 8))
+                                .scaledFont(size: 8)
                                 .foregroundColor(.secondary)
                                 .frame(width: 16, height: 16)
                                 .overlay(Circle().strokeBorder(FazmColors.overlayForeground.opacity(0.2), lineWidth: 0.5))
                             Text("esc")
-                                .font(.system(size: 9))
+                                .scaledFont(size: 9)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -90,7 +90,7 @@ struct FloatingControlBarView: View {
                     openFloatingBarSettings()
                 } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(FazmColors.overlayForeground.opacity(0.7))
                         .frame(width: 22, height: 22)
                         .background(FazmColors.overlayForeground.opacity(0.12))
@@ -200,7 +200,7 @@ struct FloatingControlBarView: View {
                     .frame(width: 16, height: 16)
             } else {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
                     .foregroundColor(FazmColors.purplePrimary)
                     .opacity(updateButtonPulse ? 1.0 : 0.4)
                     .scaleEffect(updateButtonPulse ? 1.15 : 0.9)
@@ -336,7 +336,7 @@ struct FloatingControlBarView: View {
                 Button(action: onNewChat) {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("New chat")
                             .scaledFont(size: 11)
                         Text("⌘N")
