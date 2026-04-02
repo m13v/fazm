@@ -616,6 +616,9 @@ class PushToTalkManager: ObservableObject {
         // Keyboard PTT — activate app and focus floating bar input
         NSApp.activate(ignoringOtherApps: true)
         FloatingControlBarManager.shared.focusInputField()
+      } else if let overrideState = uiOverrideState {
+        // UI button PTT (detached window) — focus the detached window's input
+        DetachedChatWindowController.shared.focusInputField(for: overrideState)
       }
       if isShowingResponse {
         // Set pendingFollowUpText after activation so the onChange handler's
@@ -630,6 +633,9 @@ class PushToTalkManager: ObservableObject {
         FloatingControlBarManager.shared.openAIInputWithQuery(query)
       } else {
         effectiveBarState?.aiInputText = query
+        if let overrideState = uiOverrideState {
+          DetachedChatWindowController.shared.focusInputField(for: overrideState)
+        }
       }
     }
   }
