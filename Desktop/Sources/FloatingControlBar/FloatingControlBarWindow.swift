@@ -1805,6 +1805,7 @@ class FloatingControlBarManager {
         state.chatHistory = []
         state.displayedQuery = ""
         state.currentAIMessage = nil
+        state.aiInputText = ""  // Clear stale input so it isn't saved as a draft
         state.clearLastConversation()
         state.clearQueue()
 
