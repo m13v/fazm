@@ -17,7 +17,8 @@
     "Fixed font size setting not applying to chat messages, follow-up questions, input field, and UI elements throughout the app",
     "Fixed high CPU usage caused by SwiftUI layout thrashing when Settings is open",
     "Fixed orphaned ACP bridge process spinning at 100% CPU after app exit",
-    "Fixed session recording blocking cooperative threads during video encoding"
+    "Fixed session recording blocking cooperative threads during video encoding",
+    "Fixed detached window creating parallel sessions with floating bar instead of independent sessions"
   ],
   "releases": [
     {
