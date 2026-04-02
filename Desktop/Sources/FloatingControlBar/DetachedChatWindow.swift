@@ -498,6 +498,14 @@ class DetachedChatWindowController {
                 sessionKey: sessionKey
             )
             state.isAILoading = false
+
+            // Sync the latest AI message directly from provider.messages to close the
+            // race window where sendMessage has returned but the Combine $messages sink
+            // (scheduled via .receive(on: .main)) hasn't fired yet.
+            if let latestAI = provider.messages.last, latestAI.sender == .ai,
+               !latestAI.text.isEmpty || !latestAI.contentBlocks.isEmpty {
+                state.currentAIMessage = latestAI
+            }
         }
     }
 
