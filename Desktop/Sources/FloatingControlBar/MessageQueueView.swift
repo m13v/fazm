@@ -15,7 +15,7 @@ struct MessageQueueView: View {
             // Header
             HStack(spacing: 6) {
                 Image(systemName: "tray.full.fill")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary)
                 Text("\(queue.count) queued")
                     .scaledFont(size: 11, weight: .medium)
@@ -64,7 +64,7 @@ private struct QueueItemRow: View {
         HStack(spacing: 6) {
             // Drag handle
             Image(systemName: "line.3.horizontal")
-                .font(.system(size: 9))
+                .scaledFont(size: 9)
                 .foregroundColor(FazmColors.overlayForeground.opacity(0.3))
                 .frame(width: 16)
 
@@ -80,7 +80,7 @@ private struct QueueItemRow: View {
             if isHovered {
                 Button(action: onDelete) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .medium))
+                        .scaledFont(size: 9, weight: .medium)
                         .foregroundColor(FazmColors.overlayForeground.opacity(0.4))
                         .frame(width: 18, height: 18)
                         .background(FazmColors.overlayForeground.opacity(0.1))
@@ -93,7 +93,7 @@ private struct QueueItemRow: View {
             // Send now button
             Button(action: onSendNow) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(FazmColors.purplePrimary)
             }
             .buttonStyle(.plain)
