@@ -1043,10 +1043,22 @@ class ChatProvider: ObservableObject {
             UserDefaults.standard.removeObject(forKey: floatingSessionIdKey)
             UserDefaults.standard.set(true, forKey: Self.floatingChatClearedKey)
             pendingFloatingResume = nil
-            messages = []
+            // Don't clear messages here — an in-flight query may still be streaming
+            // into the last AI message. The detached window's subscriber needs it alive.
+            // Messages are cleared lazily: either when the detached window's subscriber
+            // calls clearFloatingMessages() after the query finishes, or when the
+            // floating bar starts a new chat (resetSession).
             pendingMessages.removeAll()
             floatingChatSessionId = UUID().uuidString
         }
+    }
+
+    /// Clear messages that were kept alive during a floating→detached session transfer.
+    /// Called by the detached window's subscriber once the in-flight query finishes streaming.
+    func clearTransferredMessages() {
+        // Only clear if the floating bar cleared flag is set (meaning a transfer happened)
+        guard UserDefaults.standard.bool(forKey: Self.floatingChatClearedKey) else { return }
+        messages = []
     }
 
     /// Get the saved ACP session ID for a detached session key, consuming it for resume.
