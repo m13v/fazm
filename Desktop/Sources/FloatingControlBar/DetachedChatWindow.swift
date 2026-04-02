@@ -104,6 +104,26 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
+    /// Focus the first editable text field (follow-up input or main input).
+    @discardableResult
+    func focusInputField() -> Bool {
+        guard let contentView = self.contentView else { return false }
+        func findTextField(in view: NSView) -> NSView? {
+            if let textView = view as? NSTextView, textView.isEditable { return textView }
+            if let textField = view as? NSTextField, textField.isEditable { return textField }
+            for subview in view.subviews {
+                if let found = findTextField(in: subview) { return found }
+            }
+            return nil
+        }
+        if let field = findTextField(in: contentView) {
+            makeKeyAndOrderFront(nil)
+            makeFirstResponder(field)
+            return true
+        }
+        return false
+    }
+
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
@@ -482,6 +502,14 @@ class DetachedChatWindowController {
             }
     }
 
+
+    /// Focus the input field of the detached window that owns the given state.
+    func focusInputField(for state: FloatingControlBarState) {
+        for entry in entries.values where entry.window.state === state {
+            entry.window.focusInputField()
+            return
+        }
+    }
 
     func close() {
         for entry in entries.values {
