@@ -14,7 +14,7 @@
     "Fixed floating bar getting stuck in loading state when queries are enqueued while agent is busy",
     "Fixed voice response not playing after using the mute/unmute toggle in the floating bar",
     "Fixed transcription for non-English speakers \u2014 replacement rules now only apply to English and multi-language modes",
-    "Fixed font size setting not applying to user messages, follow-up questions, input field, code block buttons, and icon elements throughout the app"
+    "Fixed font size setting not applying to chat messages, follow-up questions, input field, and UI elements throughout the app"
   ],
   "releases": [
     {
