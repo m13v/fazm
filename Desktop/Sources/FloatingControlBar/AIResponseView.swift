@@ -878,7 +878,7 @@ struct AIResponseView: View {
                         .scaledFont(size: 20)
                         .foregroundColor(
                             followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? .secondary : .white
+                                ? .secondary : FazmColors.overlayForeground
                         )
                 }
                 .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
