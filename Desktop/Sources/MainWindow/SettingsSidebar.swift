@@ -21,26 +21,16 @@ struct SettingsSearchItem: Identifiable {
 
     static let allSearchableItems: [SettingsSearchItem] = [
         // General
-        SettingsSearchItem(name: "Floating Bar Visibility", subtitle: "Show or hide the floating chat bar", keywords: ["floating bar", "chat bar", "ask fazm"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.askomi"),
-        SettingsSearchItem(name: "Appearance", subtitle: "Switch between light, dark, or system theme", keywords: ["appearance", "theme", "dark mode", "light mode", "color scheme"], section: .general, advancedSubsection: nil, icon: "circle.lefthalf.filled", settingId: "general.appearance"),
+        SettingsSearchItem(name: "Microphone", subtitle: "Select which microphone to use for Push to Talk", keywords: ["microphone", "mic", "audio input", "recording device"], section: .general, advancedSubsection: nil, icon: "mic.fill", settingId: "general.microphone"),
+        SettingsSearchItem(name: "Language Mode", subtitle: "Choose auto-detect or single language for transcription", keywords: ["language", "transcription", "auto-detect", "multi-language", "single language"], section: .general, advancedSubsection: nil, icon: "globe", settingId: "general.languagemode"),
         SettingsSearchItem(name: "Font Size", subtitle: "Adjust text size across the app", keywords: ["text size", "zoom", "scale", "reset"], section: .general, advancedSubsection: nil, icon: "gearshape", settingId: "general.fontsize"),
-        SettingsSearchItem(name: "Reset Window Size", subtitle: "Restore the default window dimensions", keywords: ["resize", "window", "default size"], section: .general, advancedSubsection: nil, icon: "gearshape", settingId: "general.resetwindow"),
-
-        // AI Chat (under Advanced)
-        SettingsSearchItem(name: "AI Chat", subtitle: "Configure AI assistant settings", keywords: ["claude", "chat settings"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.aichat"),
-        SettingsSearchItem(name: "Claude Account", subtitle: "Switch between built-in and personal Claude account", keywords: ["account", "vertex", "built-in", "oauth", "sign in"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.account"),
-
-        SettingsSearchItem(name: "CLAUDE.md", subtitle: "Personal instructions loaded into AI chat", keywords: ["claude md", "claude config", "instructions", "view"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.claudemd"),
-        SettingsSearchItem(name: "Skills", subtitle: "Enable or disable discovered AI skills", keywords: ["skills", "plugins", "abilities", "view"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.skills"),
-        SettingsSearchItem(name: "Browser Extension", subtitle: "Lets the AI use your Chrome browser with all your logged-in sessions", keywords: ["playwright", "chrome", "browser extension", "browser", "set up", "reconfigure", "token"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.browserextension"),
-        SettingsSearchItem(name: "Workspace", subtitle: "Set a project directory for AI chat context", keywords: ["workspace", "project", "directory", "folder", "working directory", "claude.md"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.workspace"),
-        SettingsSearchItem(name: "AI Provider", subtitle: "Choose between Agent SDK and Claude Code for AI chat", keywords: ["provider", "agent sdk", "claude code", "acp", "bridge mode"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.provider"),
-        SettingsSearchItem(name: "Dev Mode", subtitle: "Developer tools and debugging options", keywords: ["developer", "debug", "dev mode", "development"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.devmode"),
+        SettingsSearchItem(name: "Appearance", subtitle: "Switch between light, dark, or system theme", keywords: ["appearance", "theme", "dark mode", "light mode", "color scheme"], section: .general, advancedSubsection: nil, icon: "circle.lefthalf.filled", settingId: "general.appearance"),
         SettingsSearchItem(name: "Voice Response", subtitle: "AI speaks responses aloud using text-to-speech", keywords: ["voice", "tts", "text to speech", "speak", "audio", "sound"], section: .general, advancedSubsection: nil, icon: "speaker.wave.2.fill", settingId: "general.voiceresponse"),
 
         // Remote Control
         SettingsSearchItem(name: "Remote Control", subtitle: "Control Fazm from your phone via chat.fazm.ai", keywords: ["phone", "remote", "mobile", "qr code", "relay", "websocket"], section: .remoteControl, advancedSubsection: nil, icon: "iphone", settingId: "remotecontrol.connect"),
         SettingsSearchItem(name: "Connection Status", subtitle: "Phone relay and connection status", keywords: ["status", "connected", "online", "relay", "phone"], section: .remoteControl, advancedSubsection: nil, icon: "antenna.radiowaves.left.and.right", settingId: "remotecontrol.status"),
+        SettingsSearchItem(name: "How It Works", subtitle: "Steps to connect your phone to Fazm", keywords: ["how it works", "instructions", "setup steps", "connect phone"], section: .remoteControl, advancedSubsection: nil, icon: "questionmark.circle", settingId: "remotecontrol.howitworks"),
 
         // Permissions
         SettingsSearchItem(name: "Permissions", subtitle: "Manage screen recording, microphone, and accessibility permissions", keywords: ["permissions", "screen recording", "microphone", "accessibility", "privacy", "security"], section: .permissions, advancedSubsection: nil, icon: "lock.shield", settingId: "permissions.permissions"),
@@ -48,28 +38,44 @@ struct SettingsSearchItem: Identifiable {
         // Dictionary
         SettingsSearchItem(name: "Dictionary", subtitle: "Custom words to improve transcription accuracy", keywords: ["dictionary", "vocabulary", "transcription", "words", "phrases", "keyterm"], section: .dictionary, advancedSubsection: nil, icon: "character.book.closed", settingId: "dictionary.dictionary"),
 
-        // About
-        SettingsSearchItem(name: "Software Updates", subtitle: "Check for and manage app updates", keywords: ["update", "auto update", "sparkle", "version", "check for updates", "check now"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.updates"),
-        SettingsSearchItem(name: "Automatic Updates", subtitle: "Check for updates automatically in the background", keywords: ["auto check", "background updates", "check automatically"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.autoupdates"),
-        SettingsSearchItem(name: "Auto-Install Updates", subtitle: "Automatically download and install updates when available", keywords: ["auto install", "automatic install", "download updates", "install updates"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.autoinstall"),
-        SettingsSearchItem(name: "Update Channel", subtitle: "Choose between beta and staging update channels", keywords: ["channel", "beta", "staging", "release channel"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.channel"),
-        SettingsSearchItem(name: "Version Info", subtitle: "Current app version and build number", keywords: ["version", "build", "app version", "build number"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.version"),
-        SettingsSearchItem(name: "Report an Issue", subtitle: "Help us improve Fazm", keywords: ["bug", "feedback", "report", "issue"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.reportissue"),
-
-        // Shortcuts section
-        SettingsSearchItem(name: "AI Model", subtitle: "Choose the AI model for Ask Fazm conversations", keywords: ["model", "ai", "sonnet", "opus", "claude"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.aimodel"),
-        SettingsSearchItem(name: "Response Style", subtitle: "Control response compactness", keywords: ["response", "style", "compact", "concise", "strict", "soft"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.responsestyle"),
-        SettingsSearchItem(name: "Proactiveness", subtitle: "How proactive the AI assistant should be", keywords: ["proactive", "passive", "balanced", "autonomous", "agent"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.proactiveness"),
-        SettingsSearchItem(name: "Background Style", subtitle: "Toggle between solid and transparent background", keywords: ["background", "solid", "transparent", "blur"], section: .general, advancedSubsection: nil, icon: "gearshape", settingId: "general.background"),
-        SettingsSearchItem(name: "Draggable Floating Bar", subtitle: "Allow repositioning the floating bar by dragging it", keywords: ["drag", "move", "reposition", "draggable"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.draggable"),
+        // Shortcuts
         SettingsSearchItem(name: "Ask Fazm Shortcut", subtitle: "Global shortcut to open Ask Fazm from anywhere", keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.shortcut"),
         SettingsSearchItem(name: "Push to Talk", subtitle: "Hold a key to speak, release to send your question to AI", keywords: ["push to talk", "ptt", "hold to talk", "microphone key"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.ptt"),
         SettingsSearchItem(name: "Transcription Mode", subtitle: "Choose how voice input is processed", keywords: ["transcription", "mode", "voice", "dictation"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.transcriptionmode"),
         SettingsSearchItem(name: "Double-tap for Locked Mode", subtitle: "Double-tap the push-to-talk key to keep listening hands-free", keywords: ["double tap", "locked mode", "hands free", "listening"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.doubletap"),
         SettingsSearchItem(name: "Push-to-Talk Sounds", subtitle: "Play audio feedback when starting and ending voice input", keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.pttsounds"),
+
+        // Advanced > AI Chat
+        SettingsSearchItem(name: "Claude Account", subtitle: "Switch between built-in and personal Claude account", keywords: ["account", "vertex", "built-in", "oauth", "sign in"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.account"),
+        SettingsSearchItem(name: "Workspace", subtitle: "Set a project directory for AI chat context", keywords: ["workspace", "project", "directory", "folder", "working directory", "claude.md"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.workspace"),
+        SettingsSearchItem(name: "CLAUDE.md", subtitle: "Personal instructions loaded into AI chat", keywords: ["claude md", "claude config", "instructions", "view"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.claudemd"),
+        SettingsSearchItem(name: "Skills", subtitle: "Enable or disable discovered AI skills", keywords: ["skills", "plugins", "abilities", "view"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.skills"),
+        SettingsSearchItem(name: "Browser Extension", subtitle: "Lets the AI use your Chrome browser with all your logged-in sessions", keywords: ["playwright", "chrome", "browser extension", "browser", "set up", "reconfigure", "token"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.browserextension"),
+        SettingsSearchItem(name: "Dev Mode", subtitle: "Developer tools and debugging options", keywords: ["developer", "debug", "dev mode", "development"], section: .advanced, advancedSubsection: .aiChat, icon: "cpu", settingId: "aichat.devmode"),
+
+        // Advanced > Preferences
+        SettingsSearchItem(name: "Floating Bar Visibility", subtitle: "Show or hide the floating chat bar", keywords: ["floating bar", "chat bar", "ask fazm"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.askomi"),
+        SettingsSearchItem(name: "AI Model", subtitle: "Choose the AI model for Ask Fazm conversations", keywords: ["model", "ai", "sonnet", "opus", "claude"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.aimodel"),
+        SettingsSearchItem(name: "Response Style", subtitle: "Control response compactness", keywords: ["response", "style", "compact", "concise", "strict", "soft"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.responsestyle"),
+        SettingsSearchItem(name: "Proactiveness", subtitle: "How proactive the AI assistant should be", keywords: ["proactive", "passive", "balanced", "autonomous", "agent"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.proactiveness"),
+        SettingsSearchItem(name: "Screen Observer", subtitle: "Watches your screen and suggests tasks AI can help with", keywords: ["screen observer", "discovered tasks", "watch screen", "suggestions"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.screenObserver"),
+        SettingsSearchItem(name: "Draggable Floating Bar", subtitle: "Allow repositioning the floating bar by dragging it", keywords: ["drag", "move", "reposition", "draggable"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.draggable"),
         SettingsSearchItem(name: "Launch at Login", subtitle: "Start Fazm automatically when you log in", keywords: ["startup", "login", "boot"], section: .advanced, advancedSubsection: .preferences, icon: "slider.horizontal.3", settingId: "advanced.preferences.launchatlogin"),
+
+        // Advanced > Troubleshooting
         SettingsSearchItem(name: "Report Issue", subtitle: "Send app logs and report a problem", keywords: ["bug", "feedback", "logs", "report"], section: .advanced, advancedSubsection: .troubleshooting, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
+        SettingsSearchItem(name: "Rescan Files", subtitle: "Re-index your files and update your AI profile", keywords: ["rescan", "re-index", "files", "profile", "scan"], section: .advanced, advancedSubsection: .troubleshooting, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.rescanfiles"),
         SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard and reset permissions", keywords: ["setup", "wizard", "permissions", "reset"], section: .advanced, advancedSubsection: .troubleshooting, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.resetonboarding"),
+
+        // Account
+        SettingsSearchItem(name: "Account", subtitle: "Your signed-in account and sign out", keywords: ["account", "sign out", "email", "profile", "user"], section: .about, advancedSubsection: nil, icon: "person.crop.circle", settingId: "about.account"),
+        SettingsSearchItem(name: "Subscription", subtitle: "Manage your Fazm Pro subscription or free trial", keywords: ["subscription", "pro", "upgrade", "trial", "plan", "billing", "payment"], section: .about, advancedSubsection: nil, icon: "checkmark.seal.fill", settingId: "about.subscription"),
+        SettingsSearchItem(name: "Version Info", subtitle: "Current app version and build number", keywords: ["version", "build", "app version", "build number"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.version"),
+        SettingsSearchItem(name: "Software Updates", subtitle: "Check for and manage app updates", keywords: ["update", "auto update", "sparkle", "version", "check for updates", "check now"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.updates"),
+        SettingsSearchItem(name: "Automatic Updates", subtitle: "Check for updates automatically in the background", keywords: ["auto check", "background updates", "check automatically"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.autoupdates"),
+        SettingsSearchItem(name: "Auto-Install Updates", subtitle: "Automatically download and install updates when available", keywords: ["auto install", "automatic install", "download updates", "install updates"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.autoinstall"),
+        SettingsSearchItem(name: "Update Channel", subtitle: "Choose between beta and staging update channels", keywords: ["channel", "beta", "staging", "release channel"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.channel"),
+        SettingsSearchItem(name: "Report an Issue", subtitle: "Help us improve Fazm", keywords: ["bug", "feedback", "report", "issue"], section: .about, advancedSubsection: nil, icon: "info.circle", settingId: "about.reportissue"),
     ]
 }
 
