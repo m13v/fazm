@@ -18,7 +18,7 @@ extension UserDefaults {
     @objc dynamic var playwrightExtensionToken: String? {
         return string(forKey: "playwrightExtensionToken")
     }
-    @objc dynamic var voiceResponseEnabledKVO: Bool {
+    @objc dynamic var voiceResponseEnabled: Bool {
         return bool(forKey: "voiceResponseEnabled")
     }
 }
@@ -767,7 +767,7 @@ class ChatProvider: ObservableObject {
 
         // Observe changes to voice response setting — restart bridge so next query
         // uses the updated system prompt (with or without voice instructions).
-        voiceResponseObserver = UserDefaults.standard.publisher(for: \.voiceResponseEnabledKVO)
+        voiceResponseObserver = UserDefaults.standard.publisher(for: \.voiceResponseEnabled)
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
