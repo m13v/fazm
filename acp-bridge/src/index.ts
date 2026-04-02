@@ -74,13 +74,19 @@ const googleWorkspaceMcpMain = join(googleWorkspaceMcpDir, "main.py");
 function send(msg: OutboundMessage): void {
   try {
     process.stdout.write(JSON.stringify(msg) + "\n");
-  } catch (err) {
-    logErr(`Failed to write to stdout: ${err}`);
+  } catch {
+    // Don't call logErr here — if pipes are broken, logErr throws too,
+    // creating an infinite uncaughtException loop (see orphan bug).
   }
 }
 
 function logErr(msg: string): void {
-  process.stderr.write(`[acp-bridge] ${msg}\n`);
+  try {
+    process.stderr.write(`[acp-bridge] ${msg}\n`);
+  } catch {
+    // Pipe broken (parent process gone). Swallow to prevent infinite
+    // uncaughtException recursion when this process is orphaned (PPID=1).
+  }
 }
 
 // --- OMI tools relay via Unix socket ---
