@@ -1232,7 +1232,7 @@ class FloatingControlBarManager {
                 let currentQuery = state.displayedQuery
                 var aiMessage = state.currentAIMessage
                 if aiMessage == nil, let provider = chatProvider,
-                   let latestAI = provider.messages.last, latestAI.sender == .ai,
+                   let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == "floating" }),
                    !latestAI.text.isEmpty {
                     aiMessage = latestAI
                 }
@@ -1985,10 +1985,10 @@ class FloatingControlBarManager {
             .sink { [weak barWindow] messages in
                 // Ignore updates if the conversation was closed (Esc pressed during streaming)
                 guard let barWindow = barWindow, barWindow.state.showingAIConversation else { return }
-                // Find the AI response message added after our query
+                // Find the AI response message added after our query, filtered to this session
                 guard messages.count > messageCountBefore,
-                      let aiMessage = messages.last,
-                      aiMessage.sender == .ai else { return }
+                      let aiMessage = messages.last(where: { $0.sender == .ai && $0.sessionKey == "floating" })
+                      else { return }
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow.state.currentAIMessage = aiMessage
@@ -2026,7 +2026,7 @@ class FloatingControlBarManager {
         // race window where sendMessage has returned but the Combine $messages sink
         // (scheduled via .receive(on: .main)) hasn't fired yet. Without this,
         // tool-call-only responses can briefly flash "Failed to get a response".
-        if let latestAI = provider.messages.last, latestAI.sender == .ai,
+        if let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == "floating" }),
            !latestAI.text.isEmpty || !latestAI.contentBlocks.isEmpty {
             barWindow.state.currentAIMessage = latestAI
         }
