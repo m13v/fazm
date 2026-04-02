@@ -438,6 +438,29 @@ class DetachedChatWindowController {
                 .sink { [weak self, weak state, weak win] notification in
                     guard let self, let state, let win else { return }
                     let id = ObjectIdentifier(win)
+                    // Archive the current exchange before the new query replaces it
+                    let currentQuery = state.displayedQuery
+                    var aiMessage = state.currentAIMessage
+                    if aiMessage == nil,
+                       let latestAI = provider.messages.last, latestAI.sender == .ai,
+                       !latestAI.text.isEmpty {
+                        aiMessage = latestAI
+                    }
+                    if var currentMessage = aiMessage, !currentQuery.isEmpty {
+                        currentMessage.contentBlocks = currentMessage.contentBlocks.map { block in
+                            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = block {
+                                return .toolCall(id: id, name: name, status: .completed, toolUseId: toolUseId, input: input, output: output)
+                            }
+                            return block
+                        }
+                        state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
+                    }
+                    state.flushPendingObserverExchanges()
+                    if let text = notification.userInfo?["text"] as? String {
+                        state.displayedQuery = text
+                    }
+                    state.isAILoading = true
+                    state.currentAIMessage = nil
                     // Set up the response subscriber now that our message is being sent
                     let countBefore = provider.messages.count
                     self.subscribeToResponse(provider: provider, state: state, winId: id, messageCountBefore: countBefore)
