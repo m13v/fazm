@@ -516,7 +516,7 @@ class DetachedChatWindowController {
         entries[winId]?.chatCancellable?.cancel()
         entries[winId]?.chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
-            .sink { [weak state] messages in
+            .sink { [weak state, weak provider] messages in
                 guard let state else { return }
                 guard messages.count > messageCountBefore,
                       let aiMessage = messages.last,
@@ -531,6 +531,10 @@ class DetachedChatWindowController {
                     }
                 } else {
                     state.isAILoading = false
+                    // Clear stale messages from provider now that streaming is done.
+                    // These were kept alive during pop-out so the in-flight query could
+                    // continue writing to them. The floating bar doesn't need them anymore.
+                    provider?.clearTransferredMessages()
                 }
             }
     }
