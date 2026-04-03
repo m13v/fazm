@@ -38,6 +38,9 @@ struct DesktopHomeView: View {
                             FloatingControlBarManager.shared.show()
                         }
 
+                        // Restore detached chat windows from the previous session
+                        DetachedChatWindowController.shared.restoreWindows(chatProvider: viewModelContainer.chatProvider)
+
                         // Set up push-to-talk voice input
                         if let barState = FloatingControlBarManager.shared.barState {
                             PushToTalkManager.shared.setup(barState: barState)
