@@ -138,8 +138,8 @@ struct AIResponseView: View {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: state.pendingObserverExchanges.count) {
-                    // Observer card arrived — scroll to show it
+                .onChange(of: state.pendingChatObserverExchanges.count) {
+                    // Chat observer card arrived — scroll to show it
                     if !userHasScrolledUp {
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("bottom", anchor: .bottom)
@@ -557,7 +557,7 @@ struct AIResponseView: View {
         }
     }
 
-    private func handleObserverCardAction(activityId: Int64, action: String) {
+    private func handleChatObserverCardAction(activityId: Int64, action: String) {
         onObserverCardAction?(activityId, action)
         // Persist the action in the content block so it survives view recreation
         if let barState = FloatingControlBarManager.shared.barState {
@@ -570,12 +570,12 @@ struct AIResponseView: View {
                     }
                 }
             }
-            // Also check pending observer exchanges
-            for i in barState.pendingObserverExchanges.indices {
-                for j in barState.pendingObserverExchanges[i].aiMessage.contentBlocks.indices {
-                    if case .observerCard(let id, let aId, let type, let content, let buttons, _) = barState.pendingObserverExchanges[i].aiMessage.contentBlocks[j],
+            // Also check pending chat observer exchanges
+            for i in barState.pendingChatObserverExchanges.indices {
+                for j in barState.pendingChatObserverExchanges[i].aiMessage.contentBlocks.indices {
+                    if case .observerCard(let id, let aId, let type, let content, let buttons, _) = barState.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j],
                        aId == activityId {
-                        barState.pendingObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                        barState.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
                         return
                     }
                 }
@@ -583,17 +583,17 @@ struct AIResponseView: View {
         }
     }
 
-    // MARK: - Consolidated Observer Cards
+    // MARK: - Consolidated Chat Observer Cards
 
-    /// Collects all observer cards from observer-only history exchanges into one stack.
+    /// Collects all chat observer cards from chat-observer-only history exchanges into one stack.
     @ViewBuilder
-    private var consolidatedHistoryObserverCards: some View {
-        let cards = extractObserverCards(from: observerOnlyExchanges)
+    private var consolidatedHistoryChatObserverCards: some View {
+        let cards = extractChatObserverCards(from: chatObserverOnlyExchanges)
         if !cards.isEmpty {
             ObserverCardStackView(
                 cards: cards,
                 onAction: { id, action in
-                    handleObserverCardAction(activityId: id, action: action)
+                    handleChatObserverCardAction(activityId: id, action: action)
                 }
             )
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -601,16 +601,16 @@ struct AIResponseView: View {
         }
     }
 
-    /// Collects all observer cards from pending observer exchanges into one stack.
+    /// Collects all chat observer cards from pending chat observer exchanges into one stack.
     @ViewBuilder
-    private var consolidatedPendingObserverCards: some View {
+    private var consolidatedPendingChatObserverCards: some View {
         if let state = FloatingControlBarManager.shared.barState {
-            let cards = extractObserverCards(from: state.pendingObserverExchanges)
+            let cards = extractChatObserverCards(from: state.pendingChatObserverExchanges)
             if !cards.isEmpty {
                 ObserverCardStackView(
                     cards: cards,
                     onAction: { id, action in
-                        handleObserverCardAction(activityId: id, action: action)
+                        handleChatObserverCardAction(activityId: id, action: action)
                     }
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -619,7 +619,7 @@ struct AIResponseView: View {
         }
     }
 
-    private func extractObserverCards(from exchanges: [FloatingChatExchange]) -> [ObserverCardItem] {
+    private func extractChatObserverCards(from exchanges: [FloatingChatExchange]) -> [ObserverCardItem] {
         exchanges.flatMap { exchange in
             exchange.aiMessage.contentBlocks.compactMap { block -> ObserverCardItem? in
                 if case .observerCard(let id, let activityId, let type, let content, let buttons, let actedAction) = block {
@@ -795,17 +795,17 @@ struct AIResponseView: View {
         )
     }
 
-    // MARK: - Observer Thinking Indicator
+    // MARK: - Chat Observer Thinking Indicator
 
-    /// True when any observer cards exist in current message, history, or pending exchanges
-    private var hasAnyObserverCards: Bool {
+    /// True when any chat observer cards exist in current message, history, or pending exchanges
+    private var hasAnyChatObserverCards: Bool {
         let currentHas = currentMessage?.contentBlocks.contains(where: {
             if case .observerCard = $0 { return true }
             return false
         }) ?? false
         if currentHas { return true }
 
-        let pendingHas = state.pendingObserverExchanges.contains(where: { exchange in
+        let pendingHas = state.pendingChatObserverExchanges.contains(where: { exchange in
             exchange.aiMessage.contentBlocks.contains(where: {
                 if case .observerCard = $0 { return true }
                 return false
@@ -814,17 +814,17 @@ struct AIResponseView: View {
         return pendingHas
     }
 
-    @State private var observerPulseOpacity: Double = 0.7
+    @State private var chatObserverPulseOpacity: Double = 0.7
 
-    private var observerThinkingIndicator: some View {
+    private var chatObserverThinkingIndicator: some View {
         HStack(spacing: 6) {
             Image(systemName: "eye.circle.fill")
                 .scaledFont(size: 11)
-                .foregroundColor(FazmColors.purplePrimary.opacity(observerPulseOpacity))
-                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: observerPulseOpacity)
-                .onAppear { observerPulseOpacity = 0.3 }
+                .foregroundColor(FazmColors.purplePrimary.opacity(chatObserverPulseOpacity))
+                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: chatObserverPulseOpacity)
+                .onAppear { chatObserverPulseOpacity = 0.3 }
 
-            Text("Observer is thinking...")
+            Text("Chat observer is thinking...")
                 .scaledFont(size: 11, weight: .medium)
                 .foregroundColor(FazmColors.overlayForeground.opacity(0.4))
 
