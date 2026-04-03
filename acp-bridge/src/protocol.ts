@@ -226,8 +226,8 @@ export interface RateLimitMessage {
   surpassedThreshold: number | null; // 0-1 float
 }
 
-/** Observer session completed a batch — Swift should poll observer_activity for new cards */
-export interface ObserverPollMessage {
+/** Chat observer session completed a batch — Swift should poll observer_activity for new cards */
+export interface ChatObserverPollMessage {
   type: "observer_poll";
 }
 
