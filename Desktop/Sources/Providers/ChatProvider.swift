@@ -1539,7 +1539,8 @@ class ChatProvider: ObservableObject {
     }
 
     /// Restore floating chat messages and session from local DB.
-    /// Called lazily on the first floating bar interaction.
+    /// Called eagerly during warmup (so conversation history is available for the system prompt)
+    /// and idempotently on the first floating bar interaction.
     func restoreFloatingChatIfNeeded() async {
         guard !floatingChatRestored else { return }
         floatingChatRestored = true
