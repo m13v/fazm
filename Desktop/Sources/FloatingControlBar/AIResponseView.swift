@@ -308,10 +308,6 @@ struct AIResponseView: View {
                         .scaledFont(size: 14)
                         .foregroundColor(.secondary)
                 }
-            } else if userInput.isEmpty && currentMessage == nil {
-                Text("conversation")
-                    .scaledFont(size: 14)
-                    .foregroundColor(.secondary)
             } else {
                 workspaceLabel
             }
