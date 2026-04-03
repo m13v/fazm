@@ -386,12 +386,21 @@ class DetachedChatWindowController {
                 width: snapshot.width, height: snapshot.height
             )
 
-            // Load saved messages from the local DB
+            // Load saved messages from the local DB.
+            // The DB may not be initialized yet (loadAllData runs concurrently),
+            // so retry briefly if the first attempt returns empty.
             Task { @MainActor in
-                let savedMessages = await ChatMessageStore.loadMessages(
-                    context: "__\(sessionKey)__",
-                    limit: 100
-                )
+                var savedMessages: [ChatMessage] = []
+                for attempt in 0..<5 {
+                    savedMessages = await ChatMessageStore.loadMessages(
+                        context: "__\(sessionKey)__",
+                        limit: 100
+                    )
+                    if !savedMessages.isEmpty { break }
+                    if attempt < 4 {
+                        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                    }
+                }
                 guard !savedMessages.isEmpty else {
                     log("DetachedChatWindowController: No messages for \(sessionKey), skipping restore")
                     return
