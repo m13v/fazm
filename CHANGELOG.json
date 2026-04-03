@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Chat observer cards are now auto-accepted (deny to undo) instead of requiring manual approval"
+    "Chat observer cards are now auto-accepted (deny to undo) instead of requiring manual approval",
+    "Detached chat windows now restore automatically after app restart or update"
   ],
   "releases": [
     {
