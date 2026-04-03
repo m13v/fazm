@@ -259,7 +259,7 @@ class DetachedChatWindowController {
         let window: DetachedChatWindow
         var sessionKey: String
         var chatCancellable: AnyCancellable?
-        var compactCancellable: AnyCancellable?
+        var sharedProviderCancellables: [AnyCancellable] = []
         var dequeueCancellable: AnyCancellable?
     }
 
@@ -390,7 +390,7 @@ class DetachedChatWindowController {
             guard let self, let win else { return }
             let id = ObjectIdentifier(win)
             self.entries[id]?.chatCancellable?.cancel()
-            self.entries[id]?.compactCancellable?.cancel()
+            self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
         }
@@ -401,13 +401,10 @@ class DetachedChatWindowController {
         entries[winId] = entry
         // Subscribe to ChatProvider messages for streaming updates
         subscribeToResponse(provider: chatProvider, state: detachedState, winId: winId, messageCountBefore: messageCountBefore)
-        // Subscribe to compacting state
-        entries[winId]?.compactCancellable?.cancel()
-        entries[winId]?.compactCancellable = chatProvider.$isCompacting
-            .receive(on: DispatchQueue.main)
-            .sink { [weak detachedState] isCompacting in
-                detachedState?.isCompacting = isCompacting
-            }
+        // Subscribe to shared provider state (auth, suggested replies, compaction)
+        entries[winId]?.sharedProviderCancellables = ChatQueryLifecycle.subscribeToProviderState(
+            provider: chatProvider, state: detachedState
+        )
 
         // Offset new windows so they don't stack directly on top of each other
         if entries.count > 1 {
