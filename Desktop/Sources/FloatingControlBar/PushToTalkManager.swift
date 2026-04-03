@@ -588,6 +588,10 @@ class PushToTalkManager: ObservableObject {
     lastInterimText = ""
     updateBarState(skipResize: hasQuery || wasPttOpenedChat)
 
+    // Capture and clear uiOverrideState so the next keyboard PTT targets the floating bar
+    let sendOverrideState = uiOverrideState
+    uiOverrideState = nil
+
     guard hasQuery else {
       let holdDuration = ProcessInfo.processInfo.systemUptime - lastOptionDownTime
       let micName = AudioCaptureService.getCurrentMicrophoneName() ?? "unknown"
@@ -612,11 +616,11 @@ class PushToTalkManager: ObservableObject {
         targetState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
       }
       pttOpenedChat = false
-      if uiOverrideState == nil {
+      if sendOverrideState == nil {
         // Keyboard PTT — activate app and focus floating bar input
         NSApp.activate(ignoringOtherApps: true)
         FloatingControlBarManager.shared.focusInputField()
-      } else if let overrideState = uiOverrideState {
+      } else if let overrideState = sendOverrideState {
         // UI button PTT (detached window) — focus the detached window's input
         DetachedChatWindowController.shared.focusInputField(for: overrideState)
       }
