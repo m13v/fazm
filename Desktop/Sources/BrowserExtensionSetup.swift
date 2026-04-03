@@ -273,20 +273,39 @@ struct BrowserExtensionSetup: View {
                             .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(extensionStepDone ? FazmColors.textTertiary : FazmColors.textPrimary)
 
-                        Button(action: {
-                            Self.openURLInChrome(Self.chromeWebStoreURL)
-                            startExtensionCheckTimer()
-                        }) {
-                            HStack(spacing: 5) {
-                                Image(systemName: extensionStepDone ? "checkmark" : "arrow.up.right.square")
-                                    .scaledFont(size: 11)
-                                Text(extensionStepDone ? "Installed" : "Add to Chrome")
-                                    .scaledFont(size: 12)
+                        HStack(spacing: 6) {
+                            Button(action: {
+                                Self.openURLInChrome(Self.chromeWebStoreURL)
+                                startExtensionCheckTimer()
+                            }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: extensionStepDone ? "checkmark" : "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                    Text(extensionStepDone ? "Installed" : "Add to Chrome")
+                                        .scaledFont(size: 12)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(!chromeInstalled || extensionStepDone)
+
+                            if !extensionStepDone {
+                                Button(action: {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(Self.chromeWebStoreURL, forType: .string)
+                                }) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "doc.on.doc")
+                                            .scaledFont(size: 11)
+                                        Text("Copy Link")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(!chromeInstalled)
                             }
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(!chromeInstalled || extensionStepDone)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
