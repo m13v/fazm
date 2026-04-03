@@ -61,10 +61,14 @@ find ~/Library/Application\ Support/Fazm/users -name ".fazm_running" -delete 2>/
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
-# Clear and initialize log file for fresh run (must be before backend starts)
-# Write immediately so agents can monitor run.sh progress from the start
-rm -f /tmp/fazm-dev.log 2>/dev/null || true
-echo "[$(date '+%H:%M:%S.000')] [run.sh] Build started (PID $$)" > /private/tmp/fazm-dev.log
+# Append a separator to the log (don't truncate — other agents may be tailing it)
+echo "" >> /private/tmp/fazm-dev.log 2>/dev/null || true
+echo "--- run.sh session (PID $$) $(date '+%Y-%m-%d %H:%M:%S') ---" >> /private/tmp/fazm-dev.log
+echo "[$(date '+%H:%M:%S.000')] [run.sh] Build started (PID $$)" >> /private/tmp/fazm-dev.log
+
+# Status file: single source of truth for agents to check state
+FAZM_STATUS_FILE="/tmp/fazm-dev-status"
+echo "building $$ $(date +%s)" > "$FAZM_STATUS_FILE"
 
 step "Cleaning up conflicting app bundles..."
 # Clean old build names from local build dir
@@ -444,35 +448,29 @@ echo ""
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 
-# Watchdog: monitor app process and user interaction.
-# Releases lock and exits if the app dies or user is idle (no interaction for 120s).
-# The app touches /tmp/fazm-dev-interaction on user interaction (PTT, bar expand,
-# app activate, etc.) — separate from the main log which background tasks write constantly.
-INTERACTION_MARKER="/tmp/fazm-dev-interaction"
-IDLE_THRESHOLD=60
-
-# Wait for the app to actually start (open is async)
+# Wait for the app to actually start (open is async), then capture its PID
 sleep 5
+APP_PID=$(pgrep -f "Fazm Dev.app/Contents/MacOS/Fazm" | head -1)
+if [ -n "$APP_PID" ]; then
+    echo "running $APP_PID $(date +%s)" > "$FAZM_STATUS_FILE"
+    echo "[run.sh] App launched (PID $APP_PID), status file updated."
+else
+    echo "failed $(date +%s) app_not_found" > "$FAZM_STATUS_FILE"
+    echo "[run.sh] ERROR: App did not start. Status file updated."
+    exit 1
+fi
 
-# Seed the interaction marker so we don't exit immediately
-touch "$INTERACTION_MARKER"
-
-echo "Watching app (interaction marker: $INTERACTION_MARKER, idle threshold: ${IDLE_THRESHOLD}s)..."
+# Watchdog: hold the lock as long as the app is alive.
+# Only exits when the app process dies. Does NOT exit on idle, because
+# releasing the lock while the app runs confuses other agents.
+echo "Watching app (PID $APP_PID)..."
 while true; do
     sleep 10
 
-    # Check 1: is the app process still running?
-    if ! pgrep -f "Fazm Dev.app/Contents/MacOS/Fazm" > /dev/null 2>&1; then
-        echo "[watchdog] App process not found — releasing lock and exiting."
+    # Is the app process still running?
+    if ! kill -0 "$APP_PID" 2>/dev/null; then
+        echo "[watchdog] App process $APP_PID exited — releasing lock."
+        echo "exited $APP_PID $(date +%s)" > "$FAZM_STATUS_FILE"
         break
-    fi
-
-    # Check 2: has the user interacted recently?
-    if [ -f "$INTERACTION_MARKER" ]; then
-        idle_time=$(( $(date +%s) - $(stat -f %m "$INTERACTION_MARKER") ))
-        if [ "$idle_time" -gt "$IDLE_THRESHOLD" ]; then
-            echo "[watchdog] User idle for ${idle_time}s (threshold: ${IDLE_THRESHOLD}s) — releasing lock and exiting."
-            break
-        fi
     fi
 done
