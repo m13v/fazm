@@ -334,7 +334,10 @@ class DetachedChatWindowController {
             state.clearQueue()
             let id = ObjectIdentifier(win)
             let oldKey = self.entries[id]?.sessionKey
-            self.entries[id]?.sessionKey = "detached-\(UUID().uuidString)"
+            let newKey = "detached-\(UUID().uuidString)"
+            self.entries[id]?.sessionKey = newKey
+            win.sessionKey = newKey
+            self.saveWindowRegistry()
             Task { @MainActor in
                 if let oldKey {
                     await provider.resetSession(key: oldKey)
@@ -407,7 +410,10 @@ class DetachedChatWindowController {
             state.aiInputText = ""
             state.clearQueue()
             let oldKey = self.entries[id]?.sessionKey
-            self.entries[id]?.sessionKey = "detached-\(UUID().uuidString)"
+            let newKey = "detached-\(UUID().uuidString)"
+            self.entries[id]?.sessionKey = newKey
+            win.sessionKey = newKey
+            self.saveWindowRegistry()
             Task { @MainActor in
                 if let oldKey {
                     await provider.resetSession(key: oldKey)
@@ -422,6 +428,11 @@ class DetachedChatWindowController {
             self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
+            if self.entries.isEmpty {
+                self.clearWindowRegistry()
+            } else {
+                self.saveWindowRegistry()
+            }
         }
 
         win.setupViews()
@@ -446,6 +457,179 @@ class DetachedChatWindowController {
 
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        saveWindowRegistry()
+    }
+
+    /// Restore detached windows that were open when the app last quit.
+    /// Loads conversation history from the local DB and recreates each window at its saved position.
+    func restoreWindows(chatProvider: ChatProvider) {
+        guard let data = UserDefaults.standard.data(forKey: Self.registryKey),
+              let snapshots = try? JSONDecoder().decode([WindowSnapshot].self, from: data),
+              !snapshots.isEmpty else { return }
+
+        log("DetachedChatWindowController: Restoring \(snapshots.count) detached window(s)")
+
+        // Clear the registry immediately so a crash during restore doesn't loop
+        UserDefaults.standard.removeObject(forKey: Self.registryKey)
+
+        for snapshot in snapshots {
+            let sessionKey = snapshot.sessionKey
+            let savedFrame = NSRect(
+                x: snapshot.x, y: snapshot.y,
+                width: snapshot.width, height: snapshot.height
+            )
+
+            // Load saved messages from the local DB
+            Task { @MainActor in
+                let savedMessages = await ChatMessageStore.loadMessages(
+                    context: "__\(sessionKey)__",
+                    limit: 100
+                )
+                guard !savedMessages.isEmpty else {
+                    log("DetachedChatWindowController: No messages for \(sessionKey), skipping restore")
+                    return
+                }
+
+                let detachedState = FloatingControlBarState()
+                detachedState.loadHistory(from: savedMessages)
+                detachedState.showingAIConversation = true
+                detachedState.showingAIResponse = true
+
+                let win = DetachedChatWindow(state: detachedState, sessionKey: sessionKey, savedFrame: savedFrame)
+                let winId = ObjectIdentifier(win)
+
+                self.wireUpCallbacks(win: win, detachedState: detachedState, chatProvider: chatProvider)
+
+                win.setupViews()
+
+                var entry = WindowEntry(window: win, sessionKey: sessionKey)
+                self.entries[winId] = entry
+                self.entries[winId]?.sharedProviderCancellables = ChatQueryLifecycle.subscribeToProviderState(
+                    provider: chatProvider, state: detachedState
+                )
+
+                win.makeKeyAndOrderFront(nil)
+                self.saveWindowRegistry()
+                log("DetachedChatWindowController: Restored window for \(sessionKey) with \(savedMessages.count) messages")
+            }
+        }
+    }
+
+    /// Wire up all callbacks for a detached window. Shared between show() and restoreWindows().
+    private func wireUpCallbacks(win: DetachedChatWindow, detachedState: FloatingControlBarState, chatProvider: ChatProvider) {
+        win.onSendFollowUp = { [weak self, weak win] message in
+            guard let win else { return }
+            self?.sendQuery(message, for: win)
+        }
+
+        win.onNewChat = { [weak self, weak win, weak detachedState, weak chatProvider] in
+            guard let self, let win, let state = detachedState, let provider = chatProvider else { return }
+            state.chatHistory = []
+            state.displayedQuery = ""
+            state.currentAIMessage = nil
+            state.isAILoading = false
+            state.aiInputText = ""
+            state.clearQueue()
+            let id = ObjectIdentifier(win)
+            let oldKey = self.entries[id]?.sessionKey
+            let newKey = "detached-\(UUID().uuidString)"
+            self.entries[id]?.sessionKey = newKey
+            win.sessionKey = newKey
+            self.saveWindowRegistry()
+            Task { @MainActor in
+                if let oldKey {
+                    await provider.resetSession(key: oldKey)
+                }
+            }
+        }
+
+        win.onEnqueueMessage = { [weak self, weak win, weak chatProvider] message in
+            guard let win else { return }
+            let key = self?.entries[ObjectIdentifier(win)]?.sessionKey
+            chatProvider?.enqueueMessage(message, sessionKey: key)
+        }
+
+        win.onSendNowQueued = { [weak chatProvider] item in
+            guard let provider = chatProvider else { return }
+            Task { @MainActor in
+                await provider.interruptAndSend(item.text)
+            }
+        }
+
+        win.onDeleteQueued = { [weak chatProvider] item in
+            guard let provider = chatProvider else { return }
+            if let idx = provider.pendingMessageTexts.firstIndex(of: item.text) {
+                provider.removePendingMessage(at: idx)
+            }
+        }
+
+        win.onClearQueue = { [weak chatProvider] in
+            chatProvider?.clearPendingMessages()
+        }
+
+        win.onReorderQueue = { [weak chatProvider] source, dest in
+            chatProvider?.reorderPendingMessages(from: source, to: dest)
+        }
+
+        win.onStopAgent = { [weak chatProvider] in
+            chatProvider?.stopAgent()
+        }
+
+        win.onConnectClaude = { [weak chatProvider] in
+            guard let provider = chatProvider else { return }
+            ClaudeAuthWindowController.shared.show(chatProvider: provider)
+        }
+
+        win.onChatObserverCardAction = { [weak chatProvider] activityId, action in
+            chatProvider?.handleChatObserverCardAction(activityId: activityId, action: action)
+        }
+
+        win.onChangeWorkspace = { [weak self, weak win, weak detachedState, weak chatProvider] in
+            guard let self, let win, let state = detachedState, let provider = chatProvider else { return }
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.message = "Select a project directory"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            let newPath = url.path
+            provider.aiChatWorkingDirectory = newPath
+            provider.workingDirectory = newPath
+            Task { await provider.discoverClaudeConfig() }
+
+            let id = ObjectIdentifier(win)
+            state.chatHistory = []
+            state.displayedQuery = ""
+            state.currentAIMessage = nil
+            state.isAILoading = false
+            state.aiInputText = ""
+            state.clearQueue()
+            let oldKey = self.entries[id]?.sessionKey
+            let newKey = "detached-\(UUID().uuidString)"
+            self.entries[id]?.sessionKey = newKey
+            win.sessionKey = newKey
+            self.saveWindowRegistry()
+            Task { @MainActor in
+                if let oldKey {
+                    await provider.resetSession(key: oldKey)
+                }
+            }
+        }
+
+        win.onWindowClose = { [weak self, weak win] in
+            guard let self, let win else { return }
+            let id = ObjectIdentifier(win)
+            self.entries[id]?.chatCancellable?.cancel()
+            self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
+            self.entries[id]?.dequeueCancellable?.cancel()
+            self.entries.removeValue(forKey: id)
+            if self.entries.isEmpty {
+                self.clearWindowRegistry()
+            } else {
+                self.saveWindowRegistry()
+            }
+        }
     }
 
     /// Send a follow-up query from a specific detached window.
