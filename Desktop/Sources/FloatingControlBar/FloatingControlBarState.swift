@@ -52,14 +52,14 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var showingAIResponse: Bool = false
     @Published var isAILoading: Bool = true
     @Published var isCompacting: Bool = false
-    @Published var isObserverRunning: Bool = false
+    @Published var isChatObserverRunning: Bool = false
     @Published var aiInputText: String = ""
     @Published var currentAIMessage: ChatMessage? = nil
     @Published var displayedQuery: String = ""
     @Published var inputViewHeight: CGFloat = 146
     @Published var chatHistory: [FloatingChatExchange] = []
-    /// Observer cards queued while a query is streaming — rendered below the current response.
-    @Published var pendingObserverExchanges: [FloatingChatExchange] = []
+    /// Chat observer cards queued while a query is streaming — rendered below the current response.
+    @Published var pendingChatObserverExchanges: [FloatingChatExchange] = []
     @Published var suggestedReplies: [String] = []
     @Published var suggestedReplyQuestion: String = ""
 
@@ -183,11 +183,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// System prompt suffix injected during tutorial (cleared on finish)
     var tutorialSystemPromptSuffix: String?
 
-    /// Move any pending observer cards into chatHistory (call when archiving the current exchange).
-    func flushPendingObserverExchanges() {
-        guard !pendingObserverExchanges.isEmpty else { return }
-        chatHistory.append(contentsOf: pendingObserverExchanges)
-        pendingObserverExchanges.removeAll()
+    /// Move any pending chat observer cards into chatHistory (call when archiving the current exchange).
+    func flushPendingChatObserverExchanges() {
+        guard !pendingChatObserverExchanges.isEmpty else { return }
+        chatHistory.append(contentsOf: pendingChatObserverExchanges)
+        pendingChatObserverExchanges.removeAll()
     }
 
     /// Pre-populate chatHistory from ChatProvider's messages so previous conversation is visible on fresh launch.
