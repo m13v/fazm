@@ -543,7 +543,7 @@ struct AIResponseView: View {
                             actedAction: card.actedAction
                         )
                     },
-                    isObserverRunning: state.isChatObserverRunning,
+                    isChatObserverRunning: state.isChatObserverRunning,
                     onAction: { id, action in
                         handleChatObserverCardAction(activityId: id, action: action)
                     }
