@@ -287,8 +287,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Start session recording if feature flag is enabled (PostHog must be initialized first)
         SessionRecordingManager.shared.startIfEnabled()
 
-        // Start the always-on observer recorder for Gemini analysis (local-only, no feature flag)
-        SessionRecordingManager.shared.startObserver()
+        // Start the always-on screen observer recorder for Gemini analysis (local-only, no feature flag)
+        SessionRecordingManager.shared.startScreenObserver()
 
         // Test trigger: show session recording permission prompt
         // xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testSessionRecordingPermission"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
