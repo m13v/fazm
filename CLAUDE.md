@@ -125,25 +125,43 @@ Do NOT touch `~/fazm/skills/` for bundling purposes — that directory is for pu
 - `./build.sh` builds **"Fazm"** → `build/Fazm.app` (bundle ID: `com.fazm.app`)
 - Different bundle IDs, different app names, but same source code
 - When updating resources (icons, assets, etc.) in built app bundles, update BOTH
-- To check which app is currently running: `ps aux | grep "Fazm"`
+- To check app state: `cat /tmp/fazm-dev-status` (see "Checking App State" below)
 - Legacy `com.omi.*` bundle IDs still appear in cleanup/migration code (TCC permission resets, old app bundle removal) for users who had the app when it was called Omi
 
 ### Before Running `run.sh` (Multi-Agent Safety)
 
-Multiple agents work on this codebase simultaneously. `run.sh` and `build.sh` handle locking automatically — they will wait if another build is active, and detect stale locks from dead processes.
+Multiple agents work on this codebase simultaneously. `run.sh` and `build.sh` handle locking automatically; they will wait if another build is active, and detect stale locks from dead processes.
 
-- **Just run `./run.sh` (or `./build.sh`)** — it handles everything. If another agent holds the lock, it waits (up to 5 min).
+- **Just run `./run.sh` (or `./build.sh`)**; it handles everything. If another agent holds the lock, it waits (up to 5 min).
 - **NEVER manually delete `/tmp/fazm-build.lock`** or run `rm -rf /tmp/fazm-build.lock`. The lock is a directory managed by the scripts. Manually deleting it defeats the entire concurrency system and causes parallel builds to collide.
 - **NEVER kill the app (`pkill -f "Fazm Dev"`) before building.** `run.sh` handles stopping the old app as part of its flow. Killing it externally orphans the lock.
 - **If you only need to test with distributed notifications** (e.g., `com.fazm.testQuery`) and the app is already running, you do NOT need to run `run.sh`. Just send the notification.
 
+### Checking App State (MANDATORY before any build/test decision)
+
+**Always read `/tmp/fazm-dev-status` first.** This is the single source of truth for the app lifecycle. Do NOT guess state from `pgrep`, `ps aux`, or log tailing.
+
+```bash
+cat /tmp/fazm-dev-status
+```
+
+The file contains one line in the format `<state> <pid> <unix_timestamp>`:
+- `building <run.sh_pid> <ts>` = build in progress, wait for it
+- `running <app_pid> <ts>` = app is running, verify with `kill -0 <app_pid>`
+- `exited <app_pid> <ts>` = app exited, safe to run `./run.sh`
+- `failed <ts> <reason>` = last build/launch failed
+
+**Decision tree:**
+1. Read `/tmp/fazm-dev-status`
+2. If `running <pid>`: check `kill -0 <pid> 2>/dev/null`. If alive, the app is running; send test notifications directly. If dead, the status is stale; safe to run `./run.sh`.
+3. If `building <pid>`: check `kill -0 <pid> 2>/dev/null`. If alive, wait. If dead, stale; safe to run `./run.sh`.
+4. If `exited` or `failed` or file missing: safe to run `./run.sh`.
+
+**NEVER** use `pgrep`, `ps aux | grep`, or log file checks to determine whether to build/kill/restart. Use the status file.
+
 ### Monitoring `run.sh`
 
-`run.sh` has a built-in watchdog that auto-releases the lock and exits if:
-- The app process dies (checked every 10s)
-- The dev log (`/private/tmp/fazm-dev.log`) hasn't been updated for 60 seconds
-
-During the **build phase** (before app launch), `run.sh` writes a startup line to the dev log immediately. You can monitor build progress via the `run.sh` stdout or `tail -f /private/tmp/fazm-dev.log`.
+The watchdog holds the lock as long as the app process is alive (checked every 10s via the app PID). It only releases the lock and exits when the app process dies. The log file (`/private/tmp/fazm-dev.log`) is append-only; it is never truncated between runs.
 
 If `run.sh` itself appears stalled (e.g., `swift-build` at 0% CPU for >10 minutes), first check if the holder PID is alive:
 ```bash
