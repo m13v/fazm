@@ -31,9 +31,9 @@ class SessionRecordingManager {
     private var pauseWorkItem: DispatchWorkItem?
     private let pauseDelay: TimeInterval = 30
 
-    // MARK: - Gemini Analysis Recorder (always-on, local-only, no feature flag)
-    private var observerRecorder: SessionRecorder?
-    private var isObserverStarted = false
+    // MARK: - Screen Observer Recorder (Gemini analysis, always-on, local-only, no feature flag)
+    private var screenObserverRecorder: SessionRecorder?
+    private var isScreenObserverStarted = false
 
     private init() {}
 
@@ -48,21 +48,21 @@ class SessionRecordingManager {
         }
     }
 
-    // MARK: - Gemini Observer (always-on, local-only)
+    // MARK: - Screen Observer (Gemini analysis, always-on, local-only)
 
-    /// Start the local-only observer recorder for Gemini analysis.
+    /// Start the screen observer recorder for Gemini analysis.
     /// Runs continuously while the app is open, no feature flag needed.
     /// Only requires screen recording permission and a Gemini API key.
-    func startObserver() {
-        guard !isObserverStarted else { return }
+    func startScreenObserver() {
+        guard !isScreenObserverStarted else { return }
 
         guard ScreenCaptureService.checkPermission() else {
-            log("Observer: no screen recording permission, skipping")
+            log("Screen observer: no screen recording permission, skipping")
             return
         }
 
         guard let ffmpegPath = findFfmpeg() else {
-            log("Observer: ffmpeg not found, skipping")
+            log("Screen observer: ffmpeg not found, skipping")
             return
         }
 
@@ -84,8 +84,8 @@ class SessionRecordingManager {
             )
 
             let recorder = SessionRecorder(configuration: config)
-            self.observerRecorder = recorder
-            self.isObserverStarted = true
+            self.screenObserverRecorder = recorder
+            self.isScreenObserverStarted = true
 
             // Wire up Gemini analysis
             await recorder.setOnChunkReady { info in
@@ -107,24 +107,24 @@ class SessionRecordingManager {
 
             do {
                 try await recorder.start()
-                log("Observer: started (local-only, 2 FPS)")
+                log("Screen observer: started (local-only, 2 FPS)")
             } catch {
-                logError("Observer: failed to start", error: error)
-                self.isObserverStarted = false
-                self.observerRecorder = nil
+                logError("Screen observer: failed to start", error: error)
+                self.isScreenObserverStarted = false
+                self.screenObserverRecorder = nil
             }
         }
     }
 
-    /// Stop the observer recorder.
-    func stopObserver() {
-        guard isObserverStarted, let recorder = observerRecorder else { return }
-        isObserverStarted = false
+    /// Stop the screen observer recorder.
+    func stopScreenObserver() {
+        guard isScreenObserverStarted, let recorder = screenObserverRecorder else { return }
+        isScreenObserverStarted = false
         Task {
             await recorder.stop()
-            log("Observer: stopped")
+            log("Screen observer: stopped")
         }
-        self.observerRecorder = nil
+        self.screenObserverRecorder = nil
     }
 
     private func getHardwareUUID() -> String? {
