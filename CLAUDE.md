@@ -116,23 +116,20 @@ Do NOT touch `~/fazm/skills/` for bundling purposes — that directory is for pu
 - No `npm run build`, no `xcrun swift build`, no `swift build`, no `xcodebuild`
 - No `open`, no launching from `build/`
 - `run.sh` does ALL of this. Running builds independently creates stale processes, orphaned locks, and duplicate work.
-- **Build only** (no launch): `./build.sh` — for release builds only
 
 **`run.sh` manages ONE lock: `/tmp/fazm-build.lock`.** It acquires it automatically on start, releases on exit. Do NOT create locks manually.
 
 ### App Names & Build Artifacts
 - `./run.sh` builds **"Fazm Dev"** → installs to `/Applications/Fazm Dev.app` (bundle ID: `com.fazm.desktop-dev`)
-- `./build.sh` builds **"Fazm"** → `build/Fazm.app` (bundle ID: `com.fazm.app`)
-- Different bundle IDs, different app names, but same source code
-- When updating resources (icons, assets, etc.) in built app bundles, update BOTH
+- Production **"Fazm"** (bundle ID: `com.fazm.app`) is built by the Codemagic CI pipeline only
 - To check app state: `cat /tmp/fazm-dev-status` (see "Checking App State" below)
 - Legacy `com.omi.*` bundle IDs still appear in cleanup/migration code (TCC permission resets, old app bundle removal) for users who had the app when it was called Omi
 
 ### Before Running `run.sh` (Multi-Agent Safety)
 
-Multiple agents work on this codebase simultaneously. `run.sh` and `build.sh` handle locking automatically; they will wait if another build is active, and detect stale locks from dead processes.
+Multiple agents work on this codebase simultaneously. `run.sh` handles locking automatically; it will wait if another build is active, and detects stale locks from dead processes.
 
-- **Just run `./run.sh` (or `./build.sh`)**; it handles everything. If another agent holds the lock, it waits (up to 5 min).
+- **Just run `./run.sh`**; it handles everything. If another agent holds the lock, it waits (up to 5 min).
 - **NEVER manually delete `/tmp/fazm-build.lock`** or run `rm -rf /tmp/fazm-build.lock`. The lock is a directory managed by the scripts. Manually deleting it defeats the entire concurrency system and causes parallel builds to collide.
 - **NEVER kill the app (`pkill -f "Fazm Dev"`) before building.** `run.sh` handles stopping the old app as part of its flow. Killing it externally orphans the lock.
 - **If you only need to test with distributed notifications** (e.g., `com.fazm.testQuery`) and the app is already running, you do NOT need to run `run.sh`. Just send the notification.
