@@ -75,8 +75,7 @@ if [ "$NEEDS_GEMINI" = "True" ]; then
     ANALYSES_JSON=$("$NODE_BIN" "$SCRIPTS_DIR/trigger-session-analysis.js" "$DEVICE_ID" 2>>"$LOG_FILE")
     EXIT_CODE=$?
     if [ $EXIT_CODE -eq 2 ]; then
-        log "Device has too many chunks (>100). Skipping."
-        "$NODE_BIN" "$SCRIPTS_DIR/mark-device-investigated.js" "$DEVICE_ID" "Skipped: too many chunks ($UNANALYZED)" 2>>"$LOG_FILE" || true
+        log "Device has too many unanalyzed chunks (>60). Skipping for now."
         exit 0
     elif [ $EXIT_CODE -ne 0 ]; then
         log "WARNING: Analysis trigger failed with code $EXIT_CODE"
@@ -131,8 +130,16 @@ gtimeout 2400 claude \
 
 rm -f "$PROMPT_FILE"
 
-# Step 4: Mark device as investigated
-"$NODE_BIN" "$SCRIPTS_DIR/mark-device-investigated.js" "$DEVICE_ID" "Investigated $ANALYSIS_COUNT analyses" 2>>"$LOG_FILE" || log "WARNING: Failed to mark device $DEVICE_ID as investigated"
+# Step 4: Mark device as investigated (only if all chunks are analyzed)
+FINAL_STATUS=$(curl -s "https://omi-analytics.vercel.app/api/session-recordings/orchestrate?action=status&deviceId=$DEVICE_ID" \
+    -H "Authorization: Bearer ${CRON_SECRET}" 2>/dev/null)
+FINAL_UNANALYZED=$(echo "$FINAL_STATUS" | python3 -c "import json,sys; print(json.load(sys.stdin).get('unanalyzedChunks', 0))" 2>/dev/null || echo "0")
+
+if [ "$FINAL_UNANALYZED" -gt 0 ] 2>/dev/null; then
+    log "Device still has $FINAL_UNANALYZED unanalyzed chunks. NOT marking as investigated (will retry next run)."
+else
+    "$NODE_BIN" "$SCRIPTS_DIR/mark-device-investigated.js" "$DEVICE_ID" "Investigated $ANALYSIS_COUNT analyses" 2>>"$LOG_FILE" || log "WARNING: Failed to mark device $DEVICE_ID as investigated"
+fi
 
 log "=== Done investigating device $DEVICE_ID ==="
 
