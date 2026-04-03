@@ -70,6 +70,17 @@ echo "[$(date '+%H:%M:%S.000')] [run.sh] Build started (PID $$)" >> /private/tmp
 FAZM_STATUS_FILE="/tmp/fazm-dev-status"
 echo "building $$ $(date +%s)" > "$FAZM_STATUS_FILE"
 
+# Update status on unexpected exit (set -e, Ctrl+C, etc.)
+_fazm_status_on_exit() {
+    local current_status
+    current_status=$(cat "$FAZM_STATUS_FILE" 2>/dev/null | cut -d' ' -f1)
+    if [ "$current_status" = "building" ]; then
+        echo "failed $(date +%s) build_interrupted" > "$FAZM_STATUS_FILE"
+    fi
+}
+# Chain with existing EXIT trap (fazm_release_lock)
+trap '_fazm_status_on_exit; fazm_release_lock' EXIT
+
 step "Cleaning up conflicting app bundles..."
 # Clean old build names from local build dir
 rm -rf "$BUILD_DIR/Omi Computer.app" "$BUILD_DIR/Omi Dev.app" 2>/dev/null
