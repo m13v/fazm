@@ -78,12 +78,32 @@ class PushToTalkManager: ObservableObject {
     self.barState = barState
     hasMicPermission = AudioCaptureService.checkPermission()
     installEventMonitors()
+    setupClapDetector()
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  /// Initialize the ClapDetector for double-clap → status briefing.
+  private func setupClapDetector() {
+    let clapDetector = ClapDetector.shared
+    clapDetector.onDoubleClapDetected = { [weak self] in
+      guard let self else { return }
+      // Only trigger if PTT is idle (don't interrupt active voice input)
+      guard self.state == .idle else {
+        log("PushToTalkManager: clap detected but PTT is active, ignoring")
+        return
+      }
+      log("PushToTalkManager: double-clap → triggering status briefing")
+      Task { @MainActor in
+        await ChatProvider.shared.sendStatusBriefing()
+      }
+    }
+    clapDetector.startListening()
   }
 
   func cleanup() {
     stopListening()
     audioCaptureService = nil
+    ClapDetector.shared.stopListening()
     removeEventMonitors()
     log("PushToTalkManager: cleanup complete")
   }
@@ -588,10 +608,6 @@ class PushToTalkManager: ObservableObject {
     lastInterimText = ""
     updateBarState(skipResize: hasQuery || wasPttOpenedChat)
 
-    // Capture and clear uiOverrideState so the next keyboard PTT targets the floating bar
-    let sendOverrideState = uiOverrideState
-    uiOverrideState = nil
-
     guard hasQuery else {
       let holdDuration = ProcessInfo.processInfo.systemUptime - lastOptionDownTime
       let micName = AudioCaptureService.getCurrentMicrophoneName() ?? "unknown"
@@ -602,7 +618,7 @@ class PushToTalkManager: ObservableObject {
       }
       // Only show silence overlay if PTT was held for at least 3 seconds
       if holdDuration >= 3.0 {
-        (sendOverrideState ?? barState)?.showSilenceOverlay()
+        effectiveBarState?.showSilenceOverlay()
       }
       return
     }
@@ -610,34 +626,34 @@ class PushToTalkManager: ObservableObject {
     if pttOpenedChat {
       // PTT already opened the chat and synced live transcript — just finalize the text
       log("PushToTalkManager: finalizing PTT transcript in open chat (\(query.count) chars): \(query)")
-      let targetState = sendOverrideState ?? barState
+      let targetState = effectiveBarState
       let isShowingResponse = targetState?.showingAIResponse == true
       if !isShowingResponse {
         targetState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
       }
       pttOpenedChat = false
-      if sendOverrideState == nil {
+      if uiOverrideState == nil {
         // Keyboard PTT — activate app and focus floating bar input
         NSApp.activate(ignoringOtherApps: true)
         FloatingControlBarManager.shared.focusInputField()
-      } else if let overrideState = sendOverrideState {
+      } else if let overrideState = uiOverrideState {
         // UI button PTT (detached window) — focus the detached window's input
         DetachedChatWindowController.shared.focusInputField(for: overrideState)
       }
       if isShowingResponse {
         // Set pendingFollowUpText after activation so the onChange handler's
         // isFollowUpFocused=true is honored (requires active app)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-          targetState?.pendingFollowUpText = query
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+          self?.effectiveBarState?.pendingFollowUpText = query
         }
       }
     } else {
       log("PushToTalkManager: inserting transcription into input (\(query.count) chars): \(query)")
-      if sendOverrideState == nil {
+      if uiOverrideState == nil {
         FloatingControlBarManager.shared.openAIInputWithQuery(query)
       } else {
-        barState?.aiInputText = query
-        if let overrideState = sendOverrideState {
+        effectiveBarState?.aiInputText = query
+        if let overrideState = uiOverrideState {
           DetachedChatWindowController.shared.focusInputField(for: overrideState)
         }
       }
