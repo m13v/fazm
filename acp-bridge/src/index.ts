@@ -923,7 +923,7 @@ async function flushChatObserverBatch(): Promise<void> {
     send({ type: "observer_status" as any, running: false } as any);
 
     // If new messages accumulated while we were running, flush again
-    if (observerBuffer.length > 0) {
+    if (chatObserverBuffer.length > 0) {
       setTimeout(() => flushChatObserverBatch(), 1000);
     }
   }
