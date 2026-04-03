@@ -2888,12 +2888,13 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Observer Cards
 
-    /// Poll observer_activity table for pending cards and inject them into the current chat
-    private func pollObserverCards() {
-        log("ChatProvider: pollObserverCards() called")
+    /// Poll observer_activity table for pending cards, auto-accept them, and inject into the current chat.
+    /// Cards are auto-accepted immediately — the user can deny/rollback if needed.
+    private func pollChatObserverCards() {
+        log("ChatProvider: pollChatObserverCards() called")
         Task {
             guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else {
-                log("ChatProvider: pollObserverCards — no database queue")
+                log("ChatProvider: pollChatObserverCards — no database queue")
                 return
             }
             do {
@@ -2906,7 +2907,7 @@ class ChatProvider: ObservableObject {
                     """)
                 }
 
-                log("ChatProvider: pollObserverCards — found \(rows.count) pending cards")
+                log("ChatProvider: pollChatObserverCards — found \(rows.count) pending cards")
 
                 // Build all card blocks, then inject as a single stacked exchange
                 var blocks: [ChatContentBlock] = []
@@ -2931,43 +2932,44 @@ class ChatProvider: ObservableObject {
                         }
                     }
 
-                    // Default buttons if none specified
-                    if buttons.isEmpty {
-                        if type == "skill_draft" {
-                            buttons = [
-                                ObserverCardButton(id: "\(activityId)-approve", label: "Create skill", action: "approve"),
-                                ObserverCardButton(id: "\(activityId)-dismiss", label: "Skip", action: "dismiss"),
-                            ]
-                        } else if type == "approval_request" {
-                            buttons = [
-                                ObserverCardButton(id: "\(activityId)-approve", label: "Approve", action: "approve"),
-                                ObserverCardButton(id: "\(activityId)-dismiss", label: "Reject", action: "dismiss"),
-                            ]
-                        } else {
-                            buttons = [
-                                ObserverCardButton(id: "\(activityId)-approve", label: "OK", action: "approve"),
-                                ObserverCardButton(id: "\(activityId)-dismiss", label: "Deny", action: "dismiss"),
-                            ]
-                        }
-                    }
+                    // Only show Deny button — cards are auto-accepted
+                    buttons = [
+                        ObserverCardButton(id: "\(activityId)-dismiss", label: "Deny", action: "dismiss"),
+                    ]
 
                     blocks.append(.observerCard(
                         id: "observer-\(activityId)",
                         activityId: activityId,
                         type: type,
                         content: displayText,
-                        buttons: buttons
+                        buttons: buttons,
+                        actedAction: "approve"
                     ))
 
-                    // Mark as shown
+                    // Auto-accept: mark as acted with approve immediately
                     try await dbQueue.write { db in
-                        try db.execute(sql: "UPDATE observer_activity SET status = 'shown' WHERE id = ?", arguments: [activityId])
+                        try db.execute(sql: """
+                            UPDATE observer_activity SET status = 'acted', userResponse = 'approve', actedAt = datetime('now')
+                            WHERE id = ?
+                        """, arguments: [activityId])
                     }
 
-                    log("ChatProvider: Observer card shown — id=\(activityId) type=\(type)")
+                    // Execute pending operations immediately (auto-accept)
+                    await executeApprovedChatObserverOperations(activityId: activityId)
+
+                    log("ChatProvider: Chat observer card auto-accepted — id=\(activityId) type=\(type)")
                     PostHogManager.shared.track("observer_card_shown", properties: [
                         "activity_id": activityId,
                         "card_type": type,
+                        "content": displayText,
+                        "auto_accepted": true,
+                    ])
+                    PostHogManager.shared.track("observer_card_action", properties: [
+                        "activity_id": activityId,
+                        "action": "approve",
+                        "card_type": type,
+                        "is_rollback": false,
+                        "auto_accepted": true,
                         "content": displayText,
                     ])
                 }
@@ -2976,13 +2978,13 @@ class ChatProvider: ObservableObject {
 
                 // Inject all cards as a single grouped exchange
                 await MainActor.run {
-                    var observerMsg = ChatMessage(text: "", sender: .ai)
-                    observerMsg.contentBlocks = blocks
+                    var chatObserverMsg = ChatMessage(text: "", sender: .ai)
+                    chatObserverMsg.contentBlocks = blocks
 
                     if let barState = FloatingControlBarManager.shared.barState {
-                        let exchange = FloatingChatExchange(question: "", aiMessage: observerMsg)
+                        let exchange = FloatingChatExchange(question: "", aiMessage: chatObserverMsg)
                         if barState.currentAIMessage != nil || barState.isAILoading {
-                            barState.pendingObserverExchanges.append(exchange)
+                            barState.pendingChatObserverExchanges.append(exchange)
                         } else {
                             barState.chatHistory.append(exchange)
                         }
@@ -2992,21 +2994,21 @@ class ChatProvider: ObservableObject {
                             barState.isAILoading = false
                         }
                     } else if !self.messages.isEmpty {
-                        self.messages.append(observerMsg)
+                        self.messages.append(chatObserverMsg)
                     }
                 }
             } catch {
-                log("ChatProvider: Failed to poll observer cards: \(error)")
+                log("ChatProvider: Failed to poll chat observer cards: \(error)")
             }
         }
     }
 
-    /// Handle user action on an observer card (approve, dismiss, edit)
-    func handleObserverCardAction(activityId: Int64, action: String) {
+    /// Handle user action on a chat observer card (deny/rollback — cards are auto-accepted)
+    func handleChatObserverCardAction(activityId: Int64, action: String) {
         Task {
             guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return }
             do {
-                // Check if this is a rollback (dismiss after auto-approve)
+                // Cards are auto-accepted, so dismiss always means rollback
                 let previousResponse: String? = try await dbQueue.read { db in
                     try String.fetchOne(db, sql: "SELECT userResponse FROM observer_activity WHERE id = ?", arguments: [activityId])
                 }
@@ -3019,9 +3021,9 @@ class ChatProvider: ObservableObject {
                         WHERE id = ?
                     """, arguments: [status, action, activityId])
                 }
-                log("ChatProvider: Observer card action — id=\(activityId) action=\(action)\(isRollback ? " (rollback)" : "")")
+                log("ChatProvider: Chat observer card action — id=\(activityId) action=\(action)\(isRollback ? " (rollback)" : "")")
 
-                // Track the user's response to the observer card
+                // Track the user's response
                 let cardRow: Row? = try await dbQueue.read { db in
                     try Row.fetchOne(db, sql: "SELECT type, content FROM observer_activity WHERE id = ?", arguments: [activityId])
                 }
@@ -3040,15 +3042,12 @@ class ChatProvider: ObservableObject {
                     "content": cardDisplayText,
                 ])
 
-                if action == "approve" {
-                    // Execute pending operations on approval
-                    await executeApprovedObserverOperations(activityId: activityId)
-                } else if isRollback {
-                    // Roll back previously approved operations
-                    await rollbackObserverOperations(activityId: activityId)
+                if isRollback {
+                    // Roll back previously auto-accepted operations
+                    await rollbackChatObserverOperations(activityId: activityId)
                 }
             } catch {
-                log("ChatProvider: Failed to update observer card: \(error)")
+                log("ChatProvider: Failed to update chat observer card: \(error)")
             }
         }
     }
