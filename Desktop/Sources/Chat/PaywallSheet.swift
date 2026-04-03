@@ -62,122 +62,168 @@ struct PaywallSheet: View {
 
     private var paywallView: some View {
         VStack(spacing: 0) {
-            // Content
-            VStack(spacing: 20) {
+            // Header content
+            VStack(spacing: 16) {
                 Image(systemName: "lock.fill")
-                    .scaledFont(size: 40)
+                    .scaledFont(size: 36)
                     .foregroundStyle(FazmColors.purpleGradient)
                     .padding(.top, 8)
 
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     Text("Your free trial has ended")
                         .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(FazmColors.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Subscribe to Fazm Pro to continue using the AI assistant with unlimited messages.")
+                    Text("Choose how to unlock Fazm Pro")
                         .scaledFont(size: 13)
                         .foregroundColor(FazmColors.textTertiary)
                         .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 20)
-
-                // Pricing
-                VStack(spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("$9")
-                            .scaledFont(size: 28, weight: .bold)
-                            .foregroundColor(FazmColors.textPrimary)
-                        Text("first month")
-                            .scaledFont(size: 13)
-                            .foregroundColor(FazmColors.textTertiary)
-                    }
-                    Text("then $49/month")
-                        .scaledFont(size: 13)
-                        .foregroundColor(FazmColors.textQuaternary)
-                }
-                .padding(.vertical, 8)
-
-                // Features
-                VStack(alignment: .leading, spacing: 8) {
-                    featureRow("Unlimited AI messages")
-                    featureRow("Voice and text queries")
-                    featureRow("Screen context awareness")
-                }
-                .padding(.horizontal, 20)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
 
-            Spacer()
-
-            // Actions
-            VStack(spacing: 12) {
+            // Option cards
+            VStack(spacing: 10) {
+                // Option 1: Subscribe
                 Button(action: {
                     AnalyticsManager.shared.subscriptionUpgradeTapped(source: "paywall")
                     onSubscribe()
                 }) {
-                    Text("Subscribe Now")
-                        .scaledFont(size: 14, weight: .semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(FazmColors.purpleGradient)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+                    HStack(spacing: 12) {
+                        Image(systemName: "creditcard.fill")
+                            .scaledFont(size: 20)
+                            .foregroundStyle(FazmColors.purpleGradient)
+                            .frame(width: 32)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Subscribe to Pro")
+                                .scaledFont(size: 14, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+                            Text("$9 first month, then $49/mo")
+                                .scaledFont(size: 12)
+                                .foregroundColor(FazmColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(FazmColors.textQuaternary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(FazmColors.backgroundTertiary.opacity(0.6))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(FazmColors.border.opacity(0.5), lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
 
+                // Option 2: Refer a friend
                 Button(action: {
                     AnalyticsManager.shared.paywallReferralTapped()
                     showReferral = true
                     loadReferralCode()
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 12) {
                         Image(systemName: "person.2.fill")
-                            .scaledFont(size: 12)
-                        Text("Get 1 month free — refer a friend")
+                            .scaledFont(size: 20)
+                            .foregroundStyle(FazmColors.purpleGradient)
+                            .frame(width: 32)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Refer a Friend")
+                                .scaledFont(size: 14, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+                            Text("Get 1 month free for you and your friend")
+                                .scaledFont(size: 12)
+                                .foregroundColor(FazmColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
                             .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(FazmColors.textQuaternary)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                     .background(FazmColors.backgroundTertiary.opacity(0.6))
-                    .foregroundColor(FazmColors.textSecondary)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(FazmColors.border.opacity(0.5), lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
 
+                // Option 3: Chat with founder
                 Button(action: {
                     AnalyticsManager.shared.paywallFounderCallTapped()
                     if let url = URL(string: "https://cal.com/team/mediar/onboarding") {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 12) {
                         Image(systemName: "video.fill")
-                            .scaledFont(size: 12)
-                        Text("Get 1 month free — chat with our founder")
-                            .scaledFont(size: 12, weight: .medium)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(FazmColors.backgroundTertiary.opacity(0.6))
-                    .foregroundColor(FazmColors.textSecondary)
-                    .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
+                            .scaledFont(size: 20)
+                            .foregroundStyle(FazmColors.purpleGradient)
+                            .frame(width: 32)
 
-                Button(action: {
-                    AnalyticsManager.shared.paywallDismissed()
-                    onDismiss()
-                }) {
-                    Text("Maybe Later")
-                        .scaledFont(size: 13)
-                        .foregroundColor(FazmColors.textTertiary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Chat with Our Founder")
+                                .scaledFont(size: 14, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+                            Text("Get 1 month free after a quick call")
+                                .scaledFont(size: 12)
+                                .foregroundColor(FazmColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(FazmColors.textQuaternary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(FazmColors.backgroundTertiary.opacity(0.6))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(FazmColors.border.opacity(0.5), lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 24)
+
+            Spacer()
+
+            // Features list
+            VStack(alignment: .leading, spacing: 6) {
+                featureRow("Unlimited AI messages")
+                featureRow("Voice and text queries")
+                featureRow("Screen context awareness")
+            }
+            .padding(.horizontal, 44)
+            .padding(.bottom, 12)
+
+            // Dismiss
+            Button(action: {
+                AnalyticsManager.shared.paywallDismissed()
+                onDismiss()
+            }) {
+                Text("Maybe Later")
+                    .scaledFont(size: 13)
+                    .foregroundColor(FazmColors.textTertiary)
+            }
+            .buttonStyle(.plain)
             .padding(.bottom, 20)
         }
     }
