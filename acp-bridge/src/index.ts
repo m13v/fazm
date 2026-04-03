@@ -1820,7 +1820,7 @@ function handleSessionUpdate(
     case "task_started": {
       const taskId = (update.taskId as string) ?? "";
       const description = (update.description as string) ?? "";
-      if (currentTurnTaskIds) currentTurnTaskIds.add(taskId);
+      if (taskTracking) taskTracking.currentTurnTaskIds.add(taskId);
       send({ type: "task_started", taskId, description });
       logErr(`Task started: ${taskId} — ${description}`);
       break;
@@ -1831,10 +1831,9 @@ function handleSessionUpdate(
       const status = (update.status as string) ?? "";
       const summary = (update.summary as string) ?? "";
       // Detect stale task notifications from previous turns
-      if (currentTurnTaskIds && !currentTurnTaskIds.has(taskId)) {
-        staleTaskNotificationCount++;
-        logErr(`Task notification: ${taskId} ${status} [STALE — from previous turn, suppressing UI update]`);
-        // Still forward to bridge so the notification is acknowledged, but mark it
+      if (taskTracking && !taskTracking.currentTurnTaskIds.has(taskId)) {
+        taskTracking.onStaleNotification();
+        logErr(`Task notification: ${taskId} ${status} [STALE — from previous turn]`);
         send({ type: "task_notification", taskId, status, summary });
         break;
       }
