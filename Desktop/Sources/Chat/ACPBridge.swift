@@ -787,6 +787,16 @@ actor ACPBridge {
 
       case .rateLimit(let status, let resetsAt, let rateLimitType, let utilization, _, _):
         onStatusEvent(.rateLimit(status: status, resetsAt: resetsAt, rateLimitType: rateLimitType, utilization: utilization))
+        if status == "rejected" {
+          let resetDesc = resetsAt.map { ts -> String in
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h:mm a"
+            formatter.timeZone = .current
+            return formatter.string(from: Date(timeIntervalSince1970: ts))
+          } ?? "soon"
+          let typeLabel = rateLimitType ?? "usage limit"
+          throw BridgeError.creditExhausted("You've hit your limit · resets \(resetDesc) (\(typeLabel))")
+        }
 
       case .observerPoll:
         // Handled immediately in deliverMessage(); should never reach here
