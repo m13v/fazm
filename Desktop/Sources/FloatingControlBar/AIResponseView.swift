@@ -29,7 +29,7 @@ struct AIResponseView: View {
     private var regularExchanges: [FloatingChatExchange] {
         chatHistory.filter { !$0.question.isEmpty }
     }
-    private var observerOnlyExchanges: [FloatingChatExchange] {
+    private var chatObserverOnlyExchanges: [FloatingChatExchange] {
         chatHistory.filter { $0.question.isEmpty }
     }
 
@@ -147,9 +147,9 @@ struct AIResponseView: View {
                     }
                 }
                 .onChange(of: isLoading) {
-                    // When loading finishes, flush any pending observer cards into chat history
+                    // When loading finishes, flush any pending chat observer cards into chat history
                     if !isLoading {
-                        state.flushPendingObserverExchanges()
+                        state.flushPendingChatObserverExchanges()
                     }
                 }
                 .onAppear {
@@ -185,9 +185,9 @@ struct AIResponseView: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: state.messageQueue.count)
             }
 
-            // Observer thinking indicator — only when no cards have arrived yet
-            if state.isObserverRunning && !hasAnyObserverCards {
-                observerThinkingIndicator
+            // Chat observer thinking indicator — only when no cards have arrived yet
+            if state.isChatObserverRunning && !hasAnyChatObserverCards {
+                chatObserverThinkingIndicator
             }
 
             if !isVoiceFollowUp {
@@ -498,19 +498,19 @@ struct AIResponseView: View {
     private func contentBlocksView(for message: ChatMessage) -> some View {
         if !message.contentBlocks.isEmpty {
             let grouped = ContentBlockGroup.group(message.contentBlocks)
-            let observerCards = grouped.compactMap { group -> (id: String, activityId: Int64, type: String, content: String, buttons: [ObserverCardButton], actedAction: String?)? in
+            let chatObserverCards = grouped.compactMap { group -> (id: String, activityId: Int64, type: String, content: String, buttons: [ObserverCardButton], actedAction: String?)? in
                 if case .observerCard(let id, let activityId, let type, let content, let buttons, let actedAction) = group {
                     return (id, activityId, type, content, buttons, actedAction)
                 }
                 return nil
             }
-            let nonObserverGroups = grouped.filter {
+            let nonChatObserverGroups = grouped.filter {
                 if case .observerCard = $0 { return false }
                 return true
             }
 
-            // Render non-observer blocks normally
-            ForEach(nonObserverGroups) { group in
+            // Render non-chat-observer blocks normally
+            ForEach(nonChatObserverGroups) { group in
                 switch group {
                 case .text(_, let text):
                     SelectableMarkdown(text: text, sender: .ai)
@@ -530,10 +530,10 @@ struct AIResponseView: View {
                 }
             }
 
-            // Render observer cards as a compact stack (thinking-only state shown near input)
-            if !observerCards.isEmpty {
+            // Render chat observer cards as a compact stack (thinking-only state shown near input)
+            if !chatObserverCards.isEmpty {
                 ObserverCardStackView(
-                    cards: observerCards.map { card in
+                    cards: chatObserverCards.map { card in
                         ObserverCardItem(
                             id: card.id,
                             activityId: card.activityId,
@@ -543,9 +543,9 @@ struct AIResponseView: View {
                             actedAction: card.actedAction
                         )
                     },
-                    isObserverRunning: state.isObserverRunning,
+                    isObserverRunning: state.isChatObserverRunning,
                     onAction: { id, action in
-                        handleObserverCardAction(activityId: id, action: action)
+                        handleChatObserverCardAction(activityId: id, action: action)
                     }
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
