@@ -2,7 +2,7 @@ import SwiftUI
 import GRDB
 import PostHog
 
-/// Discovered Tasks tab — shows tasks identified by the Gemini session analysis.
+/// Discovered Tasks tab — shows tasks identified by the screen observer (Gemini analysis).
 struct DiscoveredTasksSection: View {
     @State private var tasks: [DiscoveredTask] = []
     @State private var selectedTaskId: Int64?
