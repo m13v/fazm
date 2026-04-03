@@ -993,9 +993,7 @@ class FloatingControlBarManager {
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var compactCancellable: AnyCancellable?
-    private var authCancellable: AnyCancellable?
-    private var authRequiredCancellable: AnyCancellable?
-    private var queryStartedCancellable: AnyCancellable?
+    private var sharedProviderCancellables: [AnyCancellable] = []
     private(set) var chatProvider: ChatProvider?
     private var workspaceObserver: Any?
     private var dequeueObserver: Any?
@@ -1115,14 +1113,10 @@ class FloatingControlBarManager {
         // Reuse the sidebar's ChatProvider (bridge is already warm from app startup)
         self.chatProvider = chatProvider
 
-        // Clear stale follow-up suggestions when ANY new query starts (desktop, phone, etc.)
-        queryStartedCancellable = chatProvider.$queryStartedCount
-            .dropFirst() // skip initial value
-            .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] _ in
-                barWindow?.state.suggestedReplies = []
-                barWindow?.state.suggestedReplyQuestion = ""
-            }
+        // Subscribe to shared provider state (auth, suggested replies, compaction)
+        sharedProviderCancellables = ChatQueryLifecycle.subscribeToProviderState(
+            provider: chatProvider, state: barWindow.state
+        )
 
         barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
             guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
@@ -1275,32 +1269,6 @@ class FloatingControlBarManager {
                     duration: Int(duration),
                     isInitialising: appState.isSavingConversation
                 )
-            }
-
-        // Clear the "Connect Claude" button when auth succeeds.
-        // We observe both isClaudeConnected and isClaudeAuthRequired because
-        // @Published only fires on value *changes* — if isClaudeConnected was
-        // already true (from keychain check at startup), the auth_success handler
-        // setting it to true again won't trigger the subscriber.
-        authCancellable = chatProvider.$isClaudeConnected
-            .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] connected in
-                if connected {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        barWindow?.state.showConnectClaudeButton = false
-                    }
-                }
-            }
-        // Also watch isClaudeAuthRequired going false (covers the case where
-        // isClaudeConnected was already true and doesn't emit a new value)
-        authRequiredCancellable = chatProvider.$isClaudeAuthRequired
-            .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] authRequired in
-                if !authRequired {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        barWindow?.state.showConnectClaudeButton = false
-                    }
-                }
             }
 
         self.window = barWindow
@@ -2019,67 +1987,11 @@ class FloatingControlBarManager {
 
         await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating")
 
-        // Handle errors after sendMessage completes
-        barWindow.state.isAILoading = false
+        // Handle errors, credit exhaustion, auth, paywall, etc.
+        ChatQueryLifecycle.handlePostQuery(provider: provider, state: barWindow.state, sessionKey: "floating")
 
-        // Sync the latest AI message directly from provider.messages to close the
-        // race window where sendMessage has returned but the Combine $messages sink
-        // (scheduled via .receive(on: .main)) hasn't fired yet. Without this,
-        // tool-call-only responses can briefly flash "Failed to get a response".
-        if let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == "floating" }),
-           !latestAI.text.isEmpty || !latestAI.contentBlocks.isEmpty {
-            barWindow.state.currentAIMessage = latestAI
-        }
-
-        // Don't update bar state if the conversation was closed while the query was in flight.
-        // Without this guard, the post-completion code sets showingAIResponse = true and resizes
-        // the window, creating a phantom gray box after the user pressed Esc.
-        guard barWindow.state.showingAIConversation else { return }
-
-        if provider.isClaudeAuthRequired {
-            // Auth needed — show connect button in header and a helpful message
-            barWindow.state.showConnectClaudeButton = true
-            barWindow.state.currentAIMessage = ChatMessage(text: "Please connect your Claude account to continue.", sender: .ai)
-        } else if provider.showCreditExhaustedAlert {
-            provider.showCreditExhaustedAlert = false
-            barWindow.state.showConnectClaudeButton = true
-            barWindow.state.currentAIMessage = ChatMessage(text: "Your free built-in credits have run out. Connect your Claude account to continue.", sender: .ai)
-        } else if let errorText = provider.errorMessage {
-            // Provider reported an error (timeout, bridge crash, etc.)
-            // Show it even if there's partial content — append to existing or create new message
-            let isRateLimit = errorText.contains("usage limit") || errorText.contains("rate limit")
-            let isPersonalMode = provider.bridgeMode == "personal"
-
-            // Show upgrade button for personal mode rate limits
-            if isRateLimit && isPersonalMode {
-                barWindow.state.showUpgradeClaudeButton = true
-            }
-
-            let hasContent = !barWindow.state.aiResponseText.isEmpty || !(barWindow.state.currentAIMessage?.contentBlocks.isEmpty ?? true)
-            if barWindow.state.currentAIMessage != nil && hasContent {
-                barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
-            } else {
-                barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
-            }
-        } else if provider.showPaywall {
-            // Paywall blocked the query — don't show an error message
-            return
-        } else if provider.needsBrowserExtensionSetup || provider.pendingRetryMessage != nil {
-            // Browser extension setup interrupted the query — retry is pending,
-            // don't show a spurious error message.
-            log("FloatingControlBarManager: Suppressing error message — browser setup retry pending")
-        } else if barWindow.state.currentAIMessage == nil ||
-                  (barWindow.state.aiResponseText.isEmpty && (barWindow.state.currentAIMessage?.contentBlocks.isEmpty ?? true)) {
-            // No error message, no text, and no tool call blocks — something else went wrong
-            barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
-        }
-
-        // Ensure the response view is visible and resized (handles the case where
-        // the sink never fired because no streaming data arrived before the error)
-        if !barWindow.state.showingAIResponse {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                barWindow.state.showingAIResponse = true
-            }
+        // Floating bar specific: resize window to fit the response/error
+        if barWindow.state.showingAIResponse {
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
     }
