@@ -76,7 +76,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     var onPopOut: (() -> Void)?
     var onResetSession: (() -> Void)?
     var onConnectClaude: (() -> Void)?
-    var onObserverCardAction: ((Int64, String) -> Void)?
+    var onChatObserverCardAction: ((Int64, String) -> Void)?
     var onChangeWorkspace: (() -> Void)?
 
     override init(
@@ -237,7 +237,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onStopAgent: { [weak self] in self?.onStopAgent?() },
             onPopOut: { [weak self] in self?.onPopOut?() },
             onConnectClaude: { [weak self] in self?.onConnectClaude?() },
-            onObserverCardAction: { [weak self] activityId, action in self?.onObserverCardAction?(activityId, action) },
+            onChatObserverCardAction: { [weak self] activityId, action in self?.onChatObserverCardAction?(activityId, action) },
             onChangeWorkspace: { [weak self] in self?.onChangeWorkspace?() }
         ).environmentObject(state)
 
@@ -1185,8 +1185,8 @@ class FloatingControlBarManager {
             ClaudeAuthWindowController.shared.show(chatProvider: provider)
         }
 
-        barWindow.onObserverCardAction = { [weak chatProvider] activityId, action in
-            chatProvider?.handleObserverCardAction(activityId: activityId, action: action)
+        barWindow.onChatObserverCardAction = { [weak chatProvider] activityId, action in
+            chatProvider?.handleChatObserverCardAction(activityId: activityId, action: action)
         }
 
         barWindow.onChangeWorkspace = { [weak self, weak chatProvider] in
@@ -1682,8 +1682,8 @@ class FloatingControlBarManager {
             provider?.stopAgent()
         }
 
-        window.onObserverCardAction = { [weak provider] activityId, action in
-            provider?.handleObserverCardAction(activityId: activityId, action: action)
+        window.onChatObserverCardAction = { [weak provider] activityId, action in
+            provider?.handleChatObserverCardAction(activityId: activityId, action: action)
         }
 
         // Activate the app so the window can become key and accept keyboard input.
