@@ -312,6 +312,7 @@ struct FloatingControlBarView: View {
                     set: { state.aiInputText = $0 }
                 ),
                 onSend: { message in
+                    state.aiInputText = ""
                     state.displayedQuery = message
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                         state.showingAIResponse = true
