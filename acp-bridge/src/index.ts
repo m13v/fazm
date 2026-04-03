@@ -839,76 +839,76 @@ function buildMeta(systemPrompt?: string, sessionKey?: string): Record<string, u
   return { _meta: meta };
 }
 
-// --- Chat observer session: conversation batching ---
+// --- Observer session: conversation batching ---
 
-const chatObserverBuffer: Array<{ role: string; text: string }> = [];
-const CHAT_OBSERVER_BATCH_SIZE = 10;       // Send batch every N turn pairs
+const observerBuffer: Array<{ role: string; text: string }> = [];
+const OBSERVER_BATCH_SIZE = 10;       // Send batch every N turn pairs
 
-function bufferChatObserverTurn(role: string, text: string): void {
-  chatObserverBuffer.push({ role, text });
-  const turnPairs = Math.floor(chatObserverBuffer.length / 2);
-  logErr(`Chat observer: buffered ${role} turn (${turnPairs}/${CHAT_OBSERVER_BATCH_SIZE} pairs)`);
-  if (turnPairs >= CHAT_OBSERVER_BATCH_SIZE) {
-    flushChatObserverBatch();
+function bufferObserverTurn(role: string, text: string): void {
+  observerBuffer.push({ role, text });
+  const turnPairs = Math.floor(observerBuffer.length / 2);
+  logErr(`Observer: buffered ${role} turn (${turnPairs}/${OBSERVER_BATCH_SIZE} pairs)`);
+  if (turnPairs >= OBSERVER_BATCH_SIZE) {
+    flushObserverBatch();
   }
 }
 
-/** Whether the chat observer is currently processing a batch (prevents overlapping runs) */
-let chatObserverRunning = false;
+/** Whether the observer is currently processing a batch (prevents overlapping runs) */
+let observerRunning = false;
 
-async function flushChatObserverBatch(): Promise<void> {
-  if (chatObserverBuffer.length === 0) return;
-  if (chatObserverRunning) {
-    logErr("Chat observer: already running, will retry after current batch completes");
+async function flushObserverBatch(): Promise<void> {
+  if (observerBuffer.length === 0) return;
+  if (observerRunning) {
+    logErr("Observer: already running, will retry after current batch completes");
     return;
   }
-  const chatObserverSession = sessions.get("observer");
-  if (!chatObserverSession) {
-    logErr("Chat observer: no session found, skipping batch");
+  const observerSession = sessions.get("observer");
+  if (!observerSession) {
+    logErr("Observer: no session found, skipping batch");
     return;
   }
 
-  chatObserverRunning = true;
-  const batch = chatObserverBuffer.splice(0);
+  observerRunning = true;
+  const batch = observerBuffer.splice(0);
   const batchText = batch.map(t => `[${t.role}]: ${t.text}`).join("\n\n");
   const prompt = `Here are the latest conversation turns from the main session:\n\n${batchText}\n\nAnalyze these turns. Be conservative — only save things that are genuinely significant and useful for future conversations. Skip routine queries, transient context, and near-duplicates of things already saved. Each observation in this batch must cover a distinct topic — no overlapping or closely related saves. Read MEMORY.md first to check what's already known, then use your file tools (Read, Write, Edit) to save new memories as individual topic files and update MEMORY.md. Use save_observer_card to surface important observations to the user. If you detect a repeated workflow (3+ times), draft a skill.`;
 
-  // Register a per-session notification handler so chat observer notifications
+  // Register a per-session notification handler so observer notifications
   // don't get swallowed by the main query's handler or vice versa.
-  // The chat observer works silently — we only care about tool calls (which go
+  // The observer works silently — we only care about tool calls (which go
   // through acpResponseHandlers) and the final result. We log tool activity
   // but don't send it to Swift UI.
-  sessionNotificationHandlers.set(chatObserverSession.sessionId, (method, params) => {
+  sessionNotificationHandlers.set(observerSession.sessionId, (method, params) => {
     if (method === "session/update") {
       const p = params as Record<string, unknown>;
       const update = p.update as Record<string, unknown> | undefined;
       const sessionUpdate = update?.sessionUpdate as string | undefined;
-      // Log chat observer tool calls for debugging but don't send to Swift UI
+      // Log observer tool calls for debugging but don't send to Swift UI
       if (sessionUpdate === "tool_call") {
         const title = (update?.title as string) ?? "unknown";
         const status = (update?.status as string) ?? "";
-        logErr(`Chat observer tool: ${title} (${status})`);
+        logErr(`Observer tool: ${title} (${status})`);
       } else if (sessionUpdate === "agent_message_chunk") {
-        // Chat observer text output — silently accumulate for logging only
+        // Observer text output — silently accumulate for logging only
         const content = update?.content as { text?: string } | undefined;
         if (content?.text) {
-          logErr(`Chat observer text: ${content.text.slice(0, 100)}`);
+          logErr(`Observer text: ${content.text.slice(0, 100)}`);
         }
       }
     }
   });
 
   try {
-    logErr(`Chat observer: sending batch of ${batch.length} messages`);
+    logErr(`Observer: sending batch of ${batch.length} messages`);
     send({ type: "observer_status" as any, running: true } as any);
     await acpRequest("session/prompt", {
-      sessionId: chatObserverSession.sessionId,
+      sessionId: observerSession.sessionId,
       prompt: [{ type: "text", text: prompt }],
     });
-    logErr("Chat observer: batch processed successfully");
+    logErr("Observer: batch processed successfully");
 
-    // After chat observer completes, poll observer_activity for new cards
-    // and send them to Swift. The chat observer writes cards via execute_sql.
+    // After observer completes, poll observer_activity for new cards
+    // and send them to Swift. The observer writes cards via execute_sql.
     // Include batch metadata for PostHog tracking
     send({
       type: "observer_poll" as any,
@@ -916,22 +916,22 @@ async function flushChatObserverBatch(): Promise<void> {
       batchTurnCount: Math.floor(batch.length / 2),
     } as any);
   } catch (err) {
-    logErr(`Chat observer: batch failed: ${err}`);
+    logErr(`Observer: batch failed: ${err}`);
   } finally {
-    sessionNotificationHandlers.delete(chatObserverSession.sessionId);
-    chatObserverRunning = false;
+    sessionNotificationHandlers.delete(observerSession.sessionId);
+    observerRunning = false;
     send({ type: "observer_status" as any, running: false } as any);
 
     // If new messages accumulated while we were running, flush again
-    if (chatObserverBuffer.length > 0) {
-      setTimeout(() => flushChatObserverBatch(), 1000);
+    if (observerBuffer.length > 0) {
+      setTimeout(() => flushObserverBatch(), 1000);
     }
   }
 }
 
 // --- Session pre-warming ---
 
-const DEFAULT_MODEL = "claude-opus-4-6";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const SONNET_MODEL = "claude-sonnet-4-6";
 
 interface WarmupSessionConfig {
@@ -1198,7 +1198,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // drop the prompt (broken session state after cancel mid-tool-call). Race the
       // prompt against a 30s timer — if no notifications arrive, assume the session
       // is dead and throw so the outer retry logic can create a fresh session.
-      const TTFT_WATCHDOG_MS = 5_000;
+      const TTFT_WATCHDOG_MS = 30_000;
       let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
       let watchdogReject: ((err: Error) => void) | null = null;
 
@@ -1249,9 +1249,9 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
 
         // Buffer conversation turns for the observer session (skip if this IS the observer)
         if (sessionKey !== "observer" && sessions.has("observer")) {
-          bufferChatObserverTurn("user", fullPrompt);
+          bufferObserverTurn("user", fullPrompt);
           if (fullText.trim()) {
-            bufferChatObserverTurn("assistant", fullText);
+            bufferObserverTurn("assistant", fullText);
           }
         }
 
@@ -1306,9 +1306,9 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           pendingTools.length = 0;
 
           if (sessionKey !== "observer" && sessions.has("observer")) {
-            bufferChatObserverTurn("user", fullPrompt);
+            bufferObserverTurn("user", fullPrompt);
             if (fullText.trim()) {
-              bufferChatObserverTurn("assistant", fullText);
+              bufferObserverTurn("assistant", fullText);
             }
           }
 
