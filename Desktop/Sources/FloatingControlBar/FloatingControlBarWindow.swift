@@ -1909,39 +1909,22 @@ class FloatingControlBarManager {
             }
         }
 
-        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotPath != nil, queryText: message)
-
-        // Track referral progress for referred users
-        if ReferralService.shared.wasReferred && !ReferralService.shared.isReferralCompleted {
-            Task { await ReferralService.shared.validateFloatingBarMessage() }
-        }
-
-        // Provider is already initialized by ViewModelContainer at app launch
-
         // Record message count before sending so we can detect the new AI response
-        // in a shared provider that may already have many messages
         let messageCountBefore = provider.messages.count
 
-        // Wire up suggested replies callback before sending
-        barWindow.state.suggestedReplies = []
-        barWindow.state.suggestedReplyQuestion = ""
-        ChatToolExecutor.onQuickReplyOptions = { [weak barWindow] question, options in
-            Task { @MainActor in
-                barWindow?.state.suggestedReplyQuestion = question
-                barWindow?.state.suggestedReplies = options
+        // Shared pre-query setup: suggested replies, callbacks, analytics, referral
+        ChatQueryLifecycle.prepareForQuery(
+            state: barWindow.state,
+            message: message,
+            hasScreenshot: screenshotPath != nil,
+            sendFollowUp: { [weak self, weak barWindow, weak chatProvider] message in
+                guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
+                Task { @MainActor in
+                    log("Auto-sending follow-up: \(message)")
+                    await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+                }
             }
-        }
-
-        // Wire up auto-follow-up callback (e.g. after OAuth completes in browser)
-        ChatToolExecutor.onSendFollowUp = { [weak self, weak barWindow, weak chatProvider] message in
-            guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
-            Task { @MainActor in
-                log("Auto-sending follow-up: \(message)")
-                barWindow.state.suggestedReplies = []
-                barWindow.state.suggestedReplyQuestion = ""
-                await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
-            }
-        }
+        )
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
@@ -1975,14 +1958,6 @@ class FloatingControlBarManager {
                 } else {
                     barWindow.state.isAILoading = false
                 }
-            }
-
-        // Observe compaction status
-        compactCancellable?.cancel()
-        compactCancellable = provider.$isCompacting
-            .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] isCompacting in
-                barWindow?.state.isCompacting = isCompacting
             }
 
         await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating")
