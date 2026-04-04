@@ -1367,8 +1367,11 @@ private struct FloatingHintModifier: ViewModifier {
                         )
                         .fixedSize()
                         .allowsHitTesting(false)
-                        .alignmentGuide(.top) { d in d[.bottom] }
-                        .offset(y: -6)
+                        // Place the hint below the button: shift down by the
+                        // button's height plus a small gap. Overlay is inside
+                        // the response view's rounded clip, so drawing below
+                        // the tiny header row avoids the top-edge clip entirely.
+                        .offset(y: 18)
                         .transition(.opacity)
                         .zIndex(1000)
                 }
