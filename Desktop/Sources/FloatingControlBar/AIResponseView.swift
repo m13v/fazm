@@ -1228,59 +1228,6 @@ class ModelMenuTarget: NSObject {
     }
 }
 
-// MARK: - Scroll Wheel Detector
-
-/// Detects user scroll-wheel / trackpad gestures on the enclosing NSScrollView
-/// and fires a callback immediately — before the scroll position settles.
-/// This wins the race against programmatic scrolls during streaming.
-private struct ScrollWheelDetector: NSViewRepresentable {
-    let onUserScrollUp: () -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            context.coordinator.install(for: view)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onUserScrollUp: onUserScrollUp)
-    }
-
-    class Coordinator: NSObject {
-        let onUserScrollUp: () -> Void
-        private var monitor: Any?
-
-        init(onUserScrollUp: @escaping () -> Void) {
-            self.onUserScrollUp = onUserScrollUp
-        }
-
-        func install(for view: NSView) {
-            let targetWindow = view.window
-
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                guard let self = self else { return event }
-                // Scope to our window (the floating bar)
-                guard event.window == targetWindow else { return event }
-                // deltaY > 0 means scrolling up (towards earlier content)
-                if event.scrollingDeltaY > 0 {
-                    self.onUserScrollUp()
-                }
-                return event
-            }
-        }
-
-        deinit {
-            if let monitor = monitor {
-                NSEvent.removeMonitor(monitor)
-            }
-        }
-    }
-}
-
 // MARK: - Floating Hint (custom tooltip)
 
 /// Shows a small floating label below the view after a short hover delay.
