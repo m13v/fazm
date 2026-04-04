@@ -588,6 +588,17 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Apply a deferred bridge restart that was requested while a query was in-flight
+    /// (e.g., voice toggle changed mid-query).
+    private func applyPendingBridgeRestart() async {
+        guard pendingBridgeRestart else { return }
+        pendingBridgeRestart = false
+        guard acpBridgeStarted else { return }
+        log("ChatProvider: applying deferred bridge restart (voice setting changed mid-query)")
+        await acpBridge.stop()
+        acpBridgeStarted = false
+    }
+
     /// Apply a deferred bridge mode switch that was requested while a query was in-flight.
     private func applyPendingBridgeModeSwitch() async {
         guard let pending = pendingBridgeModeSwitch else { return }
@@ -2530,7 +2541,7 @@ class ChatProvider: ObservableObject {
             isSending = false
             isStopping = false
 
-
+            await applyPendingBridgeRestart()
             await applyPendingBridgeModeSwitch()
             if stoppedForBrowserSetup {
                 // Keep pendingRetryMessage so retryPendingQuery() can re-send it
@@ -2766,6 +2777,7 @@ class ChatProvider: ObservableObject {
         let wasStopped = isStopping
         isSending = false
         isStopping = false
+        await applyPendingBridgeRestart()
         await applyPendingBridgeModeSwitch()
 
         // If messages are queued, chain the next one as a follow-up query.
