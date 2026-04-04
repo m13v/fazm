@@ -84,74 +84,36 @@ struct AIResponseView: View {
                                 .id("voiceFollowUp")
                         }
 
-                        // Anchor for auto-scroll
+                        // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
                         Color.clear.frame(height: 1).id("bottom")
-                            .background(
-                                GeometryReader { geo -> Color in
-                                    let bottomY = geo.frame(in: .named("chatScroll")).maxY
-                                    let atBottom = bottomY >= 0 && bottomY <= scrollViewHeight + 60
-                                    if atBottom && userHasScrolledUp {
-                                        DispatchQueue.main.async {
-                                            userHasScrolledUp = false
-                                        }
-                                    }
-                                    return Color.clear
-                                }
-                            )
                     }
                 }
-                .coordinateSpace(name: "chatScroll")
-                .background(
-                    GeometryReader { geo -> Color in
-                        let h = geo.size.height
-                        if h != scrollViewHeight {
-                            DispatchQueue.main.async { scrollViewHeight = h }
-                        }
-                        return Color.clear
-                    }
-                )
-                .overlay {
-                    ScrollWheelDetector {
-                        userHasScrolledUp = true
-                    }
-                    .allowsHitTesting(false)
-                }
-                .onChange(of: currentMessage?.text) {
-                    // Streaming updates arrive every few ms. Animating each one
-                    // causes overlapping animations to fight as content reflows,
-                    // which looks like the scroll jumping back to earlier lines.
-                    // Unanimated scrollTo calls coalesce per frame and track the
-                    // growing bottom smoothly.
-                    guard !userHasScrolledUp else { return }
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
+                // Pin scroll to the bottom of content. When content grows or
+                // reflows (markdown re-layout during streaming), SwiftUI keeps
+                // the bottom edge of the content fixed to the bottom of the
+                // viewport in the same layout transaction — no scrollTo races,
+                // no scrollbar thumb jumping. If the user scrolls up manually,
+                // their offset-from-bottom stays stable, so they aren't yanked.
+                .defaultScrollAnchor(.bottom)
                 .onChange(of: chatHistory.count) {
-                    // New exchange added — always scroll to bottom and reset
-                    userHasScrolledUp = false
+                    // New exchange added — force scroll to bottom even if user
+                    // had scrolled up to read earlier history.
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
                 .onChange(of: state.pendingChatObserverExchanges.count) {
-                    // Chat observer card arrived — scroll to show it
-                    if !userHasScrolledUp {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("bottom", anchor: .bottom)
-                        }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
                 .onChange(of: isLoading) {
-                    // When loading finishes, flush any pending chat observer cards into chat history
                     if !isLoading {
                         state.flushPendingChatObserverExchanges()
                     }
                 }
-                .onAppear {
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
                 .onChange(of: isVoiceFollowUp) {
                     if isVoiceFollowUp {
-                        userHasScrolledUp = false
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("voiceFollowUp", anchor: .bottom)
                         }
@@ -203,7 +165,6 @@ struct AIResponseView: View {
         }
         .onChange(of: isLoading) {
             if isLoading {
-                userHasScrolledUp = false
                 hangTask?.cancel()
                 hangTask = Task { [onStopAgent] in
                     // If no streaming data arrives within 60s, the query is failing silently
@@ -935,7 +896,6 @@ struct AIResponseView: View {
             // Agent is busy — queue the message instead of interrupting
             onEnqueueMessage?(trimmed)
         } else {
-            userHasScrolledUp = false
             onSendFollowUp?(trimmed)
         }
     }
