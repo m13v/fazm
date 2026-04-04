@@ -1117,7 +1117,8 @@ class ChatProvider: ObservableObject {
             // session in the background so the next query doesn't pay warmup latency.
             // We call acpBridge directly (not self.resetSession) because the latter also
             // wipes `messages`, which must stay alive for the detached window's subscriber.
-            acpBridge.resetSession(key: "floating")
+            let bridge = acpBridge
+            Task { await bridge.resetSession(key: "floating") }
         }
     }
 
