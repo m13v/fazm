@@ -1372,7 +1372,8 @@ private struct FloatingHintModifier: ViewModifier {
                         )
                         .fixedSize()
                         .allowsHitTesting(false)
-                        .alignmentGuide(.top) { d in d[.bottom] + 4 }
+                        .alignmentGuide(.top) { d in d[.bottom] }
+                        .offset(y: -6)
                         .transition(.opacity)
                         .zIndex(1000)
                 }
