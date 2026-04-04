@@ -1035,24 +1035,31 @@ struct MessageWithCopyButton<Content: View>: View {
 
 struct ModelToggleButton: View {
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
-    @State private var isHovered = false
 
     var body: some View {
-        Button {
-            let models = ShortcutSettings.availableModels
-            if let idx = models.firstIndex(where: { $0.id == shortcutSettings.selectedModel }) {
-                shortcutSettings.selectedModel = models[(idx + 1) % models.count].id
-            } else {
-                shortcutSettings.selectedModel = models[0].id
+        Menu {
+            ForEach(ShortcutSettings.availableModels, id: \.id) { model in
+                Button {
+                    shortcutSettings.selectedModel = model.id
+                } label: {
+                    if shortcutSettings.selectedModel == model.id {
+                        Label(model.label, systemImage: "checkmark")
+                    } else {
+                        Text(model.label)
+                    }
+                }
             }
         } label: {
-            Text(shortcutSettings.selectedModelShortLabel)
-                .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(.secondary)
+            HStack(spacing: 2) {
+                Text(shortcutSettings.selectedModelShortLabel)
+                    .scaledFont(size: 11, weight: .medium)
+                Image(systemName: "chevron.down")
+                    .scaledFont(size: 7, weight: .medium)
+            }
+            .foregroundColor(.secondary)
         }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 }
 
