@@ -3,6 +3,7 @@ import SwiftUI
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
@@ -321,6 +322,8 @@ struct AIResponseView: View {
             }
 
             Spacer()
+
+            ModelToggleButton()
 
             VoiceMuteButton()
 
