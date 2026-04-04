@@ -206,13 +206,4 @@ class FloatingControlBarState: NSObject, ObservableObject {
         chatHistory = exchanges
     }
 
-    // Model selection
-    @Published var selectedModel: String = "claude-opus-4-6"
-
-    /// Available models for the floating bar picker
-    static let availableModels: [(id: String, label: String)] = [
-        ("claude-opus-4-6", "Opus"),
-        ("claude-sonnet-4-6", "Sonnet"),
-    ]
-
 }
