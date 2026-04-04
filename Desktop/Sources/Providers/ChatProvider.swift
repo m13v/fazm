@@ -320,6 +320,9 @@ class ChatProvider: ObservableObject {
     @Published var isLoading = false
     @Published var isSending = false
     @Published var isStopping = false
+    /// When true, the bridge will be restarted after the current query completes
+    /// (e.g., voice toggle changed mid-query).
+    private var pendingBridgeRestart = false
     /// Incremented each time a new query starts (from any source: desktop, phone, etc.)
     @Published var queryStartedCount = 0
     @Published var isClearing = false
@@ -780,6 +783,13 @@ class ChatProvider: ObservableObject {
                     // session with the updated system prompt (voice instructions added/removed).
                     UserDefaults.standard.removeObject(forKey: self.floatingSessionIdKey)
                     guard self.acpBridgeStarted else { return }
+                    // If a query is in-flight, defer the bridge restart until the query
+                    // completes. Stopping mid-query kills the agent task (BridgeError.stopped).
+                    if self.isSending {
+                        log("ChatProvider: Voice response setting changed, deferring bridge restart (query in-flight)")
+                        self.pendingBridgeRestart = true
+                        return
+                    }
                     log("ChatProvider: Voice response setting changed, stopping bridge (will restart on next query)")
                     await self.acpBridge.stop()
                     self.acpBridgeStarted = false
