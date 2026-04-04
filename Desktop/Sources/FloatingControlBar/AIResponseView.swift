@@ -9,8 +9,6 @@ struct AIResponseView: View {
     @State private var isQuestionExpanded = false
     @State private var followUpText: String = ""
     @State private var preVoiceFollowUpText: String = ""
-    @State private var userHasScrolledUp: Bool = false
-    @State private var scrollViewHeight: CGFloat = 0
     @State private var followUpTextHeight: CGFloat = 36
     @State private var isHanging = false
     @State private var hangTask: Task<Void, Never>?
