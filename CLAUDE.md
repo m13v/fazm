@@ -29,6 +29,32 @@ Run the full tutorial programmatically (skips overlay, auto-sends all 3 steps). 
 xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testTutorial"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 ```
 
+### Programmatic Control (com.fazm.control)
+
+Full programmatic control of the floating bar, replacing the need for macOS accessibility/MCP automation. Send a `com.fazm.control` distributed notification with `["command": "<cmd>"]` in userInfo.
+
+**Get state** (writes JSON to `/tmp/fazm-control-state.json`):
+```bash
+xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.control"), object: nil, userInfo: ["command": "getState"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+cat /tmp/fazm-control-state.json
+```
+
+**Supported commands:**
+| Command | Description |
+|---------|-------------|
+| `getState` | Writes full state JSON to `/tmp/fazm-control-state.json` |
+| `newChat` | Starts a new chat session |
+| `popOut` | Pops conversation out to a detached window |
+| `setModel:<id>` | Sets AI model (e.g. `setModel:claude-sonnet-4-6` or `setModel:claude-opus-4-6`) |
+| `toggleVoice` | Toggles voice response (TTS) on/off |
+| `setVoice:on` / `setVoice:off` | Explicitly sets voice response |
+| `show` / `hide` / `toggle` | Controls floating bar visibility |
+| `openInput` | Opens the AI input field |
+| `sendFollowUp:<text>` | Sends a follow-up message in active conversation |
+| `setWorkspace:<path>` | Sets the working directory |
+
+State JSON includes: `model`, `modelLabel`, `voiceEnabled`, `workspace`, `isVisible`, `showingAIConversation`, `showingAIResponse`, `isAILoading`, `isVoiceListening`, `chatHistoryCount`, `displayedQuery`, `queueCount`, `isTutorialActive`, `availableModels`, and optionally `currentMessagePreview`/`isStreaming`.
+
 ### SQLite Database & Active User
 Messages are stored in `~/Library/Application Support/Fazm/users/<UUID>/fazm.db` (both prod and dev share this directory). To find the active user for the currently running build:
 
