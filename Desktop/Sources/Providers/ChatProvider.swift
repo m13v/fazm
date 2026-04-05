@@ -2295,6 +2295,7 @@ class ChatProvider: ObservableObject {
         var toolStartTimes: [String: Date] = [:]
         var toolResults: [String: String] = [:]  // Track last result per tool for success/failure
         var activeBrowserToolCount = 0
+        var retryAfterModelFallback = false
 
         do {
             // Use the system prompt built at warmup. The ACP bridge applies it only
@@ -2810,6 +2811,7 @@ class ChatProvider: ObservableObject {
                 // Fall back to builtin mode and auto-retry the query.
                 log("ChatProvider: model access error in personal mode, falling back to builtin: \(msg)")
                 pendingBridgeModeSwitch = "builtin"
+                retryAfterModelFallback = true
                 // pendingRetryMessage is already set from sendMessage() — keep it for auto-retry
                 errorMessage = nil
             } else {
@@ -2822,6 +2824,14 @@ class ChatProvider: ObservableObject {
         isStopping = false
         await applyPendingBridgeRestart()
         await applyPendingBridgeModeSwitch()
+
+        // Auto-retry the failed query after a model access fallback (personal → builtin)
+        if retryAfterModelFallback, let retryText = pendingRetryMessage {
+            pendingRetryMessage = nil
+            log("ChatProvider: auto-retrying query after model access fallback to builtin")
+            await sendMessage(retryText)
+            return
+        }
 
         // If messages are queued, chain the next one as a follow-up query.
         // Skip chaining if the user explicitly stopped — queue stays visible for manual use.
