@@ -1348,6 +1348,16 @@ class ChatProvider: ObservableObject {
         return false
     }
 
+    /// Check if an error indicates the user's personal account cannot access the requested model.
+    /// This happens when CLI credentials exist but the account/plan doesn't support the model.
+    static func isModelAccessError(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        if lower.contains("may not exist") && lower.contains("not have access") { return true }
+        if lower.contains("model") && lower.contains("not found") { return true }
+        if lower.contains("model") && lower.contains("not available") { return true }
+        return false
+    }
+
     // MARK: - Load Context
 
     // MARK: - Load AI User Profile
@@ -2791,6 +2801,16 @@ class ChatProvider: ObservableObject {
                 log("ChatProvider: auth-related error in personal mode, re-triggering sign-in: \(msg)")
                 isClaudeAuthRequired = true
                 // Keep pendingRetryMessage so the query retries after auth
+                errorMessage = nil
+            } else if bridgeMode == "personal",
+                      let bridgeError = error as? BridgeError,
+                      case .agentError(let msg) = bridgeError,
+                      Self.isModelAccessError(msg) {
+                // Personal account can't access the model (e.g. CLI creds without claude-sonnet-4-6).
+                // Fall back to builtin mode and auto-retry the query.
+                log("ChatProvider: model access error in personal mode, falling back to builtin: \(msg)")
+                pendingBridgeModeSwitch = "builtin"
+                // pendingRetryMessage is already set from sendMessage() — keep it for auto-retry
                 errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
