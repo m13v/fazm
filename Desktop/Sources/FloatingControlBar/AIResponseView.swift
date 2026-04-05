@@ -89,9 +89,18 @@ struct AIResponseView: View {
                             }
 
                             // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
-                            Color.clear.frame(height: 1).id("bottom")
+                            GeometryReader { geo in
+                                Color.clear
+                                    .preference(
+                                        key: BottomVisiblePreference.self,
+                                        value: geo.frame(in: .named("chatScroll")).maxY
+                                    )
+                            }
+                            .frame(height: 1)
+                            .id("bottom")
                         }
                     }
+                    .coordinateSpace(name: "chatScroll")
                     // Pin scroll to the bottom of content. When content grows or
                     // reflows (markdown re-layout during streaming), SwiftUI keeps
                     // the bottom edge of the content fixed to the bottom of the
@@ -99,16 +108,15 @@ struct AIResponseView: View {
                     // no scrollbar thumb jumping. If the user scrolls up manually,
                     // their offset-from-bottom stays stable, so they aren't yanked.
                     .defaultScrollAnchor(.bottom)
-                    .background(
-                        ScrollPositionDetector { atBottom in
-                            isUserAtBottom = atBottom
-                            if atBottom {
-                                shouldFollowContent = true
-                            } else if !isProgrammaticScroll {
-                                shouldFollowContent = false
-                            }
+                    .onPreferenceChange(BottomVisiblePreference.self) { bottomY in
+                        guard bottomY < 10000 else { return }
+                        let atBottom = bottomY < 800
+                        if atBottom {
+                            shouldFollowContent = true
+                        } else if !isProgrammaticScroll {
+                            shouldFollowContent = false
                         }
-                    )
+                    }
                     .onChange(of: chatHistory.count) {
                         shouldFollowContent = true
                         scrollToBottom(proxy: proxy)
@@ -1360,80 +1368,10 @@ extension View {
 
 // MARK: - Scroll Position Detection
 
-/// Detects whether the enclosing NSScrollView is scrolled to the bottom.
-/// Placed as a `.background()` on the ScrollView so it shares the same NSScrollView.
-private struct ScrollPositionDetector: NSViewRepresentable {
-    let onScrollPositionChange: (Bool) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        context.coordinator.onScrollPositionChange = onScrollPositionChange
-        DispatchQueue.main.async {
-            context.coordinator.install(for: view)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.onScrollPositionChange = onScrollPositionChange
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    class Coordinator: NSObject {
-        var onScrollPositionChange: ((Bool) -> Void)?
-        private var observation: NSObjectProtocol?
-        private var lastReportedValue: Bool?
-        private var coalesceWorkItem: DispatchWorkItem?
-        private weak var scrollView: NSScrollView?
-
-        func install(for view: NSView) {
-            guard let sv = findScrollView(from: view) else { return }
-            scrollView = sv
-            sv.contentView.postsBoundsChangedNotifications = true
-            observation = NotificationCenter.default.addObserver(
-                forName: NSView.boundsDidChangeNotification,
-                object: sv.contentView,
-                queue: .main
-            ) { [weak self] _ in
-                self?.checkScrollPosition()
-            }
-            // Initial check
-            checkScrollPosition()
-        }
-
-        private func findScrollView(from view: NSView) -> NSScrollView? {
-            var current: NSView? = view
-            while let v = current {
-                if let sv = v as? NSScrollView { return sv }
-                current = v.superview
-            }
-            return nil
-        }
-
-        private func checkScrollPosition() {
-            guard let sv = scrollView, let docView = sv.documentView else { return }
-            let clipBounds = sv.contentView.bounds
-            let documentHeight = docView.frame.height
-            let visibleMaxY = clipBounds.origin.y + clipBounds.height
-            let threshold: CGFloat = 80
-            let atBottom = visibleMaxY >= documentHeight - threshold
-
-            guard atBottom != lastReportedValue else { return }
-            coalesceWorkItem?.cancel()
-            let work = DispatchWorkItem { [weak self] in
-                self?.lastReportedValue = atBottom
-                self?.onScrollPositionChange?(atBottom)
-            }
-            coalesceWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
-        }
-
-        deinit {
-            if let obs = observation {
-                NotificationCenter.default.removeObserver(obs)
-            }
-            coalesceWorkItem?.cancel()
-        }
+/// Preference key that carries the bottom anchor's maxY in the scroll view coordinate space.
+private struct BottomVisiblePreference: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
