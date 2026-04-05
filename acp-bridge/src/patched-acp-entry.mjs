@@ -95,6 +95,33 @@ ClaudeAcpAgent.prototype.createSession = async function (params, creationOpts) {
                 summary: item.value.summary ?? "",
               },
             });
+          } else if (subtype === "api_retry") {
+            // Forward API retry info with HTTP status code and typed error category
+            const errorStatus = item.value.error_status ?? null;
+            const errorType = item.value.error ?? "unknown";
+            console.error(
+              `[patched-acp] API retry: attempt=${item.value.attempt}/${item.value.max_retries}, ` +
+              `httpStatus=${errorStatus}, error=${errorType}, delay=${item.value.retry_delay_ms}ms`
+            );
+            // Store the last error info on the session for the prompt() patch to pick up
+            session._lastApiError = {
+              httpStatus: errorStatus,
+              errorType,
+              attempt: item.value.attempt ?? 0,
+              maxRetries: item.value.max_retries ?? 0,
+              retryDelayMs: item.value.retry_delay_ms ?? 0,
+            };
+            await acpClient.sessionUpdate({
+              sessionId: sid,
+              update: {
+                sessionUpdate: "api_retry",
+                httpStatus: errorStatus,
+                errorType,
+                attempt: item.value.attempt ?? 0,
+                maxRetries: item.value.max_retries ?? 0,
+                retryDelayMs: item.value.retry_delay_ms ?? 0,
+              },
+            });
           }
         } catch (e) {
           console.error(`[patched-acp] Forward system/${subtype}: ${e}`);
@@ -213,11 +240,19 @@ ClaudeAcpAgent.prototype.prompt = async function (params) {
         cachedWriteTokens: cacheWrite,
         totalTokens,
       },
-      _meta: { costUsd },
+      _meta: {
+        costUsd,
+        terminalReason: session._lastTerminalReason ?? null,
+        lastApiError: session._lastApiError ?? null,
+        errors: session._lastErrors ?? null,
+      },
     };
     delete session._lastCostUsd;
     delete session._lastUsage;
     delete session._lastModelUsage;
+    delete session._lastTerminalReason;
+    delete session._lastApiError;
+    delete session._lastErrors;
     return augmented;
   }
 
