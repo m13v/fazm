@@ -59,69 +59,98 @@ struct AIResponseView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Previous chat exchanges — regular ones rendered individually
-                        ForEach(regularExchanges) { exchange in
-                            chatExchangeView(exchange)
+                ZStack(alignment: .bottom) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Previous chat exchanges — regular ones rendered individually
+                            ForEach(regularExchanges) { exchange in
+                                chatExchangeView(exchange)
+                            }
+                            // Chat observer-only exchanges consolidated into one stack
+                            consolidatedHistoryChatObserverCards
+
+                            // Current question (hidden when empty, e.g. tutorial guide messages or history-only mode)
+                            if !userInput.isEmpty {
+                                questionBar
+                            }
+
+                            // Current response (hidden when just showing history with no active query)
+                            if !userInput.isEmpty || currentMessage != nil {
+                                currentContentView
+                            }
+
+                            // Chat observer cards that arrived while the current query was streaming
+                            consolidatedPendingChatObserverCards
+
+                            // Voice follow-up indicator (shown inline when PTT is active during conversation)
+                            if isVoiceFollowUp {
+                                voiceFollowUpView
+                                    .id("voiceFollowUp")
+                            }
+
+                            // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
+                            Color.clear.frame(height: 1).id("bottom")
                         }
-                        // Chat observer-only exchanges consolidated into one stack
-                        consolidatedHistoryChatObserverCards
-
-                        // Current question (hidden when empty, e.g. tutorial guide messages or history-only mode)
-                        if !userInput.isEmpty {
-                            questionBar
+                    }
+                    // Pin scroll to the bottom of content. When content grows or
+                    // reflows (markdown re-layout during streaming), SwiftUI keeps
+                    // the bottom edge of the content fixed to the bottom of the
+                    // viewport in the same layout transaction — no scrollTo races,
+                    // no scrollbar thumb jumping. If the user scrolls up manually,
+                    // their offset-from-bottom stays stable, so they aren't yanked.
+                    .defaultScrollAnchor(.bottom)
+                    .background(
+                        ScrollPositionDetector { atBottom in
+                            isUserAtBottom = atBottom
+                            if atBottom {
+                                shouldFollowContent = true
+                            } else if !isProgrammaticScroll {
+                                shouldFollowContent = false
+                            }
                         }
-
-                        // Current response (hidden when just showing history with no active query)
-                        if !userInput.isEmpty || currentMessage != nil {
-                            currentContentView
+                    )
+                    .onChange(of: chatHistory.count) {
+                        shouldFollowContent = true
+                        scrollToBottom(proxy: proxy)
+                    }
+                    .onChange(of: state.pendingChatObserverExchanges.count) {
+                        shouldFollowContent = true
+                        scrollToBottom(proxy: proxy)
+                    }
+                    .onChange(of: isLoading) {
+                        if !isLoading {
+                            state.flushPendingChatObserverExchanges()
                         }
-
-                        // Chat observer cards that arrived while the current query was streaming
-                        consolidatedPendingChatObserverCards
-
-                        // Voice follow-up indicator (shown inline when PTT is active during conversation)
+                    }
+                    .onChange(of: isVoiceFollowUp) {
                         if isVoiceFollowUp {
-                            voiceFollowUpView
-                                .id("voiceFollowUp")
+                            shouldFollowContent = true
+                            scrollToBottom(proxy: proxy, anchor: "voiceFollowUp")
                         }
+                    }
 
-                        // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
-                        Color.clear.frame(height: 1).id("bottom")
-                    }
-                }
-                // Pin scroll to the bottom of content. When content grows or
-                // reflows (markdown re-layout during streaming), SwiftUI keeps
-                // the bottom edge of the content fixed to the bottom of the
-                // viewport in the same layout transaction — no scrollTo races,
-                // no scrollbar thumb jumping. If the user scrolls up manually,
-                // their offset-from-bottom stays stable, so they aren't yanked.
-                .defaultScrollAnchor(.bottom)
-                .onChange(of: chatHistory.count) {
-                    // New exchange added — force scroll to bottom even if user
-                    // had scrolled up to read earlier history.
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-                .onChange(of: state.pendingChatObserverExchanges.count) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-                .onChange(of: isLoading) {
-                    if !isLoading {
-                        state.flushPendingChatObserverExchanges()
-                    }
-                }
-                .onChange(of: isVoiceFollowUp) {
-                    if isVoiceFollowUp {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("voiceFollowUp", anchor: .bottom)
+                    // Scroll-to-bottom overlay button
+                    if !shouldFollowContent && !chatHistory.isEmpty {
+                        Button {
+                            shouldFollowContent = true
+                            scrollToBottom(proxy: proxy)
+                        } label: {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(FazmColors.purplePrimary)
+                                .background(
+                                    Circle()
+                                        .fill(FazmColors.backgroundPrimary)
+                                        .frame(width: 24, height: 24)
+                                )
+                                .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
                         }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 8)
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
+                .animation(.easeInOut(duration: 0.2), value: shouldFollowContent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -231,6 +260,16 @@ struct AIResponseView: View {
     @State private var connectClaudePulse = false
     @State private var showWorkspaceChangeConfirmation = false
     @State private var showWorkspaceInfo = false
+
+    private func scrollToBottom(proxy: ScrollViewProxy, anchor: String = "bottom") {
+        isProgrammaticScroll = true
+        withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo(anchor, anchor: .bottom)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            isProgrammaticScroll = false
+        }
+    }
 
     private var isHomeDirectory: Bool {
         let home = NSHomeDirectory()
