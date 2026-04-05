@@ -3,7 +3,7 @@ import SwiftUI
 
 /// NSTextView subclass that reports its layout height as intrinsicContentSize
 /// so SwiftUI can size the container correctly.
-private class AutoSizingTextView: NSTextView {
+class AutoSizingTextView: NSTextView {
     override var intrinsicContentSize: NSSize {
         guard let layoutManager = layoutManager, let textContainer = textContainer else {
             return super.intrinsicContentSize
