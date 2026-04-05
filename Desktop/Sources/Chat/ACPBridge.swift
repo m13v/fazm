@@ -521,7 +521,19 @@ actor ACPBridge {
     }
   }
 
-  // MARK: - Session Reset
+  // MARK: - Session Transfer & Reset
+
+  /// Re-key a session in the bridge's in-memory map so the next query under
+  /// the new key finds it immediately (no resume round-trip needed).
+  func transferSession(fromKey: String, toKey: String) {
+    guard isRunning else { return }
+    let msg: [String: Any] = ["type": "transferSession", "fromKey": fromKey, "toKey": toKey]
+    if let data = try? JSONSerialization.data(withJSONObject: msg),
+      let str = String(data: data, encoding: .utf8)
+    {
+      sendLine(str)
+    }
+  }
 
   /// Invalidate a session so the next query creates a fresh one (no history).
   func resetSession(key: String) {
