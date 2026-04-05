@@ -635,15 +635,12 @@ struct AIResponseView: View {
         HStack(alignment: .top, spacing: 4) {
             Group {
                 if isQuestionExpanded {
-                    ScrollView {
-                        SelectableText(
-                            text: userInput,
-                            fontSize: 13,
-                            textColor: NSColor(FazmColors.overlayForeground)
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 120)
+                    SelectableText(
+                        text: userInput,
+                        fontSize: 13,
+                        textColor: NSColor(FazmColors.overlayForeground)
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     SelectableText(
                         text: userInput,
