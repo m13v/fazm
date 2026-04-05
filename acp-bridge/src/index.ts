@@ -542,6 +542,8 @@ let activeAuthPromise: Promise<void> | null = null;
 let activeOAuthFlow: OAuthFlowHandle | null = null;
 /** Last warmup config received from Swift — replayed after OAuth subprocess restart */
 let lastWarmupConfig: { cwd?: string; sessions?: WarmupSessionConfig[] } | null = null;
+/** Last api_retry info from the patched ACP entry point (carries HTTP status + typed error) */
+let lastApiRetry: { httpStatus: number | null; errorType: string; attempt: number; maxRetries: number } | null = null;
 
 // --- Auth flow (OAuth) ---
 
