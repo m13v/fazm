@@ -206,7 +206,7 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
-        self.selectedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? "claude-opus-4-6"
+        self.selectedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? "claude-sonnet-4-6"
         if let saved = UserDefaults.standard.string(forKey: "shortcut_floatingBarCompactness"),
            let mode = FloatingBarCompactness(rawValue: saved) {
             self.floatingBarCompactness = mode
