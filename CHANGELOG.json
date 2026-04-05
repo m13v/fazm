@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed error messages not showing when Claude credits are exhausted"
+  ],
   "releases": [
     {
       "version": "2.0.7",
