@@ -233,6 +233,16 @@ export interface RateLimitMessage {
   surpassedThreshold: number | null; // 0-1 float
 }
 
+/** API retry info from SDK (carries HTTP status code + typed error category) */
+export interface ApiRetryMessage {
+  type: "api_retry";
+  httpStatus: number | null;   // Actual HTTP status (402, 429, 500, etc.) or null for connection errors
+  errorType: string;           // "billing_error" | "rate_limit" | "authentication_failed" | "server_error" | "invalid_request" | "unknown"
+  attempt: number;
+  maxRetries: number;
+  retryDelayMs: number;
+}
+
 /** Chat observer session completed a batch — Swift should poll observer_activity for new cards */
 export interface ChatObserverPollMessage {
   type: "observer_poll";
@@ -260,4 +270,5 @@ export type OutboundMessage =
   | ToolProgressMessage
   | ToolUseSummaryMessage
   | RateLimitMessage
+  | ApiRetryMessage
   | ChatObserverPollMessage;
