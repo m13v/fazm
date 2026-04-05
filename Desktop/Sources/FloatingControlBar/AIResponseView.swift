@@ -640,6 +640,7 @@ struct AIResponseView: View {
                         fontSize: 13,
                         textColor: NSColor(FazmColors.overlayForeground)
                     )
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     SelectableText(
