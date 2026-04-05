@@ -181,6 +181,7 @@ actor ACPBridge {
     case toolProgress(toolUseId: String, toolName: String, elapsedTimeSeconds: Double)
     case toolUseSummary(summary: String)
     case rateLimit(status: String, resetsAt: Double?, rateLimitType: String?, utilization: Double?, overageStatus: String?, overageDisabledReason: String?)
+    case apiRetry(httpStatus: Int?, errorType: String, attempt: Int, maxRetries: Int)
     case observerPoll
     case observerStatus(running: Bool)
   }
@@ -810,6 +811,10 @@ actor ACPBridge {
           throw BridgeError.creditExhausted("You've hit your limit · resets \(resetDesc) (\(typeLabel))")
         }
 
+      case .apiRetry(let httpStatus, let errorType, let attempt, let maxRetries):
+        // Log API retry events for diagnostics; the bridge handles retry logic
+        log("ACPBridge: API retry \(attempt)/\(maxRetries), httpStatus=\(httpStatus.map(String.init) ?? "nil"), error=\(errorType)")
+
       case .observerPoll:
         // Handled immediately in deliverMessage(); should never reach here
         break
@@ -1002,6 +1007,13 @@ actor ACPBridge {
       let overageStatus = dict["overageStatus"] as? String
       let overageDisabledReason = dict["overageDisabledReason"] as? String
       return .rateLimit(status: status, resetsAt: resetsAt, rateLimitType: rateLimitType, utilization: utilization, overageStatus: overageStatus, overageDisabledReason: overageDisabledReason)
+
+    case "api_retry":
+      let httpStatus = dict["httpStatus"] as? Int
+      let errorType = dict["errorType"] as? String ?? "unknown"
+      let attempt = dict["attempt"] as? Int ?? 0
+      let maxRetries = dict["maxRetries"] as? Int ?? 0
+      return .apiRetry(httpStatus: httpStatus, errorType: errorType, attempt: attempt, maxRetries: maxRetries)
 
     case "observer_poll":
       return .observerPoll
