@@ -83,7 +83,7 @@ struct ChatPrompts {
        **SQL examples** (use FTS5 with `rowid`, NOT `docid`):
        ```sql
        -- Keyword search with context
-       SELECT sender, substr(messageText, 1, 200), datetime(createdAt)
+       SELECT sender, messageText, datetime(createdAt)
        FROM chat_messages
        WHERE rowid BETWEEN
          (SELECT rowid FROM chat_messages WHERE messageText LIKE '%keyword%' ORDER BY createdAt DESC LIMIT 1) - 3
@@ -93,7 +93,7 @@ struct ChatPrompts {
        ```
        ```sql
        -- Full-text search (FTS5)
-       SELECT cm.sender, substr(cm.messageText, 1, 200), datetime(cm.createdAt)
+       SELECT cm.sender, cm.messageText, datetime(cm.createdAt)
        FROM chat_messages cm
        WHERE cm.rowid IN (SELECT rowid FROM chat_messages_fts WHERE chat_messages_fts MATCH 'search terms')
        ORDER BY cm.createdAt DESC LIMIT 20
