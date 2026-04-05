@@ -1048,6 +1048,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
   activeAbort = abortController;
   interruptRequested = false;
   authRetryCount = 0;
+  lastApiRetry = null; // Clear stale error info from previous queries
 
   let fullText = "";
   let fullPrompt = "";
@@ -1422,21 +1423,32 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       }
       const errMsg = err instanceof Error ? err.message : String(err);
 
-      // Credit balance or rate limit exhausted — do NOT retry, surface immediately
-      const isCreditExhausted = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
-      if (isCreditExhausted) {
-        logErr(`Credit/rate limit exhausted, not retrying: ${errMsg}`);
+      // Credit/billing/rate limit exhausted — do NOT retry, surface immediately.
+      // Prefer structured detection from api_retry (HTTP status + error type),
+      // fall back to regex on error message text.
+      const apiRetryErrorType = lastApiRetry?.errorType;
+      const apiRetryHttpStatus = lastApiRetry?.httpStatus;
+      const isStructuredCreditError = apiRetryErrorType === "billing_error" || apiRetryErrorType === "rate_limit"
+        || apiRetryHttpStatus === 402 || apiRetryHttpStatus === 429;
+      const isRegexCreditExhausted = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
+      if (isStructuredCreditError || isRegexCreditExhausted) {
+        const detectionMethod = isStructuredCreditError
+          ? `structured (httpStatus=${apiRetryHttpStatus}, errorType=${apiRetryErrorType})`
+          : "regex";
+        logErr(`Credit/rate limit exhausted (${detectionMethod}), not retrying: ${errMsg}`);
         for (const name of pendingTools) {
           send({ type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
         send({ type: "credit_exhausted", message: errMsg });
+        lastApiRetry = null;
         return;
       }
 
       // Image/content too large — retry on the SAME session without the image,
       // with a hint so the model can adjust its approach.
-      const isImageError = /image.*(too large|too big|exceeds.*limit|dimension)|unable to resize image|content too long|at least one of the image/i.test(errMsg);
+      const isImageError = apiRetryErrorType === "image_error"
+        || /image.*(too large|too big|exceeds.*limit|dimension)|unable to resize image|content too long|at least one of the image/i.test(errMsg);
       if (isImageError && sessionId && !retryingWithHint) {
         logErr(`session/prompt failed with image error, retrying on same session without image: ${errMsg}`);
         for (const name of pendingTools) {
@@ -1476,7 +1488,9 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // caps retries to 1 as a safety net against infinite loops.
       // Skip retry for errors that are clearly not session-related (rate limits, usage errors,
       // etc.) — retrying just wastes time and can trigger spurious OAuth flows.
-      const isNonRetryable = /usage|limit|resets\s|credit|quota|exhausted|rejected/i.test(errMsg);
+      const isStructuredNonRetryable = apiRetryErrorType === "billing_error" || apiRetryErrorType === "rate_limit"
+        || apiRetryErrorType === "invalid_request";
+      const isNonRetryable = isStructuredNonRetryable || /usage|limit|resets\s|credit|quota|exhausted|rejected/i.test(errMsg);
       if (!isNewSession && sessionId && sessionRetryCount === 0 && !isNonRetryable && _retryDepth < MAX_QUERY_RETRIES) {
         sessionRetryCount++;
         logErr(`session/prompt failed with existing session, retrying with session resume (depth=${_retryDepth}): ${err}`);
@@ -1526,15 +1540,23 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       return handleQuery(msg, _retryDepth + 1);
     }
     const errMsg = err instanceof Error ? err.message : String(err);
-    // Credit balance or rate limit exhausted — surface as specific type (outer catch)
-    const isCreditExhausted = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
-    if (isCreditExhausted) {
+    // Credit balance or rate limit exhausted — surface as specific type (outer catch).
+    // Use structured api_retry info when available, regex as fallback.
+    const outerApiErrorType = lastApiRetry?.errorType;
+    const outerApiHttpStatus = lastApiRetry?.httpStatus;
+    const outerStructuredCredit = outerApiErrorType === "billing_error" || outerApiErrorType === "rate_limit"
+      || outerApiHttpStatus === 402 || outerApiHttpStatus === 429;
+    const outerRegexCredit = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
+    if (outerStructuredCredit || outerRegexCredit) {
       logErr(`Credit/rate limit exhausted (outer): ${errMsg}`);
       send({ type: "credit_exhausted", message: errMsg });
+      lastApiRetry = null;
       return;
     }
     logErr(`Query error: ${errMsg}`);
+    // Show the raw error message so the user can see what actually went wrong
     send({ type: "error", message: errMsg });
+    lastApiRetry = null;
   } finally {
     if (activeAbort === abortController) {
       activeAbort = null;
@@ -1884,6 +1906,23 @@ function handleSessionUpdate(
       logErr(`Rate limit: status=${status}, type=${rateLimitType}, utilization=${utilization}, resets=${resetsAt ? new Date(resetsAt * 1000).toISOString() : "n/a"}`);
       break;
     }
+
+    case "api_retry": {
+      // Structured error info from SDK: HTTP status code + typed error category
+      const httpStatus = (update.httpStatus as number | null) ?? null;
+      const errorType = (update.errorType as string) ?? "unknown";
+      const attempt = (update.attempt as number) ?? 0;
+      const maxRetries = (update.maxRetries as number) ?? 0;
+      const retryDelayMs = (update.retryDelayMs as number) ?? 0;
+      lastApiRetry = { httpStatus, errorType, attempt, maxRetries };
+      logErr(`API retry: httpStatus=${httpStatus}, error=${errorType}, attempt=${attempt}/${maxRetries}, delay=${retryDelayMs}ms`);
+      send({ type: "api_retry", httpStatus, errorType, attempt, maxRetries, retryDelayMs });
+      break;
+    }
+
+    case "usage_update":
+      // Token usage / context window update from ACP v0.25+ — handled by patched entry point
+      break;
 
     default:
       logErr(
