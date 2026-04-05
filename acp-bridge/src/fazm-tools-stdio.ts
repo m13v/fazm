@@ -256,7 +256,6 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "request_permission",
   "extract_browser_profile",
   "scan_files",
-  "set_user_preferences",
   "complete_onboarding",
   "save_knowledge_graph",
 ]);
@@ -382,17 +381,21 @@ This is the ONLY way to see what's on the user's desktop. Do NOT use playwright'
   },
   {
     name: "set_user_preferences",
-    description: `Save user preferences like language and name. Only call if the user explicitly mentions a preferred language or name correction.`,
+    description: `Change user preferences: language, name, or voice response (TTS). Use when the user asks to change language, mute/unmute voice, update their name, or switch transcription language.`,
     inputSchema: {
       type: "object" as const,
       properties: {
         language: {
           type: "string" as const,
-          description: "Language code (e.g. en, es, ja)",
+          description: "Language code (e.g. en, es, ja, ko, ru, zh, fr, de, it, pt, ar, hi, pl, nl)",
         },
         name: {
           type: "string" as const,
           description: "User's preferred name",
+        },
+        voice: {
+          type: "boolean" as const,
+          description: "Enable (true) or disable/mute (false) voice response (TTS)",
         },
       },
       required: [],
