@@ -83,7 +83,22 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
             chatView
                 .withFontScaling()
         ))
-        self.contentView = hosting
+        // Use a container view with explicit Auto Layout constraints so the
+        // hosting view fills the window content area. Without this, the default
+        // sizingOptions (.intrinsicContentSize) lets the hosting view expand
+        // beyond the window to fit its SwiftUI content, causing text overflow.
+        let container = NSView()
+        self.contentView = container
+
+        hosting.sizingOptions = [.maxSize]
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: container.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
         self.hostingView = hosting
     }
 
