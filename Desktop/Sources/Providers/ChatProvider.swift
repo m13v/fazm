@@ -2768,7 +2768,9 @@ class ChatProvider: ObservableObject {
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
                 // User stopped — no error to show
             } else if let bridgeError = error as? BridgeError, case .creditExhausted(let rawMessage) = bridgeError {
-                // Credits or rate limit exhausted
+                // Credits or rate limit exhausted — no retry possible, clear pending message
+                // so handlePostQuery doesn't suppress the error thinking a retry is pending
+                pendingRetryMessage = nil
                 log("ChatProvider: credit/rate limit exhausted in \(bridgeMode) mode: \(rawMessage)")
                 let isRateLimit = rawMessage.range(of: #"resets\s+\S"#, options: .regularExpression) != nil
                 if bridgeMode == "builtin" && !isRateLimit {
@@ -2815,6 +2817,7 @@ class ChatProvider: ObservableObject {
                 // pendingRetryMessage is already set from sendMessage() — keep it for auto-retry
                 errorMessage = nil
             } else {
+                pendingRetryMessage = nil
                 errorMessage = error.localizedDescription
             }
         }
