@@ -775,6 +775,40 @@ workflows:
             codesign --verify --verbose=2 "$A" 2>&1 | head -3
             echo "$ARCH app re-signed successfully"
 
+            # Notarize the arch-specific app (re-signing changed code directory hashes,
+            # so the original universal notarization ticket no longer applies)
+            ARCH_NOTARIZE_ZIP="$BUILD_DIR/notarize-$ARCH-temp.zip"
+            ditto -c -k --keepParent "$A" "$ARCH_NOTARIZE_ZIP"
+
+            mkdir -p ~/private_keys
+            PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+            echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+
+            RESULT=$(xcrun notarytool submit "$ARCH_NOTARIZE_ZIP" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+              --wait \
+              --output-format json)
+
+            STATUS=$(echo "$RESULT" | python3 -c \
+              "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+            SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
+              "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+            if [ "$STATUS" != "Accepted" ]; then
+              echo "ERROR: $ARCH notarization failed: $STATUS"
+              [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
+                --key "$PRIVATE_KEY_PATH" \
+                --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+                --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+              exit 1
+            fi
+            rm -f "$ARCH_NOTARIZE_ZIP"
+
+            xcrun stapler staple "$A"
+            echo "$ARCH app notarized and stapled"
+
             # Create ZIP
             ditto -c -k --keepParent "$A" "$BUILD_DIR/Fazm-$ARCH.zip"
             echo "Created $BUILD_DIR/Fazm-$ARCH.zip ($(du -h "$BUILD_DIR/Fazm-$ARCH.zip" | cut -f1))"
