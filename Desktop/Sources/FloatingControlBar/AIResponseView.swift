@@ -16,7 +16,6 @@ struct AIResponseView: View {
     /// True when the hang state was triggered by a previous crash, not the 30s timer.
     /// Prevents the isLoading onChange from clearing it when a query completes.
     @State private var isHangingFromCrash = false
-    @State private var isUserAtBottom = true
     @State private var shouldFollowContent = true
     @State private var isProgrammaticScroll = false
 
@@ -89,18 +88,21 @@ struct AIResponseView: View {
                             }
 
                             // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
-                            GeometryReader { geo in
-                                Color.clear
-                                    .preference(
-                                        key: BottomVisiblePreference.self,
-                                        value: geo.frame(in: .named("chatScroll")).maxY
-                                    )
-                            }
-                            .frame(height: 1)
-                            .id("bottom")
+                            Color.clear.frame(height: 1).id("bottom")
                         }
+                        // Place detector inside the scroll content so its NSView
+                        // is a descendant of NSScrollView.documentView and the
+                        // superview walk finds the correct NSScrollView.
+                        .background(
+                            ScrollPositionDetector { atBottom in
+                                if atBottom {
+                                    shouldFollowContent = true
+                                } else if !isProgrammaticScroll {
+                                    shouldFollowContent = false
+                                }
+                            }
+                        )
                     }
-                    .coordinateSpace(name: "chatScroll")
                     // Pin scroll to the bottom of content. When content grows or
                     // reflows (markdown re-layout during streaming), SwiftUI keeps
                     // the bottom edge of the content fixed to the bottom of the
@@ -108,15 +110,6 @@ struct AIResponseView: View {
                     // no scrollbar thumb jumping. If the user scrolls up manually,
                     // their offset-from-bottom stays stable, so they aren't yanked.
                     .defaultScrollAnchor(.bottom)
-                    .onPreferenceChange(BottomVisiblePreference.self) { bottomY in
-                        guard bottomY < 10000 else { return }
-                        let atBottom = bottomY < 800
-                        if atBottom {
-                            shouldFollowContent = true
-                        } else if !isProgrammaticScroll {
-                            shouldFollowContent = false
-                        }
-                    }
                     .onChange(of: chatHistory.count) {
                         shouldFollowContent = true
                         scrollToBottom(proxy: proxy)
