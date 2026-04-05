@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed error messages not showing when Claude credits are exhausted",
-    "Added scroll-to-bottom button in chat when scrolled up"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.0.9",
+      "date": "2026-04-05",
+      "changes": [
+        "Fixed error messages not showing when Claude credits are exhausted",
+        "Added scroll-to-bottom button in chat when scrolled up"
+      ]
+    },
     {
       "version": "2.0.7",
       "date": "2026-04-05",
