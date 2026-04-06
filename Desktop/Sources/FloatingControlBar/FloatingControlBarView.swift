@@ -61,16 +61,18 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
                 }
                 .overlay(alignment: .topTrailing) {
-                    ZStack {
-                        ResizeHandleView(targetWindow: window)
-                            .frame(width: 20, height: 20)
-                        ResizeGripShape()
-                            .foregroundStyle(FazmColors.overlayForeground.opacity(0.3))
-                            .frame(width: 14, height: 14)
-                            .allowsHitTesting(false)
+                    if state.showingAIResponse {
+                        ZStack {
+                            ResizeHandleView(targetWindow: window)
+                                .frame(width: 20, height: 20)
+                            ResizeGripShape()
+                                .foregroundStyle(FazmColors.overlayForeground.opacity(0.3))
+                                .frame(width: 14, height: 14)
+                                .allowsHitTesting(false)
+                        }
+                        .padding(.top, 4)
+                        .padding(.trailing, 4)
                     }
-                    .padding(.top, 4)
-                    .padding(.trailing, 4)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
