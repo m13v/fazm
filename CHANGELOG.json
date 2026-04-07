@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Upgraded ACP protocol to v0.25.0 with improved error handling for credit exhaustion and rate limits",
-    "Fixed onboarding silently failing when credits run out, now shows an error with options to connect Claude or skip"
+    "Fixed onboarding silently failing when credits run out, now shows an error with options to connect Claude or skip",
+    "Fixed mobile web app failing to connect when desktop tunnel restarts"
   ],
   "releases": [
     {
