@@ -70,12 +70,12 @@ struct PaywallSheet: View {
                     .padding(.top, 8)
 
                 VStack(spacing: 6) {
-                    Text("Your free trial has ended")
+                    Text("Unlock Fazm Pro")
                         .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(FazmColors.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Choose how to unlock Fazm Pro")
+                    Text("Start your free trial to continue")
                         .scaledFont(size: 13)
                         .foregroundColor(FazmColors.textTertiary)
                         .multilineTextAlignment(.center)
@@ -99,10 +99,10 @@ struct PaywallSheet: View {
                             .frame(width: 32)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Subscribe to Pro")
+                            Text("Start Free Trial")
                                 .scaledFont(size: 14, weight: .semibold)
                                 .foregroundColor(FazmColors.textPrimary)
-                            Text("$9 first month, then $49/mo")
+                            Text("21 days free, then $49/mo")
                                 .scaledFont(size: 12)
                                 .foregroundColor(FazmColors.textTertiary)
                         }
