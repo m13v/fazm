@@ -193,6 +193,26 @@ final class SubscriptionService {
                 NSWorkspace.shared.open(checkoutURL)
             }
         }
+
+        // Poll for subscription activation after checkout opens
+        startPostCheckoutPolling()
+    }
+
+    /// Polls subscription status every 5 seconds after checkout opens.
+    /// Stops when active or after 5 minutes.
+    private func startPostCheckoutPolling() {
+        Task {
+            let maxAttempts = 60 // 5 minutes at 5-second intervals
+            for _ in 0..<maxAttempts {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                let active = await refreshStatus()
+                if active {
+                    log("SubscriptionService: subscription activated after checkout")
+                    return
+                }
+            }
+            log("SubscriptionService: post-checkout polling timed out")
+        }
     }
 
     // MARK: - Check Status
