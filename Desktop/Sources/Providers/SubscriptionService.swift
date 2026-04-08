@@ -198,6 +198,47 @@ final class SubscriptionService {
         startPostCheckoutPolling()
     }
 
+    // MARK: - Billing Portal
+
+    /// Opens the Stripe Billing Portal so the user can manage their subscription.
+    func openBillingPortal() async throws {
+        guard !backendUrl.isEmpty else {
+            log("SubscriptionService: missing FAZM_BACKEND_URL")
+            throw SubscriptionError.notConfigured
+        }
+
+        let token = try await AuthService.shared.getIdToken(forceRefresh: false)
+        let url = URL(string: "\(backendUrl)/api/stripe/create-portal-session")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(deviceId, forHTTPHeaderField: "X-Device-Id")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+
+        guard statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            log("SubscriptionService: portal session failed (\(statusCode)): \(msg)")
+            throw SubscriptionError.serverError(msg)
+        }
+
+        struct PortalResponse: Decodable {
+            let portal_url: String
+        }
+
+        let portal = try JSONDecoder().decode(PortalResponse.self, from: data)
+        log("SubscriptionService: opening billing portal")
+
+        if let portalURL = URL(string: portal.portal_url) {
+            await MainActor.run {
+                NSWorkspace.shared.open(portalURL)
+            }
+        }
+    }
+
     /// Polls subscription status every 5 seconds after checkout opens.
     /// Stops when active or after 5 minutes.
     private func startPostCheckoutPolling() {
