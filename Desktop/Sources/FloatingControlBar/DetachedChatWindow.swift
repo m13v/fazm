@@ -346,6 +346,24 @@ class DetachedChatWindowController {
             provider: chatProvider, state: detachedState
         )
 
+        // If a query was in-flight when we popped out, the floating bar's handlePostQuery
+        // will return early (showingAIConversation is false on its reset state). We need
+        // to detect when the query finishes and run error handling on our detached state.
+        if isAILoading {
+            entries[winId]?.sharedProviderCancellables.append(
+                chatProvider.$isSending
+                    .dropFirst() // skip the current value
+                    .filter { !$0 } // only when sending finishes
+                    .first() // one-shot
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak detachedState, weak chatProvider] _ in
+                        guard let state = detachedState, let provider = chatProvider else { return }
+                        guard state.isAILoading else { return } // already handled by subscription
+                        ChatQueryLifecycle.handlePostQuery(provider: provider, state: state, sessionKey: sessionKey)
+                    }
+            )
+        }
+
         // Offset new windows so they don't stack directly on top of each other
         if entries.count > 1 {
             let offset = CGFloat((entries.count - 1) * 30)
