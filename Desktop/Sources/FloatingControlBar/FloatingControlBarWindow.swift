@@ -1236,14 +1236,18 @@ class FloatingControlBarManager {
                 // Skip archiving if onSendNow already set displayedQuery to this
                 // message. Otherwise a race with the $messages subscriber causes
                 // the same exchange to be archived twice (duplicate bubble).
-                if currentQuery != text, var currentMessage = aiMessage, !currentQuery.isEmpty {
-                    currentMessage.contentBlocks = currentMessage.contentBlocks.map { block in
+                if currentQuery != text, !currentQuery.isEmpty {
+                    var resolved = aiMessage ?? ChatMessage(
+                        id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
+                        isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
+                    )
+                    resolved.contentBlocks = resolved.contentBlocks.map { block in
                         if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = block {
                             return .toolCall(id: id, name: name, status: .completed, toolUseId: toolUseId, input: input, output: output)
                         }
                         return block
                     }
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
+                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
                 }
                 state.flushPendingChatObserverExchanges()
                 state.displayedQuery = text
@@ -1954,8 +1958,12 @@ class FloatingControlBarManager {
         // Archive the interrupted exchange to chat history before clearing,
         // so the user's original query and any partial AI response remain visible.
         let currentQuery = window.state.displayedQuery
-        if let currentMessage = window.state.currentAIMessage, !currentQuery.isEmpty {
-            window.state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
+        if !currentQuery.isEmpty {
+            let aiMessage = window.state.currentAIMessage ?? ChatMessage(
+                id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
+                isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
+            )
+            window.state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
         }
         window.state.flushPendingChatObserverExchanges()
 
