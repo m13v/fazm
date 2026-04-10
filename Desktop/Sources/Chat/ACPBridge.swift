@@ -362,6 +362,11 @@ actor ACPBridge {
       }
     }
 
+    // Custom API endpoint (allows proxying through Copilot, corporate gateways, etc.)
+    if let customEndpoint = defaults.string(forKey: "customApiEndpoint"), !customEndpoint.isEmpty {
+      env["ANTHROPIC_BASE_URL"] = customEndpoint
+    }
+
     // Pass app bundle path so acp-bridge can find bundled binaries/resources
     // (Node may run from /tmp due to NodeBinaryHelper, so process.execPath is unreliable)
     if let resourcePath = Bundle.main.resourcePath {
