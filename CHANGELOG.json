@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out windows not restoring after app update or restart"
+  ],
   "releases": [
     {
       "version": "2.1.3",
