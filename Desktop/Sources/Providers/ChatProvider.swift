@@ -2000,7 +2000,13 @@ class ChatProvider: ObservableObject {
     /// Read-only accessor for pending message texts (used by UI to sync deletions).
     var pendingMessageTexts: [String] { pendingMessages.map(\.text) }
     /// Session key of the currently running sendMessage call, so follow-ups can be chained on the same session.
-    private var activeSessionKey: String?
+    private(set) var activeSessionKey: String?
+
+    /// Whether a specific session is currently sending. Returns true only if the
+    /// bridge is busy AND the active query belongs to the given session key.
+    func isSending(sessionKey: String) -> Bool {
+        isSending && activeSessionKey == sessionKey
+    }
 
     /// Stop the ACP bridge and all its child processes (MCP servers).
     /// Called during app termination to prevent orphaned processes.
@@ -2073,7 +2079,7 @@ class ChatProvider: ObservableObject {
         // If idle, send directly as a follow-up
         if !isSending {
             log("ChatProvider: send-now (idle), sending directly")
-            NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": trimmedText])
+            NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": trimmedText, "sessionKey": activeSessionKey ?? ""])
             await sendMessage(trimmedText, isFollowUp: false, sessionKey: activeSessionKey)
             return
         }
@@ -2858,7 +2864,7 @@ class ChatProvider: ObservableObject {
             let next = pendingMessages.removeFirst()
             log("ChatProvider: chaining queued message (\(pendingMessages.count) remaining)")
             // Notify UI to dequeue (posted on main actor)
-            NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text])
+            NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text, "sessionKey": next.sessionKey ?? ""])
             await sendMessage(next.text, isFollowUp: next.userMessageAdded, sessionKey: next.sessionKey)
         }
     }
