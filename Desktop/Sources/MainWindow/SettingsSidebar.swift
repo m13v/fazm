@@ -40,6 +40,7 @@ struct SettingsSearchItem: Identifiable {
 
         // Shortcuts
         SettingsSearchItem(name: "Ask Fazm Shortcut", subtitle: "Global shortcut to open Ask Fazm from anywhere", keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.shortcut"),
+        SettingsSearchItem(name: "New Pop-Out Chat", subtitle: "Global shortcut to open a new chat in its own window", keywords: ["shortcut", "pop out", "new chat", "window", "detach"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.newpopoutchat"),
         SettingsSearchItem(name: "Push to Talk", subtitle: "Hold a key to speak, release to send your question to AI", keywords: ["push to talk", "ptt", "hold to talk", "microphone key"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.ptt"),
         SettingsSearchItem(name: "Transcription Mode", subtitle: "Choose how voice input is processed", keywords: ["transcription", "mode", "voice", "dictation"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.transcriptionmode"),
         SettingsSearchItem(name: "Double-tap for Locked Mode", subtitle: "Double-tap the push-to-talk key to keep listening hands-free", keywords: ["double tap", "locked mode", "hands free", "listening"], section: .shortcuts, advancedSubsection: nil, icon: "keyboard", settingId: "advanced.askfazm.doubletap"),
