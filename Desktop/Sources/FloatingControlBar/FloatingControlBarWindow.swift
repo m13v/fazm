@@ -1217,6 +1217,9 @@ class FloatingControlBarManager {
         ) { [weak barWindow, weak chatProvider] notification in
             guard let text = notification.userInfo?["text"] as? String,
                   let state = barWindow?.state else { return }
+            // Only react to dequeue events for the floating bar's own session
+            let dequeuedSessionKey = notification.userInfo?["sessionKey"] as? String ?? ""
+            guard dequeuedSessionKey.isEmpty || dequeuedSessionKey == "floating" else { return }
             MainActor.assumeIsolated {
                 // Remove the first matching queued message from UI
                 if let idx = state.messageQueue.firstIndex(where: { $0.text == text }) {
