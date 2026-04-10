@@ -295,8 +295,16 @@ class DetachedChatWindowController {
     }
 
     private var entries: [ObjectIdentifier: WindowEntry] = [:]
+    /// Set during app termination so window-close handlers preserve the registry.
+    private var isTerminating = false
 
     var isShowing: Bool { entries.values.contains { $0.window.isVisible } }
+
+    /// Called from applicationWillTerminate to freeze the registry before windows tear down.
+    func prepareForTermination() {
+        isTerminating = true
+        saveWindowRegistry()
+    }
 
     /// Persist the current set of open detached windows (session keys + frames) to UserDefaults.
     func saveWindowRegistry() {
@@ -416,8 +424,12 @@ class DetachedChatWindowController {
 
         log("DetachedChatWindowController: Restoring \(snapshots.count) detached window(s)")
 
-        // Clear the registry immediately so a crash during restore doesn't loop
-        UserDefaults.standard.removeObject(forKey: Self.registryKey)
+        // Keep the registry intact until all restore tasks finish.
+        // Failed entries stay persisted so the next launch can retry.
+        let totalCount = snapshots.count
+        var restoredCount = 0
+        var failedSnapshots: [WindowSnapshot] = []
+        let group = DispatchGroup()
 
         for snapshot in snapshots {
             let sessionKey = snapshot.sessionKey
@@ -426,23 +438,23 @@ class DetachedChatWindowController {
                 width: snapshot.width, height: snapshot.height
             )
 
-            // Load saved messages from the local DB.
-            // The DB may not be initialized yet (loadAllData runs concurrently),
-            // so retry briefly if the first attempt returns empty.
+            group.enter()
             Task { @MainActor in
+                defer { group.leave() }
                 var savedMessages: [ChatMessage] = []
-                for attempt in 0..<5 {
+                for attempt in 0..<10 {
                     savedMessages = await ChatMessageStore.loadMessages(
                         context: "__\(sessionKey)__",
                         limit: 100
                     )
                     if !savedMessages.isEmpty { break }
-                    if attempt < 4 {
+                    if attempt < 9 {
                         try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
                     }
                 }
                 guard !savedMessages.isEmpty else {
-                    log("DetachedChatWindowController: No messages for \(sessionKey), skipping restore")
+                    log("DetachedChatWindowController: No messages for \(sessionKey) after 10 retries, keeping in registry for next launch")
+                    failedSnapshots.append(snapshot)
                     return
                 }
 
@@ -450,10 +462,6 @@ class DetachedChatWindowController {
                 detachedState.loadHistory(from: savedMessages)
                 detachedState.showingAIConversation = true
                 detachedState.showingAIResponse = true
-                // FloatingControlBarState.isAILoading defaults to true, which would leave
-                // a restored window stuck on the "thinking" spinner with no active query.
-                // Restored windows have no in-flight work; the spinner only re-engages when
-                // the user sends a new follow-up via ChatQueryLifecycle.
                 detachedState.isAILoading = false
 
                 let win = DetachedChatWindow(state: detachedState, sessionKey: sessionKey, savedFrame: savedFrame)
@@ -463,16 +471,36 @@ class DetachedChatWindowController {
 
                 win.setupViews()
 
-                var entry = WindowEntry(window: win, sessionKey: sessionKey)
-                self.entries[winId] = entry
+                self.entries[winId] = WindowEntry(window: win, sessionKey: sessionKey)
                 self.entries[winId]?.sharedProviderCancellables = ChatQueryLifecycle.subscribeToProviderState(
                     provider: chatProvider, state: detachedState
                 )
 
                 win.makeKeyAndOrderFront(nil)
-                self.saveWindowRegistry()
+                restoredCount += 1
                 log("DetachedChatWindowController: Restored window for \(sessionKey) with \(savedMessages.count) messages")
             }
+        }
+
+        group.notify(queue: .main) {
+            if failedSnapshots.isEmpty {
+                // All restored successfully; registry will be kept up-to-date by saveWindowRegistry
+                self.saveWindowRegistry()
+            } else {
+                // Re-persist failed entries so they survive to the next launch
+                let allSnapshots = self.entries.values.map { entry in
+                    let f = entry.window.frame
+                    return WindowSnapshot(
+                        sessionKey: entry.sessionKey,
+                        x: f.origin.x, y: f.origin.y,
+                        width: f.size.width, height: f.size.height
+                    )
+                } + failedSnapshots
+                if let data = try? JSONEncoder().encode(allSnapshots) {
+                    UserDefaults.standard.set(data, forKey: Self.registryKey)
+                }
+            }
+            log("DetachedChatWindowController: Restore complete — \(restoredCount)/\(totalCount) succeeded, \(failedSnapshots.count) deferred")
         }
     }
 
@@ -587,14 +615,19 @@ class DetachedChatWindowController {
         win.onWindowClose = { [weak self, weak win] in
             guard let self, let win else { return }
             let id = ObjectIdentifier(win)
+            let sessionKey = self.entries[id]?.sessionKey ?? "unknown"
             self.entries[id]?.chatCancellable?.cancel()
             self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
-            if self.entries.isEmpty {
+            if self.isTerminating {
+                log("DetachedChatWindowController: Window closed during termination (\(sessionKey)), registry preserved")
+            } else if self.entries.isEmpty {
                 self.clearWindowRegistry()
+                log("DetachedChatWindowController: Last window closed (\(sessionKey)), registry cleared")
             } else {
                 self.saveWindowRegistry()
+                log("DetachedChatWindowController: Window closed (\(sessionKey)), \(self.entries.count) remaining")
             }
         }
     }
