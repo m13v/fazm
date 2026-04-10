@@ -36,7 +36,7 @@ workflows:
         BUNDLE_ID: "com.fazm.app"
         BUILD_DIR: "build"
         GITHUB_REPO: "mediar-ai/fazm"
-      xcode: 16.3
+      xcode: 16.4
     triggering:
       events:
         - tag
