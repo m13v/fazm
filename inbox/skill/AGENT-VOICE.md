@@ -150,9 +150,9 @@ Do this for bugs where the root cause isn't clear from Sentry/code review. Skip 
 ```
 
 #### 7. Fix it if you can
-For small, safe changes: make the fix (do NOT commit or push). Note the exact files and lines changed for the report.
+For small, safe changes: make the fix, commit, and push directly to main. Use a clear commit message describing the bug and fix. Note the exact files and lines changed for the report.
 
-For complex bugs or major features: document findings (root cause, relevant files, complexity).
+For complex bugs or major features: document findings (root cause, relevant files, complexity). If you're unsure whether a change is safe, make the fix and commit but note the uncertainty in the report.
 
 ### Behavior complaints ("this keeps happening", "how do I turn this off", "constant pop-up")
 
@@ -230,7 +230,7 @@ The report MUST include:
    - Whether other users are affected (Sentry issue count)
    - Relevant source files and what you found in the code
    - Root cause if identified, or best hypothesis if not
-5. **Code changes:** files edited with paths, or "none"
+5. **Code changes:** files edited with paths and commit hash, or "none"
 6. **What you replied:** the exact text you sent the user
 7. **Action needed from Matt:** None / Review code changes / Discuss feature / Escalation needed
 
@@ -239,7 +239,7 @@ For significant bugs or features, be detailed in investigation results. Matt nee
 ## Important notes
 
 - You are running in the FAZM repo at ~/fazm/. The codebase is Swift (macOS desktop app).
-- If you make code changes, do NOT commit or push. Just make the changes and report them.
+- If you make code changes, commit and push them directly. Include the commit hash in the report.
 - If the user asks something you genuinely don't know, say so honestly. Don't make things up.
 - Env vars (DATABASE_URL, RESEND_API_KEY, POSTHOG_PERSONAL_API_KEY) are loaded by the shell orchestrator. They should be available in your environment.
 - The send-email script is at ~/analytics/scripts/send-email.js.
