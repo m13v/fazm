@@ -12,6 +12,7 @@ struct ShortcutsSettingsSection: View {
     var body: some View {
         VStack(spacing: 20) {
             askFazmKeyCard
+            newPopOutChatKeyCard
             pttKeyCard
             pttTranscriptionModeCard
             doubleTapCard
@@ -50,6 +51,56 @@ struct ShortcutsSettingsSection: View {
         let isSelected = settings.askFazmKey == key
         return Button {
             settings.askFazmKey = key
+        } label: {
+            Text(key.rawValue)
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(FazmColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected
+                              ? FazmColors.purplePrimary.opacity(0.3)
+                              : FazmColors.backgroundTertiary.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? FazmColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var newPopOutChatKeyCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("New Pop-Out Chat")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(FazmColors.textPrimary)
+                Text("Global shortcut to open a new chat in its own window.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(FazmColors.textSecondary)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(ShortcutSettings.NewPopOutChatKey.allCases, id: \.self) { key in
+                    newPopOutChatKeyButton(key)
+                }
+                Spacer()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(FazmColors.backgroundTertiary.opacity(0.5))
+        )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askfazm.newpopoutchat", highlightedSettingId: $highlightedSettingId))
+    }
+
+    private func newPopOutChatKeyButton(_ key: ShortcutSettings.NewPopOutChatKey) -> some View {
+        let isSelected = settings.newPopOutChatKey == key
+        return Button {
+            settings.newPopOutChatKey = key
         } label: {
             Text(key.rawValue)
                 .scaledFont(size: 13, weight: .medium)
@@ -227,6 +278,7 @@ struct ShortcutsSettingsSection: View {
                 .foregroundColor(FazmColors.textPrimary)
 
             shortcutRow(label: "Ask Fazm", keys: settings.askFazmKey.rawValue)
+            shortcutRow(label: "New pop-out chat", keys: settings.newPopOutChatKey.rawValue)
             shortcutRow(label: "Toggle floating bar", keys: "\u{2318}\\")
             shortcutRow(label: "Push to talk", keys: settings.pttKey.symbol + " hold")
             if settings.doubleTapForLock {
