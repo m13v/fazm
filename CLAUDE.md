@@ -3,33 +3,31 @@
 ## Project Overview
 Fazm — a macOS desktop app (Swift). Open source at github.com/mediar-ai/fazm.
 
-## Inbox Pipelines (PAUSED since 2026-04-10)
+## Inbox Pipelines
 
-Three launchd services are **currently paused**. Config and DB state are intact; resuming picks up where they left off.
+Three launchd services run autonomous Claude Code agents that handle inbound communication. Pausing/resuming preserves all config and DB state; pipelines pick up where they left off.
 
-| Service | Plist | Interval |
-|---------|-------|----------|
-| Email inbox | `com.m13v.fazm-inbox` | 5 min |
-| Founder chat | `com.m13v.fazm-founder-chat` | 15 sec |
-| Session replay | `com.m13v.fazm-session-replay` | 20 min |
+| Service | Plist | Interval | Purpose |
+|---------|-------|----------|---------|
+| Email inbox | `com.m13v.fazm-inbox` | 5 min | Replies to unanswered inbound emails |
+| Founder chat | `com.m13v.fazm-founder-chat` | 15 sec | Responds to in-app chat messages |
+| Session replay | `com.m13v.fazm-session-replay` | 20 min | Analyzes session recordings for bugs |
 
-**Resume all three:**
+**Check status:** `launchctl list | grep fazm`
+
+**Pause all:**
 ```bash
-launchctl load ~/Library/LaunchAgents/com.m13v.fazm-inbox.plist
-launchctl load ~/Library/LaunchAgents/com.m13v.fazm-founder-chat.plist
-launchctl load ~/Library/LaunchAgents/com.m13v.fazm-session-replay.plist
+for s in inbox founder-chat session-replay; do launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-$s.plist; done
 ```
 
-**Pause again:**
+**Resume all:**
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-inbox.plist
-launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-founder-chat.plist
-launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-session-replay.plist
+for s in inbox founder-chat session-replay; do launchctl load ~/Library/LaunchAgents/com.m13v.fazm-$s.plist; done
 ```
 
-**Verify status:** `launchctl list | grep fazm`
+**Pause/resume one:** replace the loop with a single `launchctl unload/load` targeting the specific plist.
 
-Pipeline code and skills live in `inbox/` (launchd plists in `inbox/launchd/`, scripts in `inbox/scripts/`, skills in `inbox/skill/`). The SEO inbox (`com.m13v.fazm-seo-inbox`) is separate and still running.
+Pipeline code lives in `inbox/` (plists in `inbox/launchd/`, Node.js scripts in `inbox/scripts/`, Claude skills in `inbox/skill/`). The SEO inbox (`com.m13v.fazm-seo-inbox`) is a separate pipeline in `~/fazm-website/seo/inbox/`.
 
 ## Session Recording
 See `scripts/SESSION-RECORDING.md` for full guide — toggle per-user recording, view chunks, architecture.
