@@ -3,6 +3,34 @@
 ## Project Overview
 Fazm — a macOS desktop app (Swift). Open source at github.com/mediar-ai/fazm.
 
+## Inbox Pipelines (PAUSED since 2026-04-10)
+
+Three launchd services are **currently paused**. Config and DB state are intact; resuming picks up where they left off.
+
+| Service | Plist | Interval |
+|---------|-------|----------|
+| Email inbox | `com.m13v.fazm-inbox` | 5 min |
+| Founder chat | `com.m13v.fazm-founder-chat` | 15 sec |
+| Session replay | `com.m13v.fazm-session-replay` | 20 min |
+
+**Resume all three:**
+```bash
+launchctl load ~/Library/LaunchAgents/com.m13v.fazm-inbox.plist
+launchctl load ~/Library/LaunchAgents/com.m13v.fazm-founder-chat.plist
+launchctl load ~/Library/LaunchAgents/com.m13v.fazm-session-replay.plist
+```
+
+**Pause again:**
+```bash
+launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-inbox.plist
+launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-founder-chat.plist
+launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-session-replay.plist
+```
+
+**Verify status:** `launchctl list | grep fazm`
+
+Pipeline code and skills live in `inbox/` (launchd plists in `inbox/launchd/`, scripts in `inbox/scripts/`, skills in `inbox/skill/`). The SEO inbox (`com.m13v.fazm-seo-inbox`) is separate and still running.
+
 ## Session Recording
 See `scripts/SESSION-RECORDING.md` for full guide — toggle per-user recording, view chunks, architecture.
 
