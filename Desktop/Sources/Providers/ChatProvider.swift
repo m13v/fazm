@@ -392,9 +392,9 @@ class ChatProvider: ObservableObject {
     var overrideAppId: String?
 
     /// Override the Claude model for this provider's queries.
-    /// When set, the bridge uses this model instead of the default (Opus).
-    /// e.g. "claude-sonnet-4-6" for faster floating bar responses.
-    var modelOverride: String?
+    /// Reads the user's currently selected model from ShortcutSettings so all
+    /// queries (main chat, follow-ups, retries) respect the user's model choice.
+    var modelOverride: String? { ShortcutSettings.shared.selectedModel }
 
     /// Bridge mode: "personal" (user's Claude OAuth), "builtin" (Vertex AI built-in account)
     @AppStorage("bridgeMode") var bridgeMode: String = "builtin"
