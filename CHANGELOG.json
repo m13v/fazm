@@ -5,7 +5,9 @@
     "Fixed typing indicator flickering during network retries by adding a 600ms debounce",
     "Added global shortcut (\u2318\u21e7N) to open a new pop-out chat window from anywhere",
     "Fixed duplicate AI response bubble appearing in pop-out window after sending a follow-up question",
-    "Added custom API endpoint setting for proxies and corporate gateways"
+    "Added custom API endpoint setting for proxies and corporate gateways",
+    "Updated paywall to highlight full desktop control capabilities",
+    "Fixed founder chat crash loop on repeated rate limit failures"
   ],
   "releases": [
     {
