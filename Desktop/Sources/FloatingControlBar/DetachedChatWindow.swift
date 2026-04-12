@@ -642,6 +642,7 @@ class DetachedChatWindowController {
         guard let provider else { return }
 
         if provider.isSending {
+            log("[DetachedChat] sendQuery: enqueuing (provider busy) session=\(sessionKey) text='\(message.prefix(40))'")
             provider.enqueueMessage(message, sessionKey: sessionKey)
             // Listen for when this message is dequeued so we can set up the response subscriber
             entries[winId]?.dequeueCancellable?.cancel()
