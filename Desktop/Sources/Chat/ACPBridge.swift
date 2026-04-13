@@ -257,17 +257,30 @@ actor ACPBridge {
   /// Incremented each time start() is called; stale termination handlers check this
   private var processGeneration: UInt64 = 0
 
-  /// Pending messages from the bridge
+  /// Pending messages from the bridge (legacy, for messages without sessionKey)
   private var pendingMessages: [InboundMessage] = []
   /// Lock-protected continuation box: can be resumed synchronously from onCancel without actor hop.
+  /// Legacy: used for messages without sessionKey or when no per-session box exists.
   private let continuationBox = ContinuationBox<InboundMessage, Error>()
   private var messageGeneration: UInt64 = 0
+
+  /// Per-session continuation boxes for concurrent query support
+  private var sessionContinuations: [String: ContinuationBox<InboundMessage, Error>] = [:]
+  /// Per-session pending message queues
+  private var sessionPendingMessages: [String: [InboundMessage]] = [:]
+  /// Per-session message generations (for timeout tracking)
+  private var sessionMessageGenerations: [String: UInt64] = [:]
+  /// Per-session interrupt flags
+  private var sessionInterrupted: [String: Bool] = [:]
+  /// Per-session ACP tool counts (for timeout deferral)
+  private var sessionAcpToolsRunning: [String: Int] = [:]
+
   /// Set when stderr indicates OOM so handleTermination can throw the right error
   private var lastExitWasOOM = false
-  /// Set when interrupt() is called so query() can skip remaining tool calls
+  /// Set when interrupt() is called so query() can skip remaining tool calls (legacy, for non-session queries)
   private var isInterrupted = false
   /// Counts ACP tools currently running (incremented on "Tool started", decremented on "Tool completed").
-  /// Used by waitForMessage to avoid timing out while ACP tools are actively executing.
+  /// Used by waitForMessage to avoid timing out while ACP tools are actively executing. (legacy)
   private var acpToolsRunning: Int = 0
 
   /// Whether the bridge subprocess is alive and ready
@@ -277,6 +290,9 @@ actor ACPBridge {
     // Resume any pending continuation to prevent "SWIFT TASK CONTINUATION MISUSE" crash.
     // The lock-protected box is safe to access from deinit (no actor hop needed).
     continuationBox.resumeAny(throwing: BridgeError.stopped)
+    for (_, box) in sessionContinuations {
+      box.resumeAny(throwing: BridgeError.stopped)
+    }
   }
 
   // MARK: - Lifecycle
@@ -880,15 +896,15 @@ actor ACPBridge {
             continue
           }
 
-          if let message = Self.parseMessage(lineStr) {
-            await self?.deliverMessage(message)
+          if let parsed = Self.parseMessage(lineStr) {
+            await self?.deliverMessage(parsed.message, sessionKey: parsed.sessionKey)
           }
         }
       }
     }
   }
 
-  private static func parseMessage(_ json: String) -> InboundMessage? {
+  private static func parseMessage(_ json: String) -> (message: InboundMessage, sessionKey: String?)? {
     guard let data = json.data(using: .utf8),
       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let type = dict["type"] as? String
