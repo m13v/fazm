@@ -2886,23 +2886,31 @@ class ChatProvider: ObservableObject {
         // (during the race window while the interrupt was being processed),
         // those should still be drained so the chat doesn't hang.
         if !hadError, !pendingMessages.isEmpty {
+            // Only dequeue messages targeted at the session that just completed.
+            // Other sessions' queued messages wait for their own session to be free,
+            // enabling concurrent queries across pop-out windows.
+            let matches: (Int) -> Bool = { [effectiveKey] idx in
+                let key = self.pendingMessages[idx].sessionKey ?? "__default__"
+                return key == effectiveKey
+            }
             if wasStopped {
-                // Drop messages that were already queued when Stop was pressed;
-                // only process messages enqueued after the stop.
                 let newMessageCount = pendingMessages.count - pendingCountAtStop
                 if newMessageCount > 0 {
-                    // Remove the pre-stop messages from the front, keep post-stop ones
                     pendingMessages.removeFirst(pendingCountAtStop)
-                    let next = pendingMessages.removeFirst()
-                    log("ChatProvider: draining post-stop message (\(pendingMessages.count) remaining, dropped \(pendingCountAtStop) pre-stop)")
+                    if let idx = pendingMessages.indices.first(where: matches) {
+                        let next = pendingMessages.remove(at: idx)
+                        log("ChatProvider: draining post-stop message for session=\(effectiveKey) (\(pendingMessages.count) remaining)")
+                        NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text, "sessionKey": next.sessionKey ?? ""])
+                        await sendMessage(next.text, isFollowUp: next.userMessageAdded, sessionKey: next.sessionKey)
+                    }
+                }
+            } else {
+                if let idx = pendingMessages.indices.first(where: matches) {
+                    let next = pendingMessages.remove(at: idx)
+                    log("ChatProvider: chaining queued message for session=\(effectiveKey) (\(pendingMessages.count) remaining)")
                     NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text, "sessionKey": next.sessionKey ?? ""])
                     await sendMessage(next.text, isFollowUp: next.userMessageAdded, sessionKey: next.sessionKey)
                 }
-            } else {
-                let next = pendingMessages.removeFirst()
-                log("ChatProvider: chaining queued message (\(pendingMessages.count) remaining)")
-                NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text, "sessionKey": next.sessionKey ?? ""])
-                await sendMessage(next.text, isFollowUp: next.userMessageAdded, sessionKey: next.sessionKey)
             }
         }
         pendingCountAtStop = 0
