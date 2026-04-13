@@ -102,6 +102,20 @@ const pendingToolCalls = new Map<
 
 let currentMode: "ask" | "act" = "act";
 
+/** Per-query state for concurrent query support */
+interface QueryContext {
+  sessionId: string;
+  sessionKey: string;
+  abortController: AbortController;
+  interruptRequested: boolean;
+  lastTextContentBlockIndex: number;
+  pendingBoundary: boolean;
+  mode: "ask" | "act";
+}
+
+/** Active queries keyed by sessionKey */
+const activeQueries = new Map<string, QueryContext>();
+
 /** Resolve a pending tool call with a result from Swift */
 function resolveToolCall(msg: { callId: string; result: string }): void {
   const pending = pendingToolCalls.get(msg.callId);
@@ -1039,12 +1053,18 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
 const MAX_QUERY_RETRIES = 2;
 
 async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
-  if (activeAbort) {
-    activeAbort.abort();
-    activeAbort = null;
+  // Per-session concurrency: only abort the previous query if it's the SAME sessionKey.
+  // Different sessions can run concurrently.
+  const incomingSessionKey = msg.sessionKey ?? (msg.model || DEFAULT_MODEL);
+  const existingCtx = activeQueries.get(incomingSessionKey);
+  if (existingCtx) {
+    existingCtx.abortController.abort();
+    sessionNotificationHandlers.delete(existingCtx.sessionId);
+    activeQueries.delete(incomingSessionKey);
   }
 
   const abortController = new AbortController();
+  // Keep legacy globals updated for backward compat (interrupt without sessionKey, etc.)
   activeAbort = abortController;
   interruptRequested = false;
   authRetryCount = 0;
@@ -1058,6 +1078,9 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
   const pendingTools: string[] = [];
   lastTextContentBlockIndex = -1;
   pendingBoundary = false;
+
+  // QueryContext will be fully initialized once we have the ACP sessionId
+  let queryCtx: QueryContext | null = null;
 
   try {
     const mode = msg.mode ?? "act";
@@ -1143,15 +1166,29 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     }
     activeSessionId = sessionId;
 
+    // Initialize QueryContext now that we have the ACP sessionId
+    queryCtx = {
+      sessionId,
+      sessionKey,
+      abortController,
+      interruptRequested: false,
+      lastTextContentBlockIndex: -1,
+      pendingBoundary: false,
+      mode,
+    };
+    activeQueries.set(sessionKey, queryCtx);
+
     fullPrompt = msg.prompt;
 
-    // Set up notification handler for this query
+    // Set up notification handler for this query, registered per-session
+    // so concurrent queries don't clobber each other's handlers.
     let notificationCount = 0;
     let lastNotificationTime = Date.now();
     // Track task IDs started in THIS prompt turn vs stale ones from previous turns
     const currentTurnTaskIds = new Set<string>();
     let staleTaskNotificationCount = 0;
-    acpNotificationHandler = (method: string, params: unknown) => {
+    const ctx = queryCtx; // capture for closure
+    sessionNotificationHandlers.set(sessionId, (method: string, params: unknown) => {
       if (abortController.signal.aborted) return;
 
       if (method === "session/update") {
