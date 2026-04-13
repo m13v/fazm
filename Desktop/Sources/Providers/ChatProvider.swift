@@ -1808,6 +1808,15 @@ class ChatProvider: ObservableObject {
         log("ChatProvider: discovered global CLAUDE.md=\(claudeMdContent != nil), global skills=\(discoveredSkills.count), project CLAUDE.md=\(projectClaudeMdContent != nil), project skills=\(projectDiscoveredSkills.count), dev_mode_skill=\(devModeContext != nil)")
     }
 
+    /// Discover project CLAUDE.md and skills for a specific workspace path (used by detached windows).
+    /// Returns (claudeMdContent, claudeMdPath, skills) for the project directory.
+    nonisolated static func discoverProjectConfig(workspace: String) async -> (claudeMdContent: String?, claudeMdPath: String?, skills: [(name: String, description: String, path: String)]) {
+        let result = await Task.detached(priority: .utility) {
+            loadClaudeConfigFromDisk(workspace: workspace)
+        }.value
+        return (result.projectClaudeMdContent, result.projectClaudeMdPath, result.projectSkills)
+    }
+
     /// Extract description from YAML frontmatter in SKILL.md
     nonisolated static func extractSkillDescription(from content: String) -> String {
         guard content.hasPrefix("---") else {
