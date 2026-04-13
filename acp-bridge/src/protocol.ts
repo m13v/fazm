@@ -28,6 +28,7 @@ export interface StopMessage {
 
 export interface InterruptMessage {
   type: "interrupt";
+  sessionKey?: string;  // target a specific session; omit to interrupt all
 }
 
 /** Swift tells the bridge which auth method the user chose */
@@ -88,6 +89,7 @@ export interface InitMessage {
 export interface TextDeltaMessage {
   type: "text_delta";
   text: string;
+  sessionId?: string;
 }
 
 export interface ToolUseMessage {
@@ -95,6 +97,7 @@ export interface ToolUseMessage {
   callId: string;
   name: string;
   input: Record<string, unknown>;
+  sessionId?: string;
 }
 
 export interface ResultMessage {
@@ -114,6 +117,7 @@ export interface ToolActivityMessage {
   status: "started" | "completed";
   toolUseId?: string;
   input?: Record<string, unknown>;
+  sessionId?: string;
 }
 
 export interface ToolResultDisplayMessage {
@@ -121,16 +125,19 @@ export interface ToolResultDisplayMessage {
   toolUseId: string;
   name: string;
   output: string;
+  sessionId?: string;
 }
 
 export interface ThinkingDeltaMessage {
   type: "thinking_delta";
   text: string;
+  sessionId?: string;
 }
 
 /** Signals a boundary between text content blocks (new paragraph/section) */
 export interface TextBlockBoundaryMessage {
   type: "text_block_boundary";
+  sessionId?: string;
 }
 
 export interface ErrorMessage {
