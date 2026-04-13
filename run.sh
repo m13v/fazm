@@ -351,7 +351,7 @@ step "Cleaning unsealed contents from bundle root..."
 find "$APP_BUNDLE" -maxdepth 1 -not -name Contents -not -path "$APP_BUNDLE" -exec rm -rf {} +
 
 step "Removing extended attributes (xattr -cr)..."
-xattr -cr "$APP_BUNDLE"
+xattr -cr "$APP_BUNDLE" 2>/dev/null || true
 
 step "Signing app with hardened runtime..."
 # Auto-detect a stable signing identity so TCC permissions persist across rebuilds.
