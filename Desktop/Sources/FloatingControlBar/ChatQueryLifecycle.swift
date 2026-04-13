@@ -102,7 +102,8 @@ enum ChatQueryLifecycle {
     static func subscribeToProviderState(
         provider: ChatProvider,
         state: FloatingControlBarState,
-        sessionKey: String? = nil
+        sessionKey: String? = nil,
+        sessionKeyProvider: (() -> String?)? = nil
     ) -> [AnyCancellable] {
         var cancellables: [AnyCancellable] = []
 
@@ -146,18 +147,19 @@ enum ChatQueryLifecycle {
                 }
         )
 
-        // Sync compaction indicator, scoped to this session's key
+        // Sync compaction indicator, scoped to this session's key.
+        // sessionKeyProvider is preferred (handles session key changes from "new chat"),
+        // falls back to the static sessionKey, falls back to unfiltered.
         cancellables.append(
             provider.$isCompacting
                 .combineLatest(provider.$compactingSessionKey)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak state] isCompacting, compactingKey in
                     guard let state else { return }
-                    if let sessionKey {
-                        // Only show compaction for this specific session
-                        state.isCompacting = isCompacting && compactingKey == sessionKey
+                    let currentKey = sessionKeyProvider?() ?? sessionKey
+                    if let currentKey {
+                        state.isCompacting = isCompacting && compactingKey == currentKey
                     } else {
-                        // No session key filter (e.g. floating bar before first query)
                         state.isCompacting = isCompacting
                     }
                 }
