@@ -1439,13 +1439,13 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       if (abortController.signal.aborted) {
         if (interruptRequested) {
           for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
+            sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
           logErr(
             `Query interrupted by user, sending partial result (${fullText.length} chars)`
           );
-          send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
+          sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
         } else {
           logErr("Query aborted (superseded by new query)");
         }
@@ -1455,7 +1455,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       if (isAcpAuthError(err)) {
         if (authRetryCount >= MAX_AUTH_RETRIES) {
           logErr(`session/prompt auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
-          send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
+          sendWithSession(sessionId, { type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
           return;
         }
         authRetryCount++;
@@ -1484,10 +1484,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           : "regex";
         logErr(`Credit/rate limit exhausted (${detectionMethod}), not retrying: ${errMsg}`);
         for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
+          sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        send({ type: "credit_exhausted", message: errMsg });
+        sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
         lastApiRetry = null;
         return;
       }
@@ -1499,7 +1499,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       if (isImageError && sessionId && !retryingWithHint) {
         logErr(`session/prompt failed with image error, retrying on same session without image: ${errMsg}`);
         for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
+          sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
 
@@ -1557,16 +1557,16 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       if (isNonRetryable) {
         logErr(`Non-retryable error, surfacing to user: ${errMsg}`);
         for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
+          sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
         const isBillingOrRate = isStructuredNonRetryable
           && (apiRetryErrorType === "billing_error" || apiRetryErrorType === "rate_limit");
         const isRegexBilling = /credit|balance|quota|exhausted|hit your.*limit|out of extra usage/i.test(errMsg);
         if (isBillingOrRate || isRegexBilling) {
-          send({ type: "credit_exhausted", message: errMsg });
+          sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
         } else {
-          send({ type: "error", message: errMsg });
+          sendWithSession(sessionId, { type: "error", message: errMsg });
         }
         lastApiRetry = null;
         return;
@@ -1577,10 +1577,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     if (abortController.signal.aborted) {
       if (interruptRequested) {
         for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
+          sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        send({ type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
+        sendWithSession(sessionId, { type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
       }
       return;
     }
@@ -1588,7 +1588,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     if (isAcpAuthError(err)) {
       if (authRetryCount >= MAX_AUTH_RETRIES) {
         logErr(`Query auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
-        send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
+        sendWithSession(sessionId, { type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
         return;
       }
       authRetryCount++;
@@ -1607,13 +1607,13 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     const outerRegexCredit = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
     if (outerStructuredCredit || outerRegexCredit) {
       logErr(`Credit/rate limit exhausted (outer): ${errMsg}`);
-      send({ type: "credit_exhausted", message: errMsg });
+      sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
       lastApiRetry = null;
       return;
     }
     logErr(`Query error: ${errMsg}`);
     // Show the raw error message so the user can see what actually went wrong
-    send({ type: "error", message: errMsg });
+    sendWithSession(sessionId, { type: "error", message: errMsg });
     lastApiRetry = null;
   } finally {
     if (activeAbort === abortController) {
