@@ -177,13 +177,25 @@ function startFazmToolsRelay(): Promise<string> {
               logErr("[fazm-tools] Observer card ready, triggering immediate poll");
               send({ type: "observer_poll" as any } as any);
             } else if (msg.type === "tool_use") {
-              // Forward tool call to Swift via stdout
-              send({
-                type: "tool_use",
+              // Forward tool call to Swift via stdout, preserving session key
+              const toolSessionKey = (msg as Record<string, unknown>).sessionKey as string | undefined;
+              const toolMsg = {
+                type: "tool_use" as const,
                 callId: msg.callId,
                 name: msg.name,
                 input: msg.input,
-              });
+              };
+              if (toolSessionKey) {
+                // Look up sessionId from sessionKey so sendWithSession can add both
+                const entry = sessions.get(toolSessionKey);
+                if (entry) {
+                  sendWithSession(entry.sessionId, toolMsg);
+                } else {
+                  send({ ...toolMsg, sessionKey: toolSessionKey } as OutboundMessage);
+                }
+              } else {
+                send(toolMsg as OutboundMessage);
+              }
 
               // Create a promise that will be resolved when Swift responds
               const callId = msg.callId;
@@ -786,6 +798,9 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
   }
   if (process.env.FAZM_VOICE_RESPONSE === "true") {
     fazmToolsEnv.push({ name: "FAZM_VOICE_RESPONSE", value: "true" });
+  }
+  if (sessionKey) {
+    fazmToolsEnv.push({ name: "FAZM_SESSION_KEY", value: sessionKey });
   }
   servers.push({
     name: "fazm_tools",
