@@ -1120,7 +1120,7 @@ class FloatingControlBarManager {
 
         // Subscribe to shared provider state (auth, suggested replies, compaction)
         sharedProviderCancellables = ChatQueryLifecycle.subscribeToProviderState(
-            provider: chatProvider, state: barWindow.state
+            provider: chatProvider, state: barWindow.state, sessionKey: "floating"
         )
 
         barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
