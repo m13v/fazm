@@ -1236,7 +1236,9 @@ actor ACPBridge {
   }
 
   private func getSessionAcpToolsRunning(_ sessionKey: String) -> Int {
-    return sessionAcpToolsRunning[sessionKey] ?? 0
+    // Per-session tracking isn't instrumented from stderr yet; fall back to
+    // the global count which still usefully defers timeouts when ANY tool is running.
+    return sessionAcpToolsRunning[sessionKey] ?? acpToolsRunning
   }
 
   private func waitForMessage(timeout: TimeInterval? = nil) async throws -> InboundMessage {
