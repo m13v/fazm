@@ -183,12 +183,14 @@ export interface AuthFailedMessage {
 export interface CreditExhaustedMessage {
   type: "credit_exhausted";
   message: string;
+  sessionId?: string;
 }
 
 /** Agent status changed (e.g. compacting context) */
 export interface StatusChangeMessage {
   type: "status_change";
   status: string | null;  // "compacting" | null
+  sessionId?: string;
 }
 
 /** Compact boundary — context was compacted */
@@ -196,6 +198,7 @@ export interface CompactBoundaryMessage {
   type: "compact_boundary";
   trigger: string;   // "auto" | "manual"
   preTokens: number; // token count before compaction
+  sessionId?: string;
 }
 
 /** Sub-task/agent started */
@@ -203,6 +206,7 @@ export interface TaskStartedMessage {
   type: "task_started";
   taskId: string;
   description: string;
+  sessionId?: string;
 }
 
 /** Sub-task/agent completed, failed, or stopped */
@@ -211,6 +215,7 @@ export interface TaskNotificationMessage {
   taskId: string;
   status: string;  // "completed" | "failed" | "stopped"
   summary: string;
+  sessionId?: string;
 }
 
 /** Tool execution progress (elapsed time) */
@@ -219,6 +224,7 @@ export interface ToolProgressMessage {
   toolUseId: string;
   toolName: string;
   elapsedTimeSeconds: number;
+  sessionId?: string;
 }
 
 /** Collapsed summary of multiple tool calls */
@@ -226,6 +232,7 @@ export interface ToolUseSummaryMessage {
   type: "tool_use_summary";
   summary: string;
   precedingToolUseIds: string[];
+  sessionId?: string;
 }
 
 /** Rate limit info from Claude API (forwarded from SDK rate_limit_event) */
@@ -239,6 +246,7 @@ export interface RateLimitMessage {
   overageDisabledReason: string | null;
   isUsingOverage: boolean;
   surpassedThreshold: number | null; // 0-1 float
+  sessionId?: string;
 }
 
 /** API retry info from SDK (carries HTTP status code + typed error category) */
@@ -249,6 +257,7 @@ export interface ApiRetryMessage {
   attempt: number;
   maxRetries: number;
   retryDelayMs: number;
+  sessionId?: string;
 }
 
 /** Chat observer session completed a batch — Swift should poll observer_activity for new cards */
