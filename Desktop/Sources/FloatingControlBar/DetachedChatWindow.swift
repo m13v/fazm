@@ -643,8 +643,8 @@ class DetachedChatWindowController {
         let provider = FloatingControlBarManager.shared.chatProvider
         guard let provider else { return }
 
-        if provider.isSending {
-            log("[DetachedChat] sendQuery: enqueuing (provider busy) session=\(sessionKey) text='\(message.prefix(40))'")
+        if provider.isSending(sessionKey: sessionKey) {
+            log("[DetachedChat] sendQuery: enqueuing (this session busy) session=\(sessionKey) text='\(message.prefix(40))'")
             provider.enqueueMessage(message, sessionKey: sessionKey)
             // Cancel the old response subscription immediately so it doesn't keep
             // re-setting currentAIMessage to the previous (completed) response while
