@@ -1321,7 +1321,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           logErr(`Prompt completed (after stale-task retry): stopReason=${retryResult.stopReason} duration=${retryDurationMs}ms`);
 
           for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
+            sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
 
@@ -1337,7 +1337,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           const retryCacheReadTokens = retryResult.usage?.cachedReadTokens ?? 0;
           const retryCacheWriteTokens = retryResult.usage?.cachedWriteTokens ?? 0;
           const retryCostUsd = retryResult._meta?.costUsd ?? 0;
-          send({ type: "result", text: fullText, sessionId, costUsd: retryCostUsd, inputTokens: retryInputTokens, outputTokens: retryOutputTokens, cacheReadTokens: retryCacheReadTokens, cacheWriteTokens: retryCacheWriteTokens });
+          sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd: retryCostUsd, inputTokens: retryInputTokens, outputTokens: retryOutputTokens, cacheReadTokens: retryCacheReadTokens, cacheWriteTokens: retryCacheWriteTokens });
           return;
         }
 
@@ -1346,7 +1346,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
 
         // Mark any remaining pending tools as completed
         for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
+          sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
 
@@ -1365,7 +1365,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         if (!promptResult.usage) {
           logErr(`[WARN] No usage data from ACP — cost/token tracking will be zero for this query`);
         }
-        send({ type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
+        sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
       } catch (watchdogErr) {
         if (watchdogErr instanceof Error && watchdogErr.message.startsWith("TTFT_WATCHDOG")) {
           // Session is dead after interrupt — destroy it and retry with a fresh session
@@ -1957,7 +1957,7 @@ function handleSessionUpdate(
     case "tool_use_summary": {
       const summary = (update.summary as string) ?? "";
       const ids = (update.precedingToolUseIds as string[]) ?? [];
-      send({ type: "tool_use_summary", summary, precedingToolUseIds: ids });
+      sendWithSession(sid, { type: "tool_use_summary", summary, precedingToolUseIds: ids });
       logErr(`Tool use summary: ${summary.slice(0, 100)}`);
       break;
     }
@@ -1972,7 +1972,7 @@ function handleSessionUpdate(
       const overageDisabledReason = (update.overageDisabledReason as string) ?? null;
       const isUsingOverage = (update.isUsingOverage as boolean) ?? false;
       const surpassedThreshold = (update.surpassedThreshold as number) ?? null;
-      send({
+      sendWithSession(sid, {
         type: "rate_limit",
         status,
         resetsAt,
@@ -1996,7 +1996,7 @@ function handleSessionUpdate(
       const retryDelayMs = (update.retryDelayMs as number) ?? 0;
       lastApiRetry = { httpStatus, errorType, attempt, maxRetries };
       logErr(`API retry: httpStatus=${httpStatus}, error=${errorType}, attempt=${attempt}/${maxRetries}, delay=${retryDelayMs}ms`);
-      send({ type: "api_retry", httpStatus, errorType, attempt, maxRetries, retryDelayMs });
+      sendWithSession(sid, { type: "api_retry", httpStatus, errorType, attempt, maxRetries, retryDelayMs });
       break;
     }
 
