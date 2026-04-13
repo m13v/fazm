@@ -1677,7 +1677,7 @@ function handleSessionUpdate(
         // If tools were pending, they're now complete
         if (pendingTools.length > 0) {
           for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
+            sendWithSession(sid, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
         }
@@ -1686,7 +1686,7 @@ function handleSessionUpdate(
         // - when content block index changes within a single response
         // - when resuming text after a tool call (pendingBoundary)
         if (pendingBoundary || (blockIndex >= 0 && lastTextContentBlockIndex >= 0 && blockIndex !== lastTextContentBlockIndex)) {
-          send({ type: "text_block_boundary" });
+          sendWithSession(sid, { type: "text_block_boundary" });
           pendingBoundary = false;
         }
         if (blockIndex >= 0) {
@@ -1694,7 +1694,7 @@ function handleSessionUpdate(
         }
 
         onText(text);
-        send({ type: "text_delta", text });
+        sendWithSession(sid, { type: "text_delta", text });
       }
       break;
     }
@@ -1703,7 +1703,7 @@ function handleSessionUpdate(
       const content = update.content as { type: string; text?: string } | undefined;
       const text = content?.text ?? "";
       if (text) {
-        send({ type: "thinking_delta", text });
+        sendWithSession(sid, { type: "thinking_delta", text });
       }
       break;
     }
@@ -1741,7 +1741,7 @@ function handleSessionUpdate(
       if (status === "pending" || status === "in_progress") {
         if (!isInternalTool) {
           pendingTools.push(title);
-          send({
+          sendWithSession(sid, {
             type: "tool_activity",
             name: title,
             status: "started",
@@ -1751,7 +1751,7 @@ function handleSessionUpdate(
           // Extract input from rawInput if available
           const rawInput = update.rawInput as Record<string, unknown> | undefined;
           if (rawInput && Object.keys(rawInput).length > 0) {
-            send({
+            sendWithSession(sid, {
               type: "tool_activity",
               name: title,
               status: "started",
@@ -1795,7 +1795,7 @@ function handleSessionUpdate(
         if (idx >= 0) pendingTools.splice(idx, 1);
 
         if (!isInternalTool) {
-          send({
+          sendWithSession(sid, {
             type: "tool_activity",
             name: title,
             status: "completed",
@@ -1864,7 +1864,7 @@ function handleSessionUpdate(
             output.length > 2000
               ? output.slice(0, 2000) + "\n... (truncated)"
               : output;
-          send({
+          sendWithSession(sid, {
             type: "tool_result_display",
             toolUseId: toolCallId,
             name: title,
@@ -1886,7 +1886,7 @@ function handleSessionUpdate(
       if (entries && Array.isArray(entries)) {
         for (const entry of entries) {
           if (entry.content) {
-            send({ type: "thinking_delta", text: entry.content + "\n" });
+            sendWithSession(sid, { type: "thinking_delta", text: entry.content + "\n" });
           }
         }
       }
@@ -1898,20 +1898,20 @@ function handleSessionUpdate(
     case "compact_boundary": {
       const trigger = (update.trigger as string) ?? "auto";
       const preTokens = (update.preTokens as number) ?? 0;
-      send({ type: "compact_boundary", trigger, preTokens });
+      sendWithSession(sid, { type: "compact_boundary", trigger, preTokens });
       logErr(`Compact boundary: trigger=${trigger}, preTokens=${preTokens}`);
       break;
     }
 
     case "status_change": {
       const status = (update.status as string | null) ?? null;
-      send({ type: "status_change", status });
+      sendWithSession(sid, { type: "status_change", status });
       logErr(`Status change: ${status}`);
       break;
     }
 
     case "compaction_start": {
-      send({ type: "status_change", status: "compacting" });
+      sendWithSession(sid, { type: "status_change", status: "compacting" });
       logErr("Compaction stream started");
       break;
     }
@@ -1925,7 +1925,7 @@ function handleSessionUpdate(
       const taskId = (update.taskId as string) ?? "";
       const description = (update.description as string) ?? "";
       if (taskTracking) taskTracking.currentTurnTaskIds.add(taskId);
-      send({ type: "task_started", taskId, description });
+      sendWithSession(sid, { type: "task_started", taskId, description });
       logErr(`Task started: ${taskId} — ${description}`);
       break;
     }
@@ -1938,7 +1938,7 @@ function handleSessionUpdate(
       if (taskTracking && !taskTracking.currentTurnTaskIds.has(taskId)) {
         taskTracking.onStaleNotification();
         logErr(`Task notification: ${taskId} ${status} [STALE — from previous turn]`);
-        send({ type: "task_notification", taskId, status, summary });
+        sendWithSession(sid, { type: "task_notification", taskId, status, summary });
         break;
       }
       send({ type: "task_notification", taskId, status, summary });
