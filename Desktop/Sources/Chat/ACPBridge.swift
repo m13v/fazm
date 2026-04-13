@@ -1160,21 +1160,27 @@ actor ACPBridge {
       onChatObserverStatusChange?(running)
       return
     case .toolUse(let callId, let name, let input):
-      // If no active query is waiting, handle tool calls from background sessions (chat observer)
-      if !continuationBox.isPending, let handler = onBackgroundToolCall {
-        Task {
-          let result = await handler(callId, name, input)
-          let resultDict: [String: Any] = [
-            "type": "tool_result",
-            "callId": callId,
-            "result": result,
-          ]
-          if let resultData = try? JSONSerialization.data(withJSONObject: resultDict),
-             let resultString = String(data: resultData, encoding: .utf8) {
-            self.sendLine(resultString)
+      // If a per-session query is waiting for this tool call, let it fall through
+      // to the per-session routing below so the query loop handles it.
+      let hasSessionWaiter = sessionKey.flatMap { sessionContinuations[$0] } != nil
+          || sessionKey.flatMap { sessionPendingMessages[$0] } != nil
+      if !hasSessionWaiter {
+        // No per-session query waiting; use background handler (chat observer, etc.)
+        if !continuationBox.isPending, let handler = onBackgroundToolCall {
+          Task {
+            let result = await handler(callId, name, input)
+            let resultDict: [String: Any] = [
+              "type": "tool_result",
+              "callId": callId,
+              "result": result,
+            ]
+            if let resultData = try? JSONSerialization.data(withJSONObject: resultDict),
+               let resultString = String(data: resultData, encoding: .utf8) {
+              self.sendLine(resultString)
+            }
           }
+          return
         }
-        return
       }
     default:
       break
