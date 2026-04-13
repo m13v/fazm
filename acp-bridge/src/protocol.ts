@@ -143,6 +143,7 @@ export interface TextBlockBoundaryMessage {
 export interface ErrorMessage {
   type: "error";
   message: string;
+  sessionId?: string;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */
