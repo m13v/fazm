@@ -1403,7 +1403,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           logErr(`Prompt completed (after watchdog recovery): stopReason=${retryResult.stopReason} duration=${retryDurationMs}ms`);
 
           for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
+            sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
 
@@ -1422,7 +1422,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           if (!retryResult.usage) {
             logErr(`[WARN] No usage data from ACP — cost/token tracking will be zero for this query`);
           }
-          send({ type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
+          sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
         } else {
           throw watchdogErr;
         }
