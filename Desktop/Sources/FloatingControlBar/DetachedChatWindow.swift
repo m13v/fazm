@@ -293,6 +293,8 @@ class DetachedChatWindowController {
         let y: Double
         let width: Double
         let height: Double
+        /// Per-window workspace directory (empty = global default). Added in v0.3+; older snapshots decode as "".
+        var workspace: String = ""
     }
 
     private var entries: [ObjectIdentifier: WindowEntry] = [:]
@@ -314,7 +316,8 @@ class DetachedChatWindowController {
             return WindowSnapshot(
                 sessionKey: entry.sessionKey,
                 x: f.origin.x, y: f.origin.y,
-                width: f.size.width, height: f.size.height
+                width: f.size.width, height: f.size.height,
+                workspace: entry.window.state.workspaceDirectory
             )
         }
         if let data = try? JSONEncoder().encode(snapshots) {
@@ -472,6 +475,19 @@ class DetachedChatWindowController {
                 detachedState.showingAIResponse = true
                 detachedState.isAILoading = false
 
+                // Restore per-window workspace
+                detachedState.workspaceDirectory = snapshot.workspace
+                if !snapshot.workspace.isEmpty {
+                    Task {
+                        let config = await ChatProvider.discoverProjectConfig(workspace: snapshot.workspace)
+                        await MainActor.run {
+                            detachedState.projectClaudeMdContent = config.claudeMdContent
+                            detachedState.projectClaudeMdPath = config.claudeMdPath
+                            detachedState.projectDiscoveredSkills = config.skills
+                        }
+                    }
+                }
+
                 let win = DetachedChatWindow(state: detachedState, sessionKey: sessionKey, savedFrame: savedFrame)
                 let winId = ObjectIdentifier(win)
 
@@ -502,7 +518,8 @@ class DetachedChatWindowController {
                     return WindowSnapshot(
                         sessionKey: entry.sessionKey,
                         x: f.origin.x, y: f.origin.y,
-                        width: f.size.width, height: f.size.height
+                        width: f.size.width, height: f.size.height,
+                        workspace: entry.window.state.workspaceDirectory
                     )
                 } + failedSnapshots
                 if let data = try? JSONEncoder().encode(allSnapshots) {
