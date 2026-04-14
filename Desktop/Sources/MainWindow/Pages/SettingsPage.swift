@@ -124,6 +124,9 @@ struct SettingsContentView: View {
     @AppStorage("voiceResponseEnabled") private var voiceResponseEnabled = true
     @AppStorage("voiceResponseSpeed") private var voiceResponseSpeed: Double = 1.0
 
+    // Tool timeout (0 = smart defaults per tool class)
+    @AppStorage("toolTimeoutSeconds") private var toolTimeoutSeconds: Int = 0
+
     // Browser Extension settings
     @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
     @State private var playwrightExtensionToken: String = ""
@@ -1889,6 +1892,38 @@ struct SettingsContentView: View {
                             .buttonStyle(.plain)
                         }
                         .padding(.horizontal, 4)
+                    }
+                }
+            }
+
+            // Tool Timeout
+            settingsCard(settingId: "advanced.preferences.tooltimeout") {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Tool Timeout")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(FazmColors.textPrimary)
+                        Text(toolTimeoutSeconds == 0
+                             ? "Using defaults (10s internal, 2m external, 5m other)"
+                             : "All tools time out after \(toolTimeoutSeconds)s")
+                            .scaledFont(size: 13)
+                            .foregroundColor(FazmColors.textSecondary)
+                    }
+
+                    HStack(spacing: 12) {
+                        Text("Seconds:")
+                            .scaledFont(size: 13)
+                            .foregroundColor(FazmColors.textSecondary)
+
+                        TextField("0 = auto", value: $toolTimeoutSeconds, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 80)
+
+                        Text("0 for smart defaults")
+                            .scaledFont(size: 12)
+                            .foregroundColor(FazmColors.textTertiary)
+
+                        Spacer()
                     }
                 }
             }
