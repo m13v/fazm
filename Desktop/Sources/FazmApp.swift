@@ -1021,6 +1021,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     }
                 }
             }
+        case "settings":
+            // Deep link to a specific settings page, e.g. fazm://settings/tool-timeouts
+            NSApp.activate(ignoringOtherApps: true)
+            openFazmFromMenu()
+            let settingPath = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if !settingPath.isEmpty {
+                // Map URL path to settingId for scroll-to-highlight
+                let settingId: String
+                switch settingPath {
+                case "tool-timeouts", "tool-timeout":
+                    settingId = "advanced.preferences.tooltimeout"
+                default:
+                    settingId = settingPath
+                }
+                // Post after a short delay so the settings window has time to appear
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("navigateToSetting"),
+                        object: nil,
+                        userInfo: ["settingId": settingId]
+                    )
+                }
+            }
         default:
             log("FazmApp AppDelegate: Unhandled URL path: \(url.host ?? "nil")")
         }
