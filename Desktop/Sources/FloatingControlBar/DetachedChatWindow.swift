@@ -300,7 +300,7 @@ class DetachedChatWindowController {
         /// Per-window workspace directory (empty = global default). Added in v0.3+; older snapshots decode as "".
         var workspace: String = ""
         /// Per-window model selection. Added in a later version; older snapshots decode as the current global model.
-        var selectedModel: String = ShortcutSettings.shared.selectedModel
+        var selectedModel: String = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? "claude-sonnet-4-6"
     }
 
     private var entries: [ObjectIdentifier: WindowEntry] = [:]
