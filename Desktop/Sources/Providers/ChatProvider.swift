@@ -361,6 +361,7 @@ class ChatProvider: ObservableObject {
     /// Per-mode UserDefaults key so sessions from one mode aren't mistakenly
     /// resumed by a different mode (builtin API key vs personal OAuth).
     private var floatingSessionIdKey: String { "floatingACPSessionId_\(bridgeMode)" }
+    private var mainSessionIdKey: String { "mainACPSessionId_\(bridgeMode)" }
     /// Maximum number of messages to restore from local DB on startup
     private static let floatingRestoreLimit = 50
     /// UserDefaults key: when true, the user started a new chat and restore should be skipped
@@ -2671,6 +2672,8 @@ class ChatProvider: ObservableObject {
                 } else if let key = sessionKey, key.hasPrefix("detached-") {
                     let detachedIdKey = "acpSessionId_\(key)_\(bridgeMode)"
                     UserDefaults.standard.set(queryResult.sessionId, forKey: detachedIdKey)
+                } else if sessionKey == nil || sessionKey == "main" {
+                    UserDefaults.standard.set(queryResult.sessionId, forKey: mainSessionIdKey)
                 }
             }
 
