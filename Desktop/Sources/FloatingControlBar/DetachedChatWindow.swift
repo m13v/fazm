@@ -404,22 +404,34 @@ class DetachedChatWindowController {
         }
 
         // Position new pop-out relative to the last active pop-out:
-        // same size, immediately to the right with a small gap
+        // inherit size, try right → below → left → above, then fall back to center
         if let anchor = lastActiveWindow, anchor !== win {
             let anchorFrame = anchor.frame
-            var newFrame = win.frame
-            newFrame.size = anchorFrame.size
-            newFrame.origin.x = anchorFrame.maxX + 8
-            newFrame.origin.y = anchorFrame.origin.y
-            // If the new position would be off-screen, wrap or center
-            let onScreen = NSScreen.screens.contains {
-                $0.visibleFrame.intersects(NSRect(x: newFrame.origin.x, y: newFrame.origin.y, width: min(newFrame.width, 100), height: min(newFrame.height, 100)))
+            let sz = anchorFrame.size
+            let gap: CGFloat = 8
+
+            // Candidate positions in priority order: right, below, left, above
+            let candidates: [NSRect] = [
+                NSRect(x: anchorFrame.maxX + gap, y: anchorFrame.origin.y, width: sz.width, height: sz.height),
+                NSRect(x: anchorFrame.origin.x, y: anchorFrame.origin.y - sz.height - gap, width: sz.width, height: sz.height),
+                NSRect(x: anchorFrame.origin.x - sz.width - gap, y: anchorFrame.origin.y, width: sz.width, height: sz.height),
+                NSRect(x: anchorFrame.origin.x, y: anchorFrame.maxY + gap, width: sz.width, height: sz.height),
+            ]
+
+            let fitsOnScreen: (NSRect) -> Bool = { rect in
+                NSScreen.screens.contains {
+                    let visible = $0.visibleFrame
+                    // The candidate must fit mostly within a single screen's visible area
+                    return visible.contains(NSPoint(x: rect.minX + 50, y: rect.minY + 50))
+                        && visible.contains(NSPoint(x: rect.maxX - 50, y: rect.maxY - 50))
+                }
             }
-            if onScreen {
-                win.setFrame(newFrame, display: false)
+
+            if let placed = candidates.first(where: fitsOnScreen) {
+                win.setFrame(placed, display: false)
             } else {
-                // Off-screen: keep the inherited size but center the window
-                win.setContentSize(anchorFrame.size)
+                // Nothing fits: keep inherited size, center on screen
+                win.setContentSize(sz)
                 win.center()
             }
         }
