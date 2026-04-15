@@ -832,13 +832,15 @@ class DetachedChatWindowController {
 
         let windowCwd = state.workspaceDirectory.isEmpty ? nil : state.workspaceDirectory
         Task { @MainActor in
+            let bridgeAttachments: [[String: String]]? = attachments.isEmpty ? nil : attachments.map { $0.bridgeDict }
             await provider.sendMessage(
                 message,
                 model: state.selectedModel,
                 systemPromptSuffix: nil,
                 systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent,
                 sessionKey: sessionKey,
-                cwd: windowCwd
+                cwd: windowCwd,
+                attachments: bridgeAttachments
             )
 
             // Shared post-query: error handling, credit exhaustion, auth, paywall, etc.
