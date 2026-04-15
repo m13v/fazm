@@ -144,6 +144,10 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
         onWindowClose?()
     }
 
+    func windowDidBecomeKey(_ notification: Notification) {
+        DetachedChatWindowController.shared.lastActiveWindow = self
+    }
+
     func windowDidResize(_ notification: Notification) {
         DetachedChatWindowController.shared.saveWindowRegistry()
     }
@@ -304,6 +308,8 @@ class DetachedChatWindowController {
     }
 
     private var entries: [ObjectIdentifier: WindowEntry] = [:]
+    /// Tracks the most recently focused detached window for size/position inheritance.
+    fileprivate(set) weak var lastActiveWindow: DetachedChatWindow?
     /// Set during app termination so window-close handlers preserve the registry.
     private var isTerminating = false
 
@@ -397,13 +403,25 @@ class DetachedChatWindowController {
             )
         }
 
-        // Offset new windows so they don't stack directly on top of each other
-        if entries.count > 1 {
-            let offset = CGFloat((entries.count - 1) * 30)
-            var frame = win.frame
-            frame.origin.x += offset
-            frame.origin.y -= offset
-            win.setFrame(frame, display: false)
+        // Position new pop-out relative to the last active pop-out:
+        // same size, immediately to the right with a small gap
+        if let anchor = lastActiveWindow, anchor !== win {
+            let anchorFrame = anchor.frame
+            var newFrame = win.frame
+            newFrame.size = anchorFrame.size
+            newFrame.origin.x = anchorFrame.maxX + 8
+            newFrame.origin.y = anchorFrame.origin.y
+            // If the new position would be off-screen, wrap or center
+            let onScreen = NSScreen.screens.contains {
+                $0.visibleFrame.intersects(NSRect(x: newFrame.origin.x, y: newFrame.origin.y, width: min(newFrame.width, 100), height: min(newFrame.height, 100)))
+            }
+            if onScreen {
+                win.setFrame(newFrame, display: false)
+            } else {
+                // Off-screen: keep the inherited size but center the window
+                win.setContentSize(anchorFrame.size)
+                win.center()
+            }
         }
 
         win.makeKeyAndOrderFront(nil)
