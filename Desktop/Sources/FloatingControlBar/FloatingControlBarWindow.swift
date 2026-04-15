@@ -1740,10 +1740,10 @@ class FloatingControlBarManager {
         guard let provider = self.chatProvider else { return }
 
         // Re-wire the onSendQuery to use the shared provider
-        window.onSendQuery = { [weak self, weak window, weak provider] message in
+        window.onSendQuery = { [weak self, weak window, weak provider] message, attachments in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
-                await self.sendAIQuery(message, barWindow: window, provider: provider)
+                await self.sendAIQuery(message, attachments: attachments, barWindow: window, provider: provider)
             }
         }
 
@@ -2018,7 +2018,7 @@ class FloatingControlBarManager {
 
     // MARK: - AI Query
 
-    private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+    private func sendAIQuery(_ message: String, attachments: [ChatAttachment] = [], barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
         // If a query is already in-flight, enqueue instead of silently dropping.
         // The queue drains automatically after the current response finishes.
         if provider.isSending {
@@ -2149,7 +2149,9 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating")
+        // Convert user attachments to bridge format
+        let bridgeAttachments: [[String: String]]? = attachments.isEmpty ? nil : attachments.map { $0.bridgeDict }
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating", attachments: bridgeAttachments)
 
         // Handle errors, credit exhaustion, auth, paywall, etc.
         ChatQueryLifecycle.handlePostQuery(provider: provider, state: barWindow.state, sessionKey: "floating", messageCountBefore: messageCountBefore)
