@@ -843,6 +843,11 @@ class DetachedChatWindowController {
                 attachments: bridgeAttachments
             )
 
+            // Cancel the streaming subscription before post-query handling so the
+            // Combine sink can't overwrite error text appended by handlePostQuery.
+            self.entries[winId]?.chatCancellable?.cancel()
+            self.entries[winId]?.chatCancellable = nil
+
             // Shared post-query: error handling, credit exhaustion, auth, paywall, etc.
             ChatQueryLifecycle.handlePostQuery(provider: provider, state: state, sessionKey: sessionKey, messageCountBefore: messageCountBefore)
         }
@@ -884,6 +889,13 @@ class DetachedChatWindowController {
                     }
                 } else {
                     state.isAILoading = false
+                    // Ensure the response is visible even if we never saw isStreaming=true
+                    // (e.g., response completed before the Combine sink fired).
+                    if !state.showingAIResponse {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            state.showingAIResponse = true
+                        }
+                    }
                     // Clear stale messages from provider now that streaming is done.
                     // These were kept alive during pop-out so the in-flight query could
                     // continue writing to them. The floating bar doesn't need them anymore.
