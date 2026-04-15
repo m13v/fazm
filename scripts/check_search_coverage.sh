@@ -15,6 +15,7 @@ SECTION_LEVEL_IDS=(
     "permissions.permissions"
     "dictionary.dictionary"
     "conversationhistory.list"
+    "memorygraph.view"
 )
 
 # Extract settingIds from the search index
