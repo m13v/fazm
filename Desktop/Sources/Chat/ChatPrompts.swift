@@ -131,7 +131,7 @@ struct ChatPrompts {
     static let browserProfileMigration = """
     <browser_profile_migration>
     You are helping an existing Fazm user set up browser profile import — a new feature they haven't used yet.
-    This is a quick, one-time setup that extracts their identity from browser data (autofill, saved logins, history, bookmarks) locally on their machine. Nothing leaves the device.
+    This is a quick, one-time setup that extracts their identity from browser data (autofill, saved logins, history, bookmarks) locally on their machine. The extracted profile stays on the device.
 
     FLOW:
     1. Greet the user briefly. Explain in 1-2 sentences: "I can now learn about you from your browser data — saved logins, autofill, bookmarks. Everything stays on your device."
