@@ -663,6 +663,8 @@ class DetachedChatWindowController {
             state.currentAIMessage = nil
             state.isAILoading = false
             state.aiInputText = ""
+            state.suggestedReplies = []
+            state.suggestedReplyQuestion = ""
             state.clearQueue()
             let id = ObjectIdentifier(win)
             let oldKey = self.entries[id]?.sessionKey
@@ -754,6 +756,8 @@ class DetachedChatWindowController {
             state.currentAIMessage = nil
             state.isAILoading = false
             state.aiInputText = ""
+            state.suggestedReplies = []
+            state.suggestedReplyQuestion = ""
             state.clearQueue()
             let oldKey = self.entries[id]?.sessionKey
             let newKey = "detached-\(UUID().uuidString)"
