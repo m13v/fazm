@@ -9,7 +9,7 @@ struct AIResponseView: View {
     @State private var isQuestionExpanded = false
     @State private var followUpText: String = ""
     @State private var preVoiceFollowUpText: String = ""
-    @State private var followUpTextHeight: CGFloat = 36
+    @State private var followUpTextHeight: CGFloat = 34
     @State private var isHanging = false
     @State private var hangTask: Task<Void, Never>?
     @State private var isStopping = false
@@ -870,7 +870,7 @@ struct AIResponseView: View {
                 ChatAttachmentStrip(attachments: $state.pendingAttachments)
             }
 
-            HStack(alignment: .bottom, spacing: 6) {
+            HStack(alignment: .center, spacing: 6) {
                 ChatAttachmentButton {
                     ChatAttachmentHelper.openFilePicker { urls in
                         ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
@@ -897,7 +897,7 @@ struct AIResponseView: View {
                         onPasteImageData: { data in
                             ChatAttachmentHelper.addPastedImage(data, to: &state.pendingAttachments)
                         },
-                        minHeight: 36,
+                        minHeight: 34,
                         maxHeight: 120,
                         onHeightChange: { newHeight in
                             if abs(followUpTextHeight - newHeight) > 1 {
