@@ -7,6 +7,7 @@ struct ConversationSummary: Identifiable {
     let firstMessage: String // First user message (preview)
     let lastMessageDate: Date
     let messageCount: Int
+    let acpSessionId: String? // ACP session ID for resuming
 }
 
 /// Conversation History tab: scrollable list of past conversations with "New Chat" button.
@@ -159,6 +160,14 @@ struct ConversationHistorySection: View {
                     isExistingDetached = true
                 }
 
+                // Pre-populate the ACP session ID in UserDefaults so the first
+                // query in this detached window can resume the original session.
+                if let acpId = conversation.acpSessionId {
+                    let detachedIdKey = "acpSessionId_\(sessionKey)_\(provider.bridgeMode)"
+                    UserDefaults.standard.set(acpId, forKey: detachedIdKey)
+                    log("ConversationHistory: Pre-populated ACP session ID \(acpId.prefix(8))... for \(sessionKey)")
+                }
+
                 DetachedChatWindowController.shared.show(
                     chatHistory: exchanges,
                     displayedQuery: "",
@@ -190,7 +199,10 @@ struct ConversationHistorySection: View {
                              WHERE sub.taskId = cm.taskId AND sub.sender = 'user'
                              ORDER BY sub.createdAt ASC LIMIT 1) as firstUserMessage,
                             MAX(cm.createdAt) as lastMessageDate,
-                            COUNT(*) as messageCount
+                            COUNT(*) as messageCount,
+                            (SELECT sub2.session_id FROM chat_messages sub2
+                             WHERE sub2.taskId = cm.taskId AND sub2.session_id IS NOT NULL AND sub2.session_id != ''
+                             ORDER BY sub2.createdAt DESC LIMIT 1) as acpSessionId
                         FROM chat_messages cm
                         WHERE cm.taskId NOT IN ('__onboarding__')
                         GROUP BY cm.taskId
@@ -204,12 +216,14 @@ struct ConversationHistorySection: View {
 
                         let firstMsg = (row["firstUserMessage"] as String?) ?? "New conversation"
                         let count = (row["messageCount"] as Int?) ?? 0
+                        let sessionId = row["acpSessionId"] as? String
 
                         return ConversationSummary(
                             id: taskId,
                             firstMessage: firstMsg,
                             lastMessageDate: lastDate,
-                            messageCount: count
+                            messageCount: count,
+                            acpSessionId: sessionId
                         )
                     }
                 }
