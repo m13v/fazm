@@ -859,84 +859,107 @@ struct AIResponseView: View {
 
     // MARK: - Follow-Up Input
 
+    private var followUpHasInput: Bool {
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.pendingAttachments.isEmpty
+    }
+
     private var followUpInputView: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            ZStack(alignment: .topLeading) {
-                if followUpText.isEmpty {
-                    Text(isLoading && isThisSessionStreaming ? "Type next question (queued)..." : "Ask follow up...")
-                        .scaledFont(size: 13)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                }
-
-                FazmTextEditor(
-                    text: $followUpText,
-                    lineFragmentPadding: 8,
-                    onSubmit: { sendFollowUp() },
-                    focusOnAppear: false,
-                    minHeight: 36,
-                    maxHeight: 120,
-                    onHeightChange: { newHeight in
-                        if abs(followUpTextHeight - newHeight) > 1 {
-                            followUpTextHeight = newHeight
-                        }
-                    }
-                )
-                .onChange(of: state.pendingFollowUpText) {
-                    if !state.pendingFollowUpText.isEmpty {
-                        if followUpText.isEmpty {
-                            followUpText = state.pendingFollowUpText
-                        } else {
-                            followUpText += " " + state.pendingFollowUpText
-                        }
-                        state.pendingFollowUpText = ""
-                    }
-                }
-                .onChange(of: state.isVoiceListening) {
-                    if state.isVoiceListening {
-                        preVoiceFollowUpText = followUpText
-                    }
-                }
-                .onChange(of: state.aiInputText) {
-                    if state.isVoiceListening && !state.aiInputText.isEmpty && state.aiInputText != followUpText {
-                        if preVoiceFollowUpText.isEmpty {
-                            followUpText = state.aiInputText
-                        } else {
-                            followUpText = preVoiceFollowUpText + " " + state.aiInputText
-                        }
-                    }
-                }
+        VStack(spacing: 0) {
+            // Attachment thumbnails strip
+            if !state.pendingAttachments.isEmpty {
+                ChatAttachmentStrip(attachments: $state.pendingAttachments)
             }
-            .frame(height: followUpTextHeight)
-            .background(FazmColors.overlayForeground.opacity(0.1))
-            .cornerRadius(8)
 
-            PushToTalkButton(isListening: state.isVoiceListening, iconSize: 16, frameSize: 24)
+            HStack(alignment: .bottom, spacing: 6) {
+                ChatAttachmentButton {
+                    ChatAttachmentHelper.openFilePicker { urls in
+                        ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
+                    }
+                }
 
-            if (isLoading || currentMessage?.isStreaming == true) && followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button(action: {
-                    isStopping = true
-                    onStopAgent?()
-                }) {
-                    Image(systemName: isStopping ? "ellipsis.circle" : "stop.circle.fill")
-                        .scaledFont(size: 20)
-                        .foregroundColor(isStopping ? .secondary : .red)
+                ZStack(alignment: .topLeading) {
+                    if followUpText.isEmpty {
+                        Text(isLoading && isThisSessionStreaming ? "Type next question (queued)..." : "Ask follow up...")
+                            .scaledFont(size: 13)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 8)
+                    }
+
+                    FazmTextEditor(
+                        text: $followUpText,
+                        lineFragmentPadding: 8,
+                        onSubmit: { sendFollowUp() },
+                        focusOnAppear: false,
+                        onPasteFiles: { urls in
+                            ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
+                        },
+                        onPasteImageData: { data in
+                            ChatAttachmentHelper.addPastedImage(data, to: &state.pendingAttachments)
+                        },
+                        minHeight: 36,
+                        maxHeight: 120,
+                        onHeightChange: { newHeight in
+                            if abs(followUpTextHeight - newHeight) > 1 {
+                                followUpTextHeight = newHeight
+                            }
+                        }
+                    )
+                    .onChange(of: state.pendingFollowUpText) {
+                        if !state.pendingFollowUpText.isEmpty {
+                            if followUpText.isEmpty {
+                                followUpText = state.pendingFollowUpText
+                            } else {
+                                followUpText += " " + state.pendingFollowUpText
+                            }
+                            state.pendingFollowUpText = ""
+                        }
+                    }
+                    .onChange(of: state.isVoiceListening) {
+                        if state.isVoiceListening {
+                            preVoiceFollowUpText = followUpText
+                        }
+                    }
+                    .onChange(of: state.aiInputText) {
+                        if state.isVoiceListening && !state.aiInputText.isEmpty && state.aiInputText != followUpText {
+                            if preVoiceFollowUpText.isEmpty {
+                                followUpText = state.aiInputText
+                            } else {
+                                followUpText = preVoiceFollowUpText + " " + state.aiInputText
+                            }
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(isStopping)
-                .help("Stop generating")
-            } else {
-                Button(action: { sendFollowUp() }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .scaledFont(size: 20)
-                        .foregroundColor(
-                            followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? .secondary : FazmColors.overlayForeground
-                        )
+                .frame(height: followUpTextHeight)
+                .background(FazmColors.overlayForeground.opacity(0.1))
+                .cornerRadius(8)
+
+                PushToTalkButton(isListening: state.isVoiceListening, iconSize: 16, frameSize: 24)
+
+                if (isLoading || currentMessage?.isStreaming == true) && !followUpHasInput {
+                    Button(action: {
+                        isStopping = true
+                        onStopAgent?()
+                    }) {
+                        Image(systemName: isStopping ? "ellipsis.circle" : "stop.circle.fill")
+                            .scaledFont(size: 20)
+                            .foregroundColor(isStopping ? .secondary : .red)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isStopping)
+                    .help("Stop generating")
+                } else {
+                    Button(action: { sendFollowUp() }) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .scaledFont(size: 20)
+                            .foregroundColor(
+                                followUpHasInput
+                                    ? FazmColors.overlayForeground : .secondary
+                            )
+                    }
+                    .disabled(!followUpHasInput)
+                    .buttonStyle(.plain)
                 }
-                .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.plain)
             }
         }
     }
@@ -947,16 +970,18 @@ struct AIResponseView: View {
 
     private func sendFollowUp() {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let attachmentsToSend = state.pendingAttachments
+        guard !trimmed.isEmpty || !attachmentsToSend.isEmpty else { return }
         followUpText = ""
+        state.pendingAttachments = []
 
         if isLoading && isThisSessionStreaming {
-            // THIS window is actively streaming a response — queue the message
+            // THIS window is actively streaming a response — queue the message (text only)
             onEnqueueMessage?(trimmed)
         } else {
             // Window is idle (or another window is busy) — always render the user
             // message immediately. sendQuery handles bridge serialization via the queue.
-            onSendFollowUp?(trimmed)
+            onSendFollowUp?(trimmed, attachmentsToSend)
         }
     }
 }
