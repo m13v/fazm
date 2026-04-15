@@ -3,6 +3,12 @@
 
 // === Swift → Bridge (stdin) ===
 
+export interface QueryAttachment {
+  path: string;
+  name: string;
+  mimeType: string;
+}
+
 export interface QueryMessage {
   type: "query";
   id: string;
@@ -13,7 +19,7 @@ export interface QueryMessage {
   mode?: "ask" | "act";
   model?: string;
   resume?: string;
-  imagePath?: string;
+  attachments?: QueryAttachment[];
 }
 
 export interface ToolResultMessage {
