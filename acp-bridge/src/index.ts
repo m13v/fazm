@@ -31,7 +31,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { tmpdir, homedir } from "os";
-import { unlinkSync, appendFileSync, existsSync, watch, mkdirSync } from "fs";
+import { unlinkSync, appendFileSync, existsSync, watch, mkdirSync, readFileSync } from "fs";
 import type {
   InboundMessage,
   OutboundMessage,
@@ -1365,11 +1365,46 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     let promptStartTime = Date.now();
     const sendPrompt = async (): Promise<void> => {
       const promptBlocks: Array<Record<string, unknown>> = [];
-      // Cap image sends per session to avoid Claude's "many-image" stricter 2000px limit.
-      // After MAX_IMAGE_TURNS images in a session, screenshots are silently dropped.
-      const currentImageTurns = imageTurnCounts.get(sessionKey) ?? 0;
-      // Screenshots are no longer sent inline — the path is appended to the prompt text
-      // so the model can read the file via the Read tool if it decides the visual context is needed.
+
+      // Add user-attached files as native content blocks (images, PDFs, text)
+      if (msg.attachments && msg.attachments.length > 0) {
+        for (const att of msg.attachments) {
+          try {
+            if (!existsSync(att.path)) {
+              logErr(`[ATTACH] File not found: ${att.path}`);
+              continue;
+            }
+            const fileData = readFileSync(att.path);
+            const base64Data = fileData.toString("base64");
+            const mime = att.mimeType.toLowerCase();
+
+            if (mime.startsWith("image/")) {
+              // Native image content block
+              promptBlocks.push({
+                type: "image",
+                source: { type: "base64", media_type: mime, data: base64Data },
+              });
+            } else if (mime === "application/pdf") {
+              // Native PDF/document content block
+              promptBlocks.push({
+                type: "document",
+                source: { type: "base64", media_type: mime, data: base64Data },
+              });
+            } else {
+              // Text-based files: read as UTF-8 and inline as text block
+              const textContent = fileData.toString("utf-8");
+              promptBlocks.push({
+                type: "text",
+                text: `[File: ${att.name}]\n${textContent}`,
+              });
+            }
+            logErr(`[ATTACH] Added ${mime} attachment: ${att.name} (${fileData.length} bytes)`);
+          } catch (err) {
+            logErr(`[ATTACH] Failed to read attachment ${att.path}: ${err}`);
+          }
+        }
+      }
+
       promptBlocks.push({ type: "text", text: fullPrompt });
 
       const sessionPromptPayload = {
