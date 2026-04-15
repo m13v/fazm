@@ -56,8 +56,14 @@ enum ChatQueryLifecycle {
             state.currentAIMessage = ChatMessage(text: "Please connect your Claude account to continue.", sender: .ai)
         } else if provider.showCreditExhaustedAlert {
             provider.showCreditExhaustedAlert = false
-            state.showConnectClaudeButton = true
-            state.currentAIMessage = ChatMessage(text: "Your free built-in credits have run out. Connect your Claude account to continue.", sender: .ai)
+            if provider.isClaudeConnected {
+                // User already has valid Claude credentials; just inform them the switch happened
+                log("ChatQueryLifecycle: credits exhausted but Claude already connected, skipping connect prompt")
+                state.currentAIMessage = ChatMessage(text: "Switched to your Claude account. You can keep chatting.", sender: .ai)
+            } else {
+                state.showConnectClaudeButton = true
+                state.currentAIMessage = ChatMessage(text: "Your free built-in credits have run out. Connect your Claude account to continue.", sender: .ai)
+            }
         } else if let errorText = provider.errorMessage {
             let isRateLimit = errorText.contains("usage limit") || errorText.contains("rate limit")
             let isPersonalMode = provider.bridgeMode == "personal"
