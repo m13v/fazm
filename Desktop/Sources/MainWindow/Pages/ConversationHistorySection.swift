@@ -15,6 +15,7 @@ struct ConversationHistorySection: View {
 
     @State private var conversations: [ConversationSummary] = []
     @State private var isLoading = true
+    @State private var loadingConversationId: String? = nil
 
     private let refreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
@@ -54,8 +55,14 @@ struct ConversationHistorySection: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(conversations) { conversation in
-                            ConversationRow(conversation: conversation)
-                                .onTapGesture { openConversation(conversation) }
+                            ConversationRow(
+                                conversation: conversation,
+                                isLoading: loadingConversationId == conversation.id
+                            )
+                            .onTapGesture {
+                                guard loadingConversationId == nil else { return }
+                                openConversation(conversation)
+                            }
                         }
                     }
                 }
@@ -109,6 +116,8 @@ struct ConversationHistorySection: View {
     private func openConversation(_ conversation: ConversationSummary) {
         guard let provider = chatProvider ?? FloatingControlBarManager.shared.chatProvider else { return }
 
+        loadingConversationId = conversation.id
+
         Task {
             let messages = await ChatMessageStore.loadMessages(context: conversation.id, limit: 200)
 
@@ -137,13 +146,17 @@ struct ConversationHistorySection: View {
                     exchanges.append(FloatingChatExchange(question: trailing, aiMessage: placeholder))
                 }
 
-                // For floating bar conversations, create a new detached session to view them
+                // For floating bar conversations, create a new detached session to view them.
+                // Existing detached sessions already have their messages persisted.
                 let sessionKey: String
+                let isExistingDetached: Bool
                 if conversation.id == "__floating__" {
                     sessionKey = "detached-\(UUID().uuidString)"
+                    isExistingDetached = false
                 } else {
                     // Strip __ wrappers to get the original session key
                     sessionKey = String(conversation.id.dropFirst(2).dropLast(2))
+                    isExistingDetached = true
                 }
 
                 DetachedChatWindowController.shared.show(
@@ -153,8 +166,11 @@ struct ConversationHistorySection: View {
                     isAILoading: false,
                     chatProvider: provider,
                     messageCountBefore: provider.messages.count,
-                    sessionKey: sessionKey
+                    sessionKey: sessionKey,
+                    skipPersist: isExistingDetached
                 )
+
+                loadingConversationId = nil
             }
         }
     }
@@ -214,16 +230,23 @@ struct ConversationHistorySection: View {
 
 struct ConversationRow: View {
     let conversation: ConversationSummary
+    var isLoading: Bool = false
 
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Image(systemName: conversation.id == "__floating__" ? "text.bubble" : "macwindow")
-                .scaledFont(size: 14)
-                .foregroundColor(FazmColors.purplePrimary)
-                .frame(width: 24)
+            // Icon (swap to spinner when loading)
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 24)
+            } else {
+                Image(systemName: conversation.id == "__floating__" ? "text.bubble" : "macwindow")
+                    .scaledFont(size: 14)
+                    .foregroundColor(FazmColors.purplePrimary)
+                    .frame(width: 24)
+            }
 
             // Content
             VStack(alignment: .leading, spacing: 4) {
