@@ -16,6 +16,9 @@ struct SettingsPage: View {
             if selectedSection == .chatWithFounder {
                 // Chat page fills the entire content area (no header/scroll wrapper)
                 FounderChatPage()
+            } else if selectedSection == .memoryGraph {
+                // Memory graph fills the entire content area (full-bleed 3D scene)
+                MemoryGraphPage()
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -151,6 +154,7 @@ struct SettingsContentView: View {
         case shortcuts = "Shortcuts"
         case permissions = "Permissions"
         case general = "General"
+        case memoryGraph = "Memory"
         case advanced = "Advanced"
         case about = "Account"
     }
@@ -210,6 +214,8 @@ struct SettingsContentView: View {
                     PermissionsPage(appState: appState)
                 case .dictionary:
                     dictionarySection
+                case .memoryGraph:
+                    MemoryGraphPage()
                 case .advanced:
                     advancedSection
                 case .about:
