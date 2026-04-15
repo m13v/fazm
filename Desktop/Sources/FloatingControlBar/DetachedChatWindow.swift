@@ -1,6 +1,7 @@
 import Cocoa
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A normal macOS window that hosts the chat conversation after "popping out" from the floating bar.
 /// Not always-on-top — behaves like a regular app window.
@@ -12,7 +13,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
     var sessionKey: String
     private var hostingView: NSHostingView<AnyView>?
 
-    var onSendFollowUp: ((String) -> Void)?
+    var onSendFollowUp: ((String, [ChatAttachment]) -> Void)?
     var onEnqueueMessage: ((String) -> Void)?
     var onSendNowQueued: ((QueuedMessage) -> Void)?
     var onDeleteQueued: ((QueuedMessage) -> Void)?
@@ -66,7 +67,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
 
     func setupViews() {
         let chatView = DetachedChatView(
-            onSendFollowUp: { [weak self] msg in self?.onSendFollowUp?(msg) },
+            onSendFollowUp: { [weak self] msg, attachments in self?.onSendFollowUp?(msg, attachments) },
             onNewChat: { [weak self] in self?.onNewChat?() },
             onEnqueueMessage: { [weak self] msg in self?.onEnqueueMessage?(msg) },
             onSendNowQueued: { [weak self] item in self?.onSendNowQueued?(item) },
@@ -163,7 +164,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
 struct DetachedChatView: View {
     @EnvironmentObject var state: FloatingControlBarState
 
-    var onSendFollowUp: (String) -> Void
+    var onSendFollowUp: (String, [ChatAttachment]) -> Void
     var onNewChat: () -> Void
     var onEnqueueMessage: (String) -> Void
     var onSendNowQueued: (QueuedMessage) -> Void
