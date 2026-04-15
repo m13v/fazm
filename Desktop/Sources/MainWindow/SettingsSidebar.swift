@@ -38,6 +38,9 @@ struct SettingsSearchItem: Identifiable {
         // Permissions
         SettingsSearchItem(name: "Permissions", subtitle: "Manage screen recording, microphone, and accessibility permissions", keywords: ["permissions", "screen recording", "microphone", "accessibility", "privacy", "security"], section: .permissions, advancedSubsection: nil, icon: "lock.shield", settingId: "permissions.permissions"),
 
+        // Memory
+        SettingsSearchItem(name: "Memory Graph", subtitle: "Visual 3D graph of AI memory and knowledge", keywords: ["memory", "graph", "knowledge", "brain", "3d", "visualization"], section: .memoryGraph, advancedSubsection: nil, icon: "brain.head.profile", settingId: "memorygraph.view"),
+
         // Dictionary
         SettingsSearchItem(name: "Dictionary", subtitle: "Custom words to improve transcription accuracy", keywords: ["dictionary", "vocabulary", "transcription", "words", "phrases", "keyterm"], section: .dictionary, advancedSubsection: nil, icon: "character.book.closed", settingId: "dictionary.dictionary"),
 
@@ -406,6 +409,7 @@ struct SettingsSidebarItem: View {
         case .shortcuts: return "keyboard"
         case .permissions: return "lock.shield"
         case .dictionary: return "character.book.closed"
+        case .memoryGraph: return "brain.head.profile"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"
         }
