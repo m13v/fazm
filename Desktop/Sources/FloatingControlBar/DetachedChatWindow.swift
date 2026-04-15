@@ -453,11 +453,23 @@ class DetachedChatWindowController {
             )
         }
 
-        // Position new pop-out relative to the last active pop-out:
-        // inherit size, try right → below → left → above, then fall back to center
-        if let anchor = lastActiveWindow, anchor !== win {
+        // Position new pop-out relative to the last active pop-out (or floating bar):
+        // inherit size, try right → below → left → above, then fall back to center.
+        // Also check other existing detached windows as potential anchors.
+        let anchor: NSWindow? = {
+            if let active = lastActiveWindow, active !== win { return active }
+            // Fall back to any other open detached window
+            for entry in entries.values where entry.window !== win {
+                return entry.window
+            }
+            // No other detached windows available; skip floating bar anchor
+            // since it's a different window type with different sizing
+            return nil
+        }()
+
+        if let anchor = anchor {
             let anchorFrame = anchor.frame
-            let sz = anchorFrame.size
+            let sz = (lastActiveWindow != nil && lastActiveWindow !== win) ? anchorFrame.size : DetachedChatWindow.defaultSize
             let gap: CGFloat = 8
 
             // Candidate positions in priority order: right, below, left, above
@@ -484,6 +496,10 @@ class DetachedChatWindowController {
                 win.setContentSize(sz)
                 win.center()
             }
+        } else {
+            // No anchor at all: use default size and center
+            win.setContentSize(DetachedChatWindow.defaultSize)
+            win.center()
         }
 
         win.makeKeyAndOrderFront(nil)
