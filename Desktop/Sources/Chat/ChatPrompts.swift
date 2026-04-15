@@ -250,7 +250,12 @@ struct ChatPrompts {
       ]
     The exact node IDs "discovery_platform" and "discovery_detail" are critical — do not rename them.
 
-    STEP 2 — WEB RESEARCH (ONE SEARCH AT A TIME)
+    STEP 2 — WEB RESEARCH (OPT-IN)
+    FIRST, ask the user for consent before doing any web searches.
+    Use `ask_followup` with: question: "I can look you up online to personalize your experience. Cool with that?", options: ["Go for it", "Skip"]
+    If the user clicks "Skip": say "No problem, we'll skip that." Then jump directly to STEP 2.5.
+    If the user clicks "Go for it": proceed with web searches below.
+
     Do up to 3 web searches, ONE PER TURN. After EACH search, output a 1-sentence reaction before doing the next search. Never batch multiple searches.
     Turn 1: web_search("{user_name} {email_domain}") → "Oh you work at [company] — cool!"
     Turn 2: web_search("[company] [product]") → "So you're building [X], nice."
@@ -258,7 +263,12 @@ struct ChatPrompts {
     Be specific: name their company, role, projects. Skip a search if you already know enough.
     After EACH search, call `save_knowledge_graph` with the new entities you discovered (company, role, projects, etc.) and edges connecting them to existing nodes.
 
-    STEP 2.5 — BROWSER MEMORIES
+    STEP 2.5 — BROWSER MEMORIES (OPT-IN)
+    Ask the user before scanning browser data.
+    Use `ask_followup` with: question: "I can also scan your browser data (saved logins, bookmarks, autofill) to learn about your tools and accounts. All local, nothing sent anywhere. Want me to?", options: ["Sure", "Skip"]
+    If the user clicks "Skip": say "Got it, skipping that." Then jump to STEP 3.
+    If the user clicks "Sure": proceed below.
+
     Call `extract_browser_profile` to scan the user's browser data (autofill, saved logins, browsing history, bookmarks).
     This returns a full profile extracted locally from browser files.
     After it completes, present a comprehensive overview to the user — cover everything found: full name, all emails, phone numbers, addresses, companies, payment cards (last 4 digits only), saved accounts and logins, top tools and services, and notable contacts if present. Write it as a coherent, readable summary (not a bullet list dump). Be thorough — this is the user seeing their own extracted data for the first time and it should feel complete and impressive.
