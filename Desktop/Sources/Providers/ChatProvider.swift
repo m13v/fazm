@@ -188,6 +188,32 @@ enum ToolCallStatus: Equatable {
 
 // MARK: - Chat Message Model
 
+/// A file attached to a chat message (image, PDF, text file)
+struct ChatAttachment: Identifiable, Equatable {
+    let id: String
+    let path: String
+    let name: String
+    let mimeType: String
+    /// Thumbnail image data for display (JPEG, small)
+    var thumbnailData: Data?
+
+    init(id: String = UUID().uuidString, path: String, name: String, mimeType: String, thumbnailData: Data? = nil) {
+        self.id = id
+        self.path = path
+        self.name = name
+        self.mimeType = mimeType
+        self.thumbnailData = thumbnailData
+    }
+
+    var isImage: Bool { mimeType.hasPrefix("image/") }
+    var isPDF: Bool { mimeType == "application/pdf" }
+
+    /// Convert to the dict format expected by ACPBridge
+    var bridgeDict: [String: String] {
+        ["path": path, "name": name, "mimeType": mimeType]
+    }
+}
+
 /// A single chat message
 struct ChatMessage: Identifiable, Equatable {
     var id: String  // Mutable to sync with server-generated ID
@@ -205,6 +231,8 @@ struct ChatMessage: Identifiable, Equatable {
     var contentBlocks: [ChatContentBlock]
     /// Which chat session this message belongs to (e.g. "floating", "detached-UUID")
     var sessionKey: String?
+    /// Files attached by the user (images, PDFs, text files)
+    var attachments: [ChatAttachment]
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
@@ -213,9 +241,10 @@ struct ChatMessage: Identifiable, Equatable {
             && lhs.rating == rhs.rating
             && lhs.isSynced == rhs.isSynced
             && lhs.contentBlocks == rhs.contentBlocks
+            && lhs.attachments == rhs.attachments
     }
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], sessionKey: String? = nil) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], sessionKey: String? = nil, attachments: [ChatAttachment] = []) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -226,6 +255,7 @@ struct ChatMessage: Identifiable, Equatable {
         self.citations = citations
         self.contentBlocks = contentBlocks
         self.sessionKey = sessionKey
+        self.attachments = attachments
     }
 }
 
@@ -2297,11 +2327,16 @@ class ChatProvider: ObservableObject {
                 }
             }
 
+            let userAttachments: [ChatAttachment] = (attachments ?? []).compactMap { dict in
+                guard let path = dict["path"], let name = dict["name"], let mime = dict["mimeType"] else { return nil }
+                return ChatAttachment(path: path, name: name, mimeType: mime)
+            }
             let userMessage = ChatMessage(
                 id: userMessageId,
                 text: trimmedText,
                 sender: .user,
-                sessionKey: sessionKey
+                sessionKey: sessionKey,
+                attachments: userAttachments
             )
             messages.append(userMessage)
 
