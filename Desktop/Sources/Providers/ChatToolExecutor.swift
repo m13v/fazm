@@ -15,14 +15,41 @@ class ChatToolExecutor {
     static var onboardingAppState: AppState?
     /// Called when AI invokes complete_onboarding
     static var onCompleteOnboarding: (() -> Void)?
-    /// Called when AI invokes ask_followup — delivers question text and quick-reply options to the UI
+    /// Called when AI invokes ask_followup — delivers question text and quick-reply options to the UI.
+    /// Per-session callbacks keyed by session key to prevent cross-contamination between pop-out windows.
+    private static var quickReplyCallbacks: [String: (_ question: String, _ options: [String]) -> Void] = [:]
+    /// Fallback for onboarding and contexts without a session key
     static var onQuickReplyOptions: ((_ question: String, _ options: [String]) -> Void)?
     /// Called when AI invokes save_knowledge_graph — notifies the graph view to update
     static var onKnowledgeGraphUpdated: (() -> Void)?
     /// Called when scan_files completes — used to kick off parallel exploration
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
-    /// Called to programmatically send a follow-up message (e.g. after OAuth completes)
+    /// Called to programmatically send a follow-up message (e.g. after OAuth completes).
+    /// Per-session callbacks keyed by session key.
+    private static var sendFollowUpCallbacks: [String: (_ message: String) -> Void] = [:]
+    /// Fallback for contexts without a session key
     static var onSendFollowUp: ((_ message: String) -> Void)?
+
+    /// The session key for the currently executing tool call, set before each execution
+    static var activeSessionKey: String?
+
+    /// Register per-session callbacks for quick replies and follow-ups
+    static func registerCallbacks(
+        sessionKey: String,
+        onQuickReply: @escaping (_ question: String, _ options: [String]) -> Void,
+        onFollowUp: ((_ message: String) -> Void)? = nil
+    ) {
+        quickReplyCallbacks[sessionKey] = onQuickReply
+        if let onFollowUp {
+            sendFollowUpCallbacks[sessionKey] = onFollowUp
+        }
+    }
+
+    /// Remove per-session callbacks when a session ends
+    static func unregisterCallbacks(sessionKey: String) {
+        quickReplyCallbacks.removeValue(forKey: sessionKey)
+        sendFollowUpCallbacks.removeValue(forKey: sessionKey)
+    }
 
     private static var fileScanFileCount = 0
 
@@ -812,8 +839,13 @@ class ChatToolExecutor {
         }
         let options = (args["options"] as? [String]) ?? []
 
-        // Notify the UI to render question text and quick-reply buttons
-        onQuickReplyOptions?(question, options)
+        // Notify the UI to render question text and quick-reply buttons.
+        // Use per-session callback if available (pop-out windows), fall back to global.
+        if let key = activeSessionKey, let callback = quickReplyCallbacks[key] {
+            callback(question, options)
+        } else {
+            onQuickReplyOptions?(question, options)
+        }
 
         return "Buttons shown to user. Your turn is DONE. Do NOT generate any more text, tool calls, or content after this. The user will respond by clicking a button or typing."
     }
