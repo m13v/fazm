@@ -1499,12 +1499,9 @@ class FloatingControlBarManager {
                     self.popOutNewChat()
                 } else if command.hasPrefix("setModel:") {
                     let modelId = String(command.dropFirst("setModel:".count))
-                    if ShortcutSettings.availableModels.contains(where: { $0.id == modelId }) {
-                        ShortcutSettings.shared.selectedModel = modelId
-                        log("FloatingControlBarManager: Model set to \(modelId)")
-                    } else {
-                        log("FloatingControlBarManager: Unknown model ID: \(modelId)")
-                    }
+                    // Accept any model ID; the ACP backend will reject truly invalid ones
+                    ShortcutSettings.shared.selectedModel = modelId
+                    log("FloatingControlBarManager: Model set to \(modelId)")
                     self.writeControlState()
                 } else if command == "toggleVoice" {
                     let current = UserDefaults.standard.bool(forKey: "voiceResponseEnabled")
@@ -1565,7 +1562,7 @@ class FloatingControlBarManager {
             "displayedQuery": state?.displayedQuery ?? "",
             "queueCount": state?.messageQueue.count ?? 0,
             "isTutorialActive": state?.isTutorialChatActive ?? false,
-            "availableModels": ShortcutSettings.availableModels.map { ["id": $0.id, "label": $0.label, "shortLabel": $0.shortLabel] }
+            "availableModels": ShortcutSettings.shared.availableModels.map { ["id": $0.id, "label": $0.label, "shortLabel": $0.shortLabel] }
         ]
 
         if let currentMessage = state?.currentAIMessage {
