@@ -1090,6 +1090,17 @@ async function flushChatObserverBatch(): Promise<void> {
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const SONNET_MODEL = "claude-sonnet-4-6";
 
+// --- Dynamic model list from ACP SDK ---
+let lastEmittedModelsJson = "";
+
+function emitModelsIfChanged(availableModels: Array<{ modelId: string; name: string; description?: string }>): void {
+  const json = JSON.stringify(availableModels);
+  if (json === lastEmittedModelsJson) return;
+  lastEmittedModelsJson = json;
+  emit({ type: "models_available", models: availableModels });
+  logErr(`Emitted models_available: ${availableModels.map(m => m.modelId).join(", ")}`);
+}
+
 interface WarmupSessionConfig {
   key: string;
   model: string;
@@ -1152,21 +1163,23 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
               logErr(`Pre-warm set_model after resume: ${cfg.model}`);
             } catch (resumeErr) {
               logErr(`Pre-warm session/resume failed for ${cfg.key}, falling back to session/new: ${resumeErr}`);
-              const result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+              const result = (await acpRequest("session/new", sessionParams)) as { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string; description?: string }> } };
               sessionId = result.sessionId;
+              if (result.models?.availableModels) emitModelsIfChanged(result.models.availableModels);
               logErr(`Pre-warmed new session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
             }
           } else {
             // Retry once after a short delay if session/new fails
-            let result: { sessionId: string };
+            let result: { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string; description?: string }> } };
             try {
-              result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+              result = (await acpRequest("session/new", sessionParams)) as typeof result;
             } catch (firstErr) {
               logErr(`Pre-warm session/new failed for ${cfg.key}, retrying in 2s: ${firstErr}`);
               await new Promise((r) => setTimeout(r, 2000));
-              result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+              result = (await acpRequest("session/new", sessionParams)) as typeof result;
             }
             sessionId = result.sessionId;
+            if (result.models?.availableModels) emitModelsIfChanged(result.models.availableModels);
             logErr(`Pre-warmed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
           }
 
@@ -1294,9 +1307,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
         ...buildMeta(msg.systemPrompt, sessionKey),
       };
-      const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+      const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string; description?: string }> } };
 
       sessionId = sessionResult.sessionId;
+      if (sessionResult.models?.availableModels) emitModelsIfChanged(sessionResult.models.availableModels);
       registerSession(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
       isNewSession = true;
       if (requestedModel) {
