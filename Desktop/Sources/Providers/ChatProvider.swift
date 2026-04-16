@@ -1012,6 +1012,12 @@ class ChatProvider: ObservableObject {
                     FloatingControlBarManager.shared.barState?.isChatObserverRunning = running
                 }
             }
+            // Set up dynamic model list handler — ACP SDK reports available models after session/new
+            acpBridge.onModelsAvailable = { models in
+                Task { @MainActor in
+                    ShortcutSettings.shared.updateModels(models)
+                }
+            }
             // Set up background tool call handler for observer session tool calls
             // (execute_sql, etc.) that arrive when no main query is active
             await acpBridge.setBackgroundToolCallHandler { callId, name, input in
