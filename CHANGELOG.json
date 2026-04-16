@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Tightened privacy language in onboarding and system prompts to accurately say \"local-first\" instead of \"nothing leaves your device\"",
-    "Fixed AI responses leaking between pop-out chat windows when streaming simultaneously"
+    "Fixed AI responses leaking between pop-out chat windows when streaming simultaneously",
+    "Fixed onboarding chat splitting AI messages into multiple bubbles"
   ],
   "releases": [
     {
