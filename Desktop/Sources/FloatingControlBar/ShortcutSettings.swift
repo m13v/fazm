@@ -140,16 +140,59 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(selectedModel, forKey: "shortcut_selectedModel") }
     }
 
-    /// Available models for Ask Fazm.
-    static let availableModels: [(id: String, label: String, shortLabel: String)] = [
-        ("claude-haiku-4-5-20251001", "Scary (Haiku)", "Scary"),
-        ("claude-sonnet-4-6", "Fast (Sonnet)", "Fast"),
-        ("claude-opus-4-6", "Smart (Opus)", "Smart"),
+    /// Model option for Ask Fazm.
+    struct ModelOption: Identifiable, Equatable {
+        let id: String
+        let label: String
+        let shortLabel: String
+    }
+
+    /// Default models used as fallback until ACP reports the dynamic list.
+    static let defaultModels: [ModelOption] = [
+        ModelOption(id: "claude-haiku-4-5-20251001", label: "Scary (Haiku)", shortLabel: "Scary"),
+        ModelOption(id: "claude-sonnet-4-6", label: "Fast (Sonnet)", shortLabel: "Fast"),
+        ModelOption(id: "claude-opus-4-6", label: "Smart (Opus)", shortLabel: "Smart"),
     ]
+
+    /// Mapping from model family substring to user-friendly short labels.
+    private static let shortLabelMap: [(substring: String, short: String, labelSuffix: String)] = [
+        ("haiku", "Scary", "Haiku"),
+        ("sonnet", "Fast", "Sonnet"),
+        ("opus", "Smart", "Opus"),
+    ]
+
+    /// Available models for Ask Fazm. Updated dynamically from ACP SDK; falls back to defaults.
+    @Published var availableModels: [ModelOption] = ShortcutSettings.defaultModels
+
+    /// Update the model list from ACP SDK response. Preserves user-friendly labels for known families.
+    func updateModels(_ acpModels: [(modelId: String, name: String)]) {
+        guard !acpModels.isEmpty else { return }
+        let newModels = acpModels.map { model -> ModelOption in
+            // Try to match a known model family for friendly labels
+            if let match = Self.shortLabelMap.first(where: { model.modelId.contains($0.substring) }) {
+                return ModelOption(id: model.modelId, label: "\(match.short) (\(match.labelSuffix))", shortLabel: match.short)
+            }
+            // Unknown model family: derive labels from the API name
+            let shortName = model.name.replacingOccurrences(of: "Claude ", with: "")
+            return ModelOption(id: model.modelId, label: shortName, shortLabel: shortName)
+        }
+        // Only update if the list actually changed
+        if newModels != availableModels {
+            availableModels = newModels
+            log("ShortcutSettings: updated availableModels to \(newModels.map { $0.id })")
+            // If the user's selected model is not in the new list, keep it (it may still work)
+            // but log a warning
+            if !newModels.contains(where: { $0.id == selectedModel }) {
+                log("ShortcutSettings: current selectedModel '\(selectedModel)' not in new model list")
+            }
+        }
+    }
 
     /// Human-readable short label for the currently selected model.
     var selectedModelShortLabel: String {
-        Self.availableModels.first(where: { $0.id == selectedModel })?.shortLabel ?? "Smart"
+        availableModels.first(where: { $0.id == selectedModel })?.shortLabel
+            ?? Self.defaultModels.first(where: { $0.id == selectedModel })?.shortLabel
+            ?? "Smart"
     }
 
     /// Proactiveness level for the AI assistant.
