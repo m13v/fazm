@@ -1097,7 +1097,7 @@ function emitModelsIfChanged(availableModels: Array<{ modelId: string; name: str
   const json = JSON.stringify(availableModels);
   if (json === lastEmittedModelsJson) return;
   lastEmittedModelsJson = json;
-  emit({ type: "models_available", models: availableModels });
+  send({ type: "models_available", models: availableModels });
   logErr(`Emitted models_available: ${availableModels.map(m => m.modelId).join(", ")}`);
 }
 
