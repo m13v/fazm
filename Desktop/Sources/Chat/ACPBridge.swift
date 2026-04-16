@@ -184,6 +184,7 @@ actor ACPBridge {
     case apiRetry(httpStatus: Int?, errorType: String, attempt: Int, maxRetries: Int)
     case observerPoll
     case observerStatus(running: Bool)
+    case modelsAvailable(models: [[String: Any]])
   }
 
   // MARK: - Configuration
@@ -215,6 +216,8 @@ actor ACPBridge {
   var onChatObserverPoll: (() -> Void)?
   /// Called when the chat observer starts or stops processing a batch
   var onChatObserverStatusChange: ((_ running: Bool) -> Void)?
+  /// Called when the ACP SDK reports available models (after session/new)
+  var onModelsAvailable: ((_ models: [(modelId: String, name: String)]) -> Void)?
   /// Global tool call handler for background sessions (chat observer) — processes tool_use even when no query is active
   var onBackgroundToolCall: ToolCallHandler?
 
@@ -1112,6 +1115,10 @@ actor ACPBridge {
       let running = dict["running"] as? Bool ?? false
       return .observerStatus(running: running)
 
+    case "models_available":
+      let models = dict["models"] as? [[String: Any]] ?? []
+      return .modelsAvailable(models: models)
+
     default:
       log("ACPBridge: unknown message type: \(type)")
       return nil
@@ -1174,6 +1181,17 @@ actor ACPBridge {
     case .observerStatus(let running):
       log("ACPBridge: chat observer status running=\(running)")
       onChatObserverStatusChange?(running)
+      return
+    case .modelsAvailable(let models):
+      log("ACPBridge: received models_available with \(models.count) models")
+      let parsed = models.compactMap { dict -> (modelId: String, name: String)? in
+        guard let modelId = dict["modelId"] as? String,
+              let name = dict["name"] as? String else { return nil }
+        return (modelId: modelId, name: name)
+      }
+      if !parsed.isEmpty {
+        onModelsAvailable?(parsed)
+      }
       return
     case .toolUse(let callId, let name, let input):
       // If a per-session query is waiting for this tool call, let it fall through
