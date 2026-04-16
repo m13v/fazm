@@ -781,6 +781,8 @@ class DetachedChatWindowController {
             guard let self, let win else { return }
             let id = ObjectIdentifier(win)
             let sessionKey = self.entries[id]?.sessionKey ?? "unknown"
+            // Clean up per-session tool executor callbacks to prevent stale references
+            ChatToolExecutor.unregisterCallbacks(sessionKey: sessionKey)
             self.entries[id]?.chatCancellable?.cancel()
             self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
