@@ -145,8 +145,8 @@ struct SettingsContentView: View {
     @State private var showSignOutAlert = false
 
     enum SettingsSection: String, CaseIterable {
-        case home = "Home"
         case conversationHistory = "Conversations"
+        case home = "Floating Bar"
         case chatWithFounder = "Chat with Founder"
         case discoveredTasks = "Discovered Tasks"
         case remoteControl = "Remote Control"
