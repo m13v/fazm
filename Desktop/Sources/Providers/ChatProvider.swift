@@ -676,17 +676,19 @@ class ChatProvider: ObservableObject {
     private var messagePollTimer: AnyCancellable?
     private static let messagePollInterval: TimeInterval = 15.0
 
-    // MARK: - Streaming Buffer
+    // MARK: - Streaming Buffers (per-message)
     /// Accumulates text deltas during streaming and flushes them to the published
     /// messages array at most once per ~100ms, reducing SwiftUI re-render frequency.
-    private var streamingTextBuffer: String = ""
-    private var streamingThinkingBuffer: String = ""
-    private var streamingBufferMessageId: String?
-    private var streamingFlushWorkItem: DispatchWorkItem?
+    /// Each active message gets its own buffer to prevent cross-contamination
+    /// when multiple pop-out windows stream simultaneously.
+    private struct StreamingBuffer {
+        var textBuffer: String = ""
+        var thinkingBuffer: String = ""
+        var flushWorkItem: DispatchWorkItem?
+        var forceNewTextBlock: Bool = false
+    }
+    private var streamingBuffers: [String: StreamingBuffer] = [:]
     private let streamingFlushInterval: TimeInterval = 0.1
-    /// When true, the next text buffer flush creates a new .text content block
-    /// instead of appending to the existing one. Set by text_block_boundary events.
-    private var forceNewTextBlock: Bool = false
 
     // MARK: - Cached Context for Prompts
     private var cachedAIProfile: String = ""
@@ -3003,18 +3005,18 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
+    /// Append text to a streaming message via a per-message buffer that flushes at ~100ms intervals.
     /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+    /// Each message ID gets its own buffer to prevent cross-contamination between pop-out windows.
     private func appendToMessage(id: String, text: String) {
-        streamingBufferMessageId = id
-        streamingTextBuffer += text
+        streamingBuffers[id, default: StreamingBuffer()].textBuffer += text
 
-        // Schedule a flush if one isn't already pending
-        if streamingFlushWorkItem == nil {
+        // Schedule a flush if one isn't already pending for this message
+        if streamingBuffers[id]?.flushWorkItem == nil {
             let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
+                self?.flushStreamingBuffer(messageId: id)
             }
-            streamingFlushWorkItem = workItem
+            streamingBuffers[id]?.flushWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
         }
     }
@@ -3023,10 +3025,10 @@ class ChatProvider: ObservableObject {
     /// so it lands in its own content block, then marks the next flush to create
     /// a new block rather than appending to the previous one.
     private func handleTextBlockBoundary(messageId: String) {
-        if streamingBufferMessageId == messageId && !streamingTextBuffer.isEmpty {
-            flushStreamingBuffer()
+        if let buf = streamingBuffers[messageId], !buf.textBuffer.isEmpty {
+            flushStreamingBuffer(messageId: messageId)
         }
-        forceNewTextBlock = true
+        streamingBuffers[messageId, default: StreamingBuffer()].forceNewTextBlock = true
     }
 
     /// Flush accumulated text and thinking deltas to the published messages array.
