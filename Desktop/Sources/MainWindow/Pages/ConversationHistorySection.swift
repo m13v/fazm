@@ -15,6 +15,8 @@ struct ConversationHistorySection: View {
     var chatProvider: ChatProvider? = nil
     var appState: AppState? = nil
 
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+
     @State private var conversations: [ConversationSummary] = []
     @State private var isLoading = true
     @State private var loadingConversationId: String? = nil
@@ -32,7 +34,7 @@ struct ConversationHistorySection: View {
                     .padding(.bottom, 16)
             }
 
-            // Header with New Chat button
+            // Header with New Chat button + shortcut hint
             HStack {
                 Spacer()
                 Button(action: startNewChat) {
@@ -48,6 +50,16 @@ struct ConversationHistorySection: View {
                     .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
+
+                Text(shortcutSettings.newPopOutChatKey.rawValue)
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(FazmColors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(FazmColors.backgroundTertiary)
+                    )
             }
             .padding(.bottom, 16)
 
