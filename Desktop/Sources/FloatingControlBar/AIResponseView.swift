@@ -1120,12 +1120,12 @@ struct ModelToggleButton: View {
     }
 
     private var selectedModelShortLabel: String {
-        ShortcutSettings.availableModels.first(where: { $0.id == selectedModelId })?.shortLabel ?? "Smart"
+        shortcutSettings.availableModels.first(where: { $0.id == selectedModelId })?.shortLabel ?? "Smart"
     }
 
     var body: some View {
         Menu {
-            ForEach(ShortcutSettings.availableModels, id: \.id) { model in
+            ForEach(shortcutSettings.availableModels) { model in
                 Button {
                     if let localModel {
                         localModel.wrappedValue = model.id
