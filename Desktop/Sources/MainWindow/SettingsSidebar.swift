@@ -400,8 +400,8 @@ struct SettingsSidebarItem: View {
 
     private var icon: String {
         switch section {
-        case .home: return "house"
         case .conversationHistory: return "clock.arrow.circlepath"
+        case .home: return "menubar.dock.rectangle"
         case .chatWithFounder: return "bubble.left.and.bubble.right"
         case .discoveredTasks: return "wand.and.stars"
         case .remoteControl: return "iphone"
