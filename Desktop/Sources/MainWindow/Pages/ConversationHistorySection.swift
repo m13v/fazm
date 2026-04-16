@@ -13,15 +13,25 @@ struct ConversationSummary: Identifiable {
 /// Conversation History tab: scrollable list of past conversations with "New Chat" button.
 struct ConversationHistorySection: View {
     var chatProvider: ChatProvider? = nil
+    var appState: AppState? = nil
 
     @State private var conversations: [ConversationSummary] = []
     @State private var isLoading = true
     @State private var loadingConversationId: String? = nil
 
+    // Onboarding skipped state
+    @AppStorage("onboardingWasSkipped") private var onboardingWasSkipped = false
+
     private let refreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Setup incomplete banner
+            if onboardingWasSkipped {
+                completeSetupBanner
+                    .padding(.bottom, 16)
+            }
+
             // Header with New Chat button
             HStack {
                 Spacer()
@@ -71,6 +81,49 @@ struct ConversationHistorySection: View {
         }
         .onAppear { loadConversations() }
         .onReceive(refreshTimer) { _ in loadConversations() }
+    }
+
+    // MARK: - Complete Setup Banner
+
+    private var completeSetupBanner: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .scaledFont(size: 20)
+                .foregroundColor(FazmColors.purplePrimary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Setup incomplete")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundColor(FazmColors.textPrimary)
+                Text("Finish setting up Fazm to get the full experience.")
+                    .scaledFont(size: 12)
+                    .foregroundColor(FazmColors.textSecondary)
+            }
+
+            Spacer()
+
+            Button(action: {
+                appState?.restartOnboarding()
+            }) {
+                Text("Complete Setup")
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(FazmColors.purplePrimary)
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(FazmColors.purplePrimary.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(FazmColors.purplePrimary.opacity(0.3), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Empty State
