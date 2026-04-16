@@ -199,7 +199,7 @@ struct SettingsContentView: View {
                 case .home:
                     HomeSection(appState: appState)
                 case .conversationHistory:
-                    ConversationHistorySection(chatProvider: chatProvider)
+                    ConversationHistorySection(chatProvider: chatProvider, appState: appState)
                 case .chatWithFounder:
                     FounderChatPage()
                 case .discoveredTasks:
