@@ -229,6 +229,10 @@ actor ACPBridge {
     self.onChatObserverStatusChange = handler
   }
 
+  func setModelsAvailableHandler(_ handler: @escaping @Sendable (_ models: [(modelId: String, name: String)]) -> Void) {
+    self.onModelsAvailable = handler
+  }
+
   func setBackgroundToolCallHandler(_ handler: @escaping ToolCallHandler) {
     self.onBackgroundToolCall = handler
   }
@@ -891,6 +895,10 @@ actor ACPBridge {
         break
 
       case .observerStatus(_):
+        // Handled immediately in deliverMessage(); should never reach here
+        break
+
+      case .modelsAvailable(_):
         // Handled immediately in deliverMessage(); should never reach here
         break
       }
