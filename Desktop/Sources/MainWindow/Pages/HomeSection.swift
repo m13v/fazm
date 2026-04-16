@@ -1,7 +1,7 @@
 import SwiftUI
 import GRDB
 
-/// Home tab — the default landing page showing how to use Fazm, stats, and recent messages.
+/// Floating Bar tab — shows how to use the floating bar, stats, and recent messages.
 struct HomeSection: View {
     @ObservedObject var shortcutSettings = ShortcutSettings.shared
     var appState: AppState? = nil
@@ -12,17 +12,11 @@ struct HomeSection: View {
     // Recent messages
     @State private var recentMessages: [(text: String, date: Date)] = []
 
-    // Onboarding skipped state
-    @AppStorage("onboardingWasSkipped") private var onboardingWasSkipped = false
-
     // Timer to refresh data periodically
     private let refreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 20) {
-            if onboardingWasSkipped {
-                completeSetupBanner
-            }
             howToUseCard
             exploreCards
             statsCard
@@ -34,49 +28,6 @@ struct HomeSection: View {
         .onReceive(refreshTimer) { _ in
             loadData()
         }
-    }
-
-    // MARK: - Complete Setup Banner
-
-    private var completeSetupBanner: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .scaledFont(size: 20)
-                .foregroundColor(FazmColors.purplePrimary)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Setup incomplete")
-                    .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(FazmColors.textPrimary)
-                Text("Finish setting up Fazm to get the full experience.")
-                    .scaledFont(size: 12)
-                    .foregroundColor(FazmColors.textSecondary)
-            }
-
-            Spacer()
-
-            Button(action: {
-                appState?.restartOnboarding()
-            }) {
-                Text("Complete Setup")
-                    .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(FazmColors.purplePrimary)
-                    .cornerRadius(8)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(FazmColors.purplePrimary.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(FazmColors.purplePrimary.opacity(0.3), lineWidth: 1)
-                )
-        )
     }
 
     // MARK: - How to Use Fazm
