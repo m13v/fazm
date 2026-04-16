@@ -973,9 +973,17 @@ struct OnboardingChatView: View {
                 let schema = await Self.loadDatabaseSchema()
                 let systemPrompt = ChatPromptBuilder.buildOnboardingGraphExploration(userName: userName, databaseSchema: schema)
 
+                // Pre-warm the session so MCP servers (fazm-tools) are fully initialized
+                // before the first query. Without this, execute_sql may not be registered
+                // in time and the AI falls back to raw Bash SQLite queries that can hang.
+                bridge.warmupSession(sessions: [
+                    .init(key: "graph-exploration", model: "claude-sonnet-4-6", systemPrompt: systemPrompt)
+                ])
+
                 let result = try await bridge.query(
                     prompt: "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
                     systemPrompt: systemPrompt,
+                    sessionKey: "graph-exploration",
                     model: "claude-sonnet-4-6",
                     onTextDelta: { @Sendable _ in },
                     onToolCall: { @Sendable _, name, input in
@@ -1017,12 +1025,20 @@ struct OnboardingChatView: View {
                 let schema = await Self.loadDatabaseSchema()
                 let systemPrompt = ChatPromptBuilder.buildOnboardingProfileExploration(userName: userName, databaseSchema: schema)
 
+                // Pre-warm the session so MCP servers (fazm-tools) are fully initialized
+                // before the first query. Without this, execute_sql may not be registered
+                // in time and the AI falls back to raw Bash SQLite queries that can hang.
+                bridge.warmupSession(sessions: [
+                    .init(key: "profile-exploration", model: "claude-sonnet-4-6", systemPrompt: systemPrompt)
+                ])
+
                 // Flag shared between callbacks (called sequentially from bridge event loop)
                 let needsBoundary = UnsafeSendableBox(false)
 
                 let result = try await bridge.query(
                     prompt: "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
                     systemPrompt: systemPrompt,
+                    sessionKey: "profile-exploration",
                     model: "claude-sonnet-4-6",
                     onTextDelta: { @Sendable delta in
                         let insertBoundary = needsBoundary.value
