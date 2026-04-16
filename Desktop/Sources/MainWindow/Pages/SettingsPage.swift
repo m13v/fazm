@@ -1778,7 +1778,7 @@ struct SettingsContentView: View {
                     }
 
                     HStack(spacing: 12) {
-                        ForEach(ShortcutSettings.availableModels, id: \.id) { model in
+                        ForEach(shortcutSettings.availableModels) { model in
                             preferencesModelButton(model)
                         }
                         Spacer()
@@ -2415,7 +2415,7 @@ struct SettingsContentView: View {
 
     // MARK: - Preferences Button Helpers
 
-    private func preferencesModelButton(_ model: (id: String, label: String, shortLabel: String)) -> some View {
+    private func preferencesModelButton(_ model: ShortcutSettings.ModelOption) -> some View {
         let isSelected = shortcutSettings.selectedModel == model.id
         return Button {
             shortcutSettings.selectedModel = model.id
