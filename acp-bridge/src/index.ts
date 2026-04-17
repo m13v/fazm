@@ -982,6 +982,43 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
     });
   }
 
+  // Append user-defined MCP servers from ~/.fazm/mcp-servers.json
+  // Format mirrors Claude Code's mcpServers: { "name": { "command": "...", "args": [...], "env": {...}, "enabled": true } }
+  const userMcpConfigPath = join(homeDir, ".fazm", "mcp-servers.json");
+  try {
+    if (existsSync(userMcpConfigPath)) {
+      const raw = readFileSync(userMcpConfigPath, "utf-8");
+      const userServers = JSON.parse(raw) as Record<string, {
+        command: string;
+        args?: string[];
+        env?: Record<string, string>;
+        enabled?: boolean;
+      }>;
+      for (const [name, cfg] of Object.entries(userServers)) {
+        if (cfg.enabled === false) continue;
+        if (!cfg.command) {
+          logErr(`User MCP server "${name}" skipped: missing command`);
+          continue;
+        }
+        const envArr: Array<{ name: string; value: string }> = [];
+        if (cfg.env) {
+          for (const [k, v] of Object.entries(cfg.env)) {
+            envArr.push({ name: k, value: String(v) });
+          }
+        }
+        servers.push({
+          name,
+          command: cfg.command,
+          args: cfg.args || [],
+          env: envArr,
+        });
+        logErr(`User MCP server loaded: ${name} (${cfg.command})`);
+      }
+    }
+  } catch (err) {
+    logErr(`Failed to load user MCP servers from ${userMcpConfigPath}: ${err}`);
+  }
+
   return servers;
 }
 
