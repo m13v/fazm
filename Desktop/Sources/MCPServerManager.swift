@@ -10,7 +10,7 @@ final class MCPServerManager: ObservableObject {
 
     private let configURL: URL
 
-    struct MCPServerConfig: Identifiable, Codable, Equatable {
+    struct MCPServerConfig: Identifiable, Codable, Equatable, Hashable {
         var id: String { name }
         var name: String
         var command: String
