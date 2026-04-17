@@ -277,6 +277,12 @@ export interface ModelsAvailableMessage {
   models: Array<{ modelId: string; name: string; description?: string }>;
 }
 
+/** Active MCP servers reported after session creation/resume */
+export interface McpServersAvailableMessage {
+  type: "mcp_servers_available";
+  servers: Array<{ name: string; command: string; builtin: boolean }>;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -301,4 +307,5 @@ export type OutboundMessage =
   | RateLimitMessage
   | ApiRetryMessage
   | ChatObserverPollMessage
-  | ModelsAvailableMessage;
+  | ModelsAvailableMessage
+  | McpServersAvailableMessage;
