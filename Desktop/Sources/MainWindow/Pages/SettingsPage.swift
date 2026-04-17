@@ -161,12 +161,14 @@ struct SettingsContentView: View {
 
     enum AdvancedSubsection: String, CaseIterable {
         case aiChat = "AI Chat"
+        case mcpServers = "MCP Servers"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
 
         var icon: String {
             switch self {
             case .aiChat: return "cpu"
+            case .mcpServers: return "server.rack"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             }
@@ -1720,6 +1722,8 @@ struct SettingsContentView: View {
             switch selectedAdvancedSubsection {
             case .aiChat, .none:
                 aiChatSection
+            case .mcpServers:
+                mcpServersSubsection
             case .preferences:
                 preferencesSubsection
             case .troubleshooting:
@@ -1729,6 +1733,188 @@ struct SettingsContentView: View {
     }
 
     // MARK: - Advanced Subsections
+
+    // MARK: MCP Servers
+
+    @ObservedObject private var mcpServerManager = MCPServerManager.shared
+    @State private var showAddMCPServer = false
+    @State private var editingMCPServer: MCPServerManager.MCPServerConfig?
+
+    private var mcpServersSubsection: some View {
+        VStack(spacing: 20) {
+            // Header card with description and add button
+            settingsCard(settingId: "advanced.mcpservers.info") {
+                HStack(spacing: 16) {
+                    Image(systemName: "server.rack")
+                        .scaledFont(size: 16)
+                        .foregroundColor(FazmColors.textSecondary)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("MCP Servers")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(FazmColors.textPrimary)
+
+                        Text("Connect external tools via the Model Context Protocol. Servers are available in all AI conversations.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(FazmColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    Button(action: { showAddMCPServer = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                            Text("Add")
+                        }
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(FazmColors.purplePrimary)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Server list
+            if mcpServerManager.servers.isEmpty {
+                settingsCard(settingId: "advanced.mcpservers.empty") {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            Image(systemName: "tray")
+                                .scaledFont(size: 24)
+                                .foregroundColor(FazmColors.textTertiary)
+                            Text("No MCP servers configured")
+                                .scaledFont(size: 14)
+                                .foregroundColor(FazmColors.textTertiary)
+                            Text("Add servers to give AI access to databases, APIs, file systems, and other tools.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(FazmColors.textTertiary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.vertical, 12)
+                        Spacer()
+                    }
+                }
+            } else {
+                ForEach(mcpServerManager.servers) { server in
+                    mcpServerRow(server)
+                }
+            }
+
+            // Config file location hint
+            settingsCard(settingId: "advanced.mcpservers.configpath") {
+                HStack(spacing: 12) {
+                    Image(systemName: "doc.text")
+                        .scaledFont(size: 14)
+                        .foregroundColor(FazmColors.textTertiary)
+                        .frame(width: 20, height: 20)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Config file: ~/.fazm/mcp-servers.json")
+                            .scaledFont(size: 12)
+                            .foregroundColor(FazmColors.textTertiary)
+                        Text("Uses the same format as Claude Code. Changes take effect on next conversation.")
+                            .scaledFont(size: 11)
+                            .foregroundColor(FazmColors.textTertiary.opacity(0.7))
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        let configPath = FileManager.default.homeDirectoryForCurrentUser
+                            .appendingPathComponent(".fazm/mcp-servers.json").path
+                        NSWorkspace.shared.selectFile(configPath, inFileViewerRootedAtPath: "")
+                    }) {
+                        Text("Open")
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(FazmColors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(FazmColors.textTertiary.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .sheet(isPresented: $showAddMCPServer) {
+            MCPServerEditSheet(
+                server: nil,
+                onSave: { server in
+                    mcpServerManager.addServer(server)
+                    showAddMCPServer = false
+                },
+                onCancel: { showAddMCPServer = false }
+            )
+        }
+        .sheet(item: $editingMCPServer) { server in
+            MCPServerEditSheet(
+                server: server,
+                onSave: { updated in
+                    mcpServerManager.updateServer(updated)
+                    editingMCPServer = nil
+                },
+                onCancel: { editingMCPServer = nil }
+            )
+        }
+    }
+
+    private func mcpServerRow(_ server: MCPServerManager.MCPServerConfig) -> some View {
+        settingsCard(settingId: "advanced.mcpservers.\(server.name)") {
+            HStack(spacing: 16) {
+                // Status indicator
+                Circle()
+                    .fill(server.enabled ? Color.green : FazmColors.textTertiary.opacity(0.3))
+                    .frame(width: 8, height: 8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(server.name)
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(server.enabled ? FazmColors.textPrimary : FazmColors.textTertiary)
+
+                    Text(server.command + (server.args.isEmpty ? "" : " " + server.args.joined(separator: " ")))
+                        .scaledFont(size: 12)
+                        .foregroundColor(FazmColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer()
+
+                // Toggle
+                Toggle("", isOn: Binding(
+                    get: { server.enabled },
+                    set: { _ in mcpServerManager.toggleServer(named: server.name) }
+                ))
+                .toggleStyle(.switch)
+                .scaleEffect(0.8)
+
+                // Edit
+                Button(action: { editingMCPServer = server }) {
+                    Image(systemName: "pencil")
+                        .scaledFont(size: 13)
+                        .foregroundColor(FazmColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+
+                // Delete
+                Button(action: { mcpServerManager.removeServer(named: server.name) }) {
+                    Image(systemName: "trash")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.red.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
 
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
