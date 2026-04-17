@@ -902,6 +902,10 @@ actor ACPBridge {
       case .modelsAvailable(_):
         // Handled immediately in deliverMessage(); should never reach here
         break
+
+      case .mcpServersAvailable(_):
+        // Handled immediately in deliverMessage(); should never reach here
+        break
       }
     }
   }
