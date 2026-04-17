@@ -1018,6 +1018,7 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
     logErr(`Failed to load user MCP servers from ${userMcpConfigPath}: ${err}`);
   }
 
+  emitMcpServers(servers);
   return servers;
 }
 
