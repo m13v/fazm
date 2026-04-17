@@ -142,7 +142,7 @@ struct MCPServerEditSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 480, minHeight: 400)
+        .frame(width: 480, height: 500)
         .background(FazmColors.backgroundPrimary)
         .onAppear {
             if let server {
