@@ -180,17 +180,24 @@ class ShortcutSettings: ObservableObject {
     }
 
     /// Update the model list from ACP SDK response. Preserves user-friendly labels for known families.
-    func updateModels(_ acpModels: [(modelId: String, name: String)]) {
+    /// The description field from ACP contains version info like "Sonnet 4.6 · Best for everyday tasks".
+    func updateModels(_ acpModels: [(modelId: String, name: String, description: String?)]) {
         guard !acpModels.isEmpty else { return }
         let newModels = acpModels.compactMap { model -> (ModelOption, Int)? in
             let fullId = Self.normalizeModelId(model.modelId)
+            // Extract version from description (e.g. "Sonnet 4.6 · Best for..." -> "Sonnet 4.6")
+            let versionFromDesc = model.description?
+                .components(separatedBy: " · ").first?
+                .trimmingCharacters(in: .whitespaces)
             // Try to match a known model family for friendly labels
             if let match = Self.modelFamilyMap.first(where: { fullId.contains($0.substring) || model.modelId.contains($0.substring) }) {
-                let versionLabel = model.name.isEmpty ? match.short : "\(match.short) (\(model.name))"
-                return (ModelOption(id: fullId, label: versionLabel, shortLabel: match.short), match.order)
+                // Use version from description if available (e.g. "Sonnet 4.6"), otherwise just the name
+                let detail = versionFromDesc ?? model.name
+                let label = detail.isEmpty ? match.short : "\(match.short) (\(detail))"
+                return (ModelOption(id: fullId, label: label, shortLabel: match.short), match.order)
             }
-            // Unknown model family: derive labels from the API name
-            let displayName = model.name.isEmpty ? model.modelId : model.name
+            // Unknown model family: derive labels from the API name/description
+            let displayName = versionFromDesc ?? (model.name.isEmpty ? model.modelId : model.name)
             return (ModelOption(id: fullId, label: displayName, shortLabel: displayName), 99)
         }
         .sorted(by: { $0.1 < $1.1 })
