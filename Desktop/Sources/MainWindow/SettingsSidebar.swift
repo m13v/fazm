@@ -76,6 +76,9 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Rescan Files", subtitle: "Re-index your files and update your AI profile", keywords: ["rescan", "re-index", "files", "profile", "scan"], section: .advanced, advancedSubsection: .troubleshooting, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.rescanfiles"),
         SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard and reset permissions", keywords: ["setup", "wizard", "permissions", "reset"], section: .advanced, advancedSubsection: .troubleshooting, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.resetonboarding"),
 
+        // Advanced > MCP Servers
+        SettingsSearchItem(name: "MCP Servers", subtitle: "Connect external tools via the Model Context Protocol", keywords: ["mcp", "server", "tools", "protocol", "integration", "external", "plugin"], section: .advanced, advancedSubsection: .mcpServers, icon: "server.rack", settingId: "advanced.mcpservers.info"),
+
         // Account
         SettingsSearchItem(name: "Account", subtitle: "Your signed-in account and sign out", keywords: ["account", "sign out", "email", "profile", "user"], section: .about, advancedSubsection: nil, icon: "person.crop.circle", settingId: "about.account"),
         SettingsSearchItem(name: "Subscription", subtitle: "Manage your Fazm Pro subscription or free trial", keywords: ["subscription", "pro", "upgrade", "trial", "plan", "billing", "payment"], section: .about, advancedSubsection: nil, icon: "checkmark.seal.fill", settingId: "about.subscription"),
