@@ -185,6 +185,7 @@ actor ACPBridge {
     case observerPoll
     case observerStatus(running: Bool)
     case modelsAvailable(models: [[String: Any]])
+    case mcpServersAvailable(servers: [[String: Any]])
   }
 
   // MARK: - Configuration
@@ -1127,6 +1128,10 @@ actor ACPBridge {
       let models = dict["models"] as? [[String: Any]] ?? []
       return .modelsAvailable(models: models)
 
+    case "mcp_servers_available":
+      let servers = dict["servers"] as? [[String: Any]] ?? []
+      return .mcpServersAvailable(servers: servers)
+
     default:
       log("ACPBridge: unknown message type: \(type)")
       return nil
@@ -1200,6 +1205,16 @@ actor ACPBridge {
       if !parsed.isEmpty {
         onModelsAvailable?(parsed)
       }
+      return
+    case .mcpServersAvailable(let servers):
+      log("ACPBridge: received mcp_servers_available with \(servers.count) servers")
+      let parsed = servers.compactMap { dict -> MCPServerManager.ActiveServer? in
+        guard let name = dict["name"] as? String,
+              let command = dict["command"] as? String else { return nil }
+        let builtin = dict["builtin"] as? Bool ?? false
+        return MCPServerManager.ActiveServer(name: name, command: command, builtin: builtin)
+      }
+      MCPServerManager.shared.updateActiveServers(parsed)
       return
     case .toolUse(let callId, let name, let input):
       // If a per-session query is waiting for this tool call, let it fall through
