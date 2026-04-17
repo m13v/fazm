@@ -154,36 +154,64 @@ class ShortcutSettings: ObservableObject {
         ModelOption(id: "claude-opus-4-6", label: "Smart (Opus)", shortLabel: "Smart"),
     ]
 
-    /// Mapping from model family substring to user-friendly short labels.
-    private static let shortLabelMap: [(substring: String, short: String, labelSuffix: String)] = [
-        ("haiku", "Scary", "Haiku"),
-        ("sonnet", "Fast", "Sonnet"),
-        ("opus", "Smart", "Opus"),
+    /// Mapping from model family substring to user-friendly labels and ordering.
+    /// Order determines display order in the UI (lowest first).
+    private static let modelFamilyMap: [(substring: String, short: String, order: Int)] = [
+        ("haiku", "Scary", 0),
+        ("sonnet", "Fast", 1),
+        ("opus", "Smart", 2),
     ]
 
     /// Available models for Ask Fazm. Updated dynamically from ACP SDK; falls back to defaults.
     @Published var availableModels: [ModelOption] = ShortcutSettings.defaultModels
 
+    /// Normalize a model ID: ACP SDK returns short aliases ("sonnet") while the app
+    /// stores full IDs ("claude-sonnet-4-6"). Map known aliases to their current full IDs.
+    static func normalizeModelId(_ modelId: String) -> String {
+        // Already a full ID
+        if modelId.hasPrefix("claude-") { return modelId }
+        // Map short alias to full model ID
+        switch modelId {
+        case "haiku": return "claude-haiku-4-5-20251001"
+        case "sonnet": return "claude-sonnet-4-6"
+        case "opus": return "claude-opus-4-6"
+        default: return modelId
+        }
+    }
+
     /// Update the model list from ACP SDK response. Preserves user-friendly labels for known families.
     func updateModels(_ acpModels: [(modelId: String, name: String)]) {
         guard !acpModels.isEmpty else { return }
-        let newModels = acpModels.map { model -> ModelOption in
+        let newModels = acpModels.compactMap { model -> (ModelOption, Int)? in
+            let fullId = Self.normalizeModelId(model.modelId)
             // Try to match a known model family for friendly labels
-            if let match = Self.shortLabelMap.first(where: { model.modelId.contains($0.substring) }) {
-                return ModelOption(id: model.modelId, label: "\(match.short) (\(match.labelSuffix))", shortLabel: match.short)
+            if let match = Self.modelFamilyMap.first(where: { fullId.contains($0.substring) || model.modelId.contains($0.substring) }) {
+                let versionLabel = model.name.isEmpty ? match.short : "\(match.short) (\(model.name))"
+                return (ModelOption(id: fullId, label: versionLabel, shortLabel: match.short), match.order)
             }
             // Unknown model family: derive labels from the API name
-            let shortName = model.name.replacingOccurrences(of: "Claude ", with: "")
-            return ModelOption(id: model.modelId, label: shortName, shortLabel: shortName)
+            let displayName = model.name.isEmpty ? model.modelId : model.name
+            return (ModelOption(id: fullId, label: displayName, shortLabel: displayName), 99)
         }
+        .sorted(by: { $0.1 < $1.1 })
+        .map { $0.0 }
+
         // Only update if the list actually changed
         if newModels != availableModels {
             availableModels = newModels
-            log("ShortcutSettings: updated availableModels to \(newModels.map { $0.id })")
+            let modelDesc = newModels.map { "\($0.id) = \($0.label)" }.joined(separator: ", ")
+            log("ShortcutSettings: updated availableModels to [\(modelDesc)]")
             // If the user's selected model is not in the new list, keep it (it may still work)
             // but log a warning
             if !newModels.contains(where: { $0.id == selectedModel }) {
-                log("ShortcutSettings: current selectedModel '\(selectedModel)' not in new model list")
+                // Try normalizing the selected model too
+                let normalizedSelection = Self.normalizeModelId(selectedModel)
+                if newModels.contains(where: { $0.id == normalizedSelection }) {
+                    selectedModel = normalizedSelection
+                    log("ShortcutSettings: normalized selectedModel to \(normalizedSelection)")
+                } else {
+                    log("ShortcutSettings: current selectedModel \(selectedModel) not in new model list")
+                }
             }
         }
     }
