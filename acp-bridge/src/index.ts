@@ -623,9 +623,36 @@ function startAcpProcess(): void {
         if (sessionHandler) {
           sessionHandler(msg.method as string, msg.params as unknown);
         } else if (acpNotificationHandler) {
+          // Legacy global fallback. Routing here when there IS a sessionId means
+          // the per-session handler was missing; that is the signature of the
+          // cross-session routing bug we're hunting.
+          if (notifSessionId) {
+            const methodStr = msg.method as string;
+            const p = msg.params as Record<string, unknown> | undefined;
+            const u = p?.update as Record<string, unknown> | undefined;
+            logErr(
+              `[ROUTE-MISS] notification for sessionId=${notifSessionId} had no registered handler; ` +
+                `falling back to global. method=${methodStr} update=${u?.sessionUpdate ?? "?"} ` +
+                `activeHandlers=[${Array.from(sessionNotificationHandlers.keys()).join(",")}]`,
+            );
+          }
           acpNotificationHandler(
             msg.method as string,
             msg.params as unknown
+          );
+        } else if (notifSessionId) {
+          // No handler at all — notification silently dropped. Prior to this log
+          // line, dropped notifications were invisible; this is the pathological
+          // case where tool_call_update lands after the session already cleaned up.
+          const methodStr = msg.method as string;
+          const p = msg.params as Record<string, unknown> | undefined;
+          const u = p?.update as Record<string, unknown> | undefined;
+          const su = u?.sessionUpdate as string | undefined;
+          const toolCallId = u?.toolCallId as string | undefined;
+          logErr(
+            `[ROUTE-DROP] notification dropped: sessionId=${notifSessionId} method=${methodStr} ` +
+              `update=${su ?? "?"}${toolCallId ? ` toolId=${toolCallId}` : ""} ` +
+              `activeHandlers=[${Array.from(sessionNotificationHandlers.keys()).slice(0, 5).join(",")}]`,
           );
         }
       }
@@ -1514,9 +1541,27 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         const p = params as Record<string, unknown>;
         const update = p.update as Record<string, unknown> | undefined;
         const sessionUpdate = update?.sessionUpdate as string | undefined;
-        // Log every notification with gap time to detect stalls
-        if (notificationCount <= 5 || gapMs > 10000 || notificationCount % 50 === 0) {
-          logErr(`[NOTIFY] #${notificationCount} type=${sessionUpdate ?? "?"} gap=${gapMs}ms`);
+        const isToolEvent =
+          sessionUpdate === "tool_call" || sessionUpdate === "tool_call_update";
+        const toolCallId = isToolEvent ? (update?.toolCallId as string | undefined) : undefined;
+        const toolTitle = isToolEvent ? (update?.title as string | undefined) : undefined;
+        const toolStatus = isToolEvent ? (update?.status as string | undefined) : undefined;
+        // Log every notification with gap time to detect stalls; include tool
+        // identity so cross-session routing (and stuck-tool progression) is
+        // visible in one grep.
+        if (
+          notificationCount <= 5 ||
+          gapMs > 10000 ||
+          notificationCount % 50 === 0 ||
+          isToolEvent // always log tool lifecycle notifications
+        ) {
+          const suffix = isToolEvent
+            ? ` toolId=${toolCallId ?? "?"} name=${toolTitle ?? "?"} status=${toolStatus ?? "?"}`
+            : "";
+          logErr(
+            `[NOTIFY] #${notificationCount} key=${sessionKey} sid=${sessionId.slice(0, 8)} ` +
+              `type=${sessionUpdate ?? "?"} gap=${gapMs}ms${suffix}`,
+          );
         }
         handleSessionUpdate(p, pendingTools, (text) => {
           fullText += text;
