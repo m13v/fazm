@@ -307,15 +307,21 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
-        // One-time migration: switch existing Opus users to Sonnet (Opus burns through rate limits too fast)
+        // Migrate saved model IDs: old full IDs -> short aliases, and Opus -> Sonnet rate limit fix
         let savedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel")
         let didMigrateOpus = UserDefaults.standard.bool(forKey: "shortcut_didMigrateFromOpus")
-        if savedModel == "claude-opus-4-6" && !didMigrateOpus {
-            UserDefaults.standard.set("claude-sonnet-4-6", forKey: "shortcut_selectedModel")
+        if savedModel?.contains("opus") == true && !didMigrateOpus {
+            UserDefaults.standard.set("sonnet", forKey: "shortcut_selectedModel")
             UserDefaults.standard.set(true, forKey: "shortcut_didMigrateFromOpus")
-            self.selectedModel = "claude-sonnet-4-6"
+            self.selectedModel = "sonnet"
+        } else if let saved = savedModel {
+            // Normalize legacy full IDs to short aliases
+            self.selectedModel = Self.normalizeModelId(saved)
+            if self.selectedModel != saved {
+                UserDefaults.standard.set(self.selectedModel, forKey: "shortcut_selectedModel")
+            }
         } else {
-            self.selectedModel = savedModel ?? "claude-sonnet-4-6"
+            self.selectedModel = "sonnet"
         }
         if let saved = UserDefaults.standard.string(forKey: "shortcut_floatingBarCompactness"),
            let mode = FloatingBarCompactness(rawValue: saved) {
