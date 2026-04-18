@@ -146,6 +146,9 @@ struct SettingsContentView: View {
     @State private var showAddMCPServer = false
     @State private var editingMCPServer: MCPServerManager.MCPServerConfig?
     @State private var showSignOutAlert = false
+    @State private var referralStatus: ReferralService.ReferralStatusResponse?
+    @State private var isLoadingReferralStatus = false
+    @State private var referralLinkCopied = false
 
     enum SettingsSection: String, CaseIterable {
         case conversationHistory = "Conversations"
@@ -2437,6 +2440,130 @@ struct SettingsContentView: View {
                     }
                 }
             }
+
+            // Referral card
+            settingsCard(settingId: "about.referral") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.2.fill")
+                            .scaledFont(size: 16)
+                            .foregroundStyle(FazmColors.purpleGradient)
+                            .frame(width: 24, height: 24)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Referrals")
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(FazmColors.textPrimary)
+
+                            if isLoadingReferralStatus {
+                                Text("Loading...")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            } else if let status = referralStatus {
+                                if status.reward_months > 0 {
+                                    Text("$\(status.reward_months * 49) credit earned")
+                                        .scaledFont(size: 13)
+                                        .foregroundColor(FazmColors.success)
+                                } else if status.referred_count > 0 {
+                                    Text("\(status.referred_count) referred, \(status.completed_count) completed")
+                                        .scaledFont(size: 13)
+                                        .foregroundColor(FazmColors.textTertiary)
+                                } else {
+                                    Text("Invite friends, earn free months")
+                                        .scaledFont(size: 13)
+                                        .foregroundColor(FazmColors.textTertiary)
+                                }
+                            } else {
+                                Text("Invite friends, earn free months")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+
+                        if let status = referralStatus, !status.code.isEmpty {
+                            Button(action: {
+                                Task { try? await ReferralService.shared.copyReferralLink() }
+                                referralLinkCopied = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { referralLinkCopied = false }
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: referralLinkCopied ? "checkmark" : "doc.on.doc")
+                                        .scaledFont(size: 11)
+                                    Text(referralLinkCopied ? "Copied!" : "Copy Link")
+                                        .scaledFont(size: 13, weight: .semibold)
+                                }
+                                .foregroundColor(referralLinkCopied ? FazmColors.success : FazmColors.textSecondary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(FazmColors.backgroundTertiary)
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if let status = referralStatus, !status.code.isEmpty {
+                        Divider().foregroundColor(FazmColors.border)
+
+                        // Referral code display
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Your code")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(FazmColors.textTertiary)
+                                Text(status.code)
+                                    .scaledFont(size: 15, weight: .bold)
+                                    .foregroundColor(FazmColors.textPrimary)
+                                    .tracking(2)
+                            }
+
+                            Spacer()
+
+                            // Stats
+                            HStack(spacing: 16) {
+                                VStack(spacing: 2) {
+                                    Text("\(status.referred_count)")
+                                        .scaledFont(size: 15, weight: .bold)
+                                        .foregroundColor(FazmColors.textPrimary)
+                                    Text("Referred")
+                                        .scaledFont(size: 11)
+                                        .foregroundColor(FazmColors.textTertiary)
+                                }
+                                VStack(spacing: 2) {
+                                    Text("\(status.completed_count)")
+                                        .scaledFont(size: 15, weight: .bold)
+                                        .foregroundColor(FazmColors.success)
+                                    Text("Completed")
+                                        .scaledFont(size: 11)
+                                        .foregroundColor(FazmColors.textTertiary)
+                                }
+                                VStack(spacing: 2) {
+                                    Text("$\(status.reward_months * 49)")
+                                        .scaledFont(size: 15, weight: .bold)
+                                        .foregroundColor(FazmColors.purplePrimary)
+                                    Text("Credit")
+                                        .scaledFont(size: 11)
+                                        .foregroundColor(FazmColors.textTertiary)
+                                }
+                            }
+                        }
+
+                        // How it works
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("How it works")
+                                .scaledFont(size: 12, weight: .medium)
+                                .foregroundColor(FazmColors.textSecondary)
+                            Text("Share your link. When a friend installs Fazm and sends 5 messages, you both get $49 credit toward Pro.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(FazmColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .onAppear { loadReferralStatus() }
 
             settingsCard(settingId: "about.version") {
                 VStack(spacing: 16) {
