@@ -1050,7 +1050,8 @@ private struct QuestionBarButtons: View {
                 Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                     .scaledFont(size: 10)
                     .foregroundColor(showCopied ? .green : .secondary)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .opacity(isHovered || showCopied ? 1 : 0)
@@ -1060,7 +1061,8 @@ private struct QuestionBarButtons: View {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .scaledFont(size: 10)
                         .foregroundColor(.secondary)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
