@@ -1497,7 +1497,16 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
-      logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey})`);
+      // If the requested model differs from the session's current model, switch it
+      const existingModel = sessions.get(sessionKey)?.model;
+      if (requestedModel && requestedModel !== existingModel) {
+        await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
+        const s = sessions.get(sessionKey);
+        if (s) s.model = requestedModel;
+        logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey}, switched model ${existingModel} -> ${requestedModel})`);
+      } else {
+        logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey})`);
+      }
     }
     activeSessionId = sessionId;
 
