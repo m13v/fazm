@@ -11,6 +11,7 @@ struct PaywallSheet: View {
     @State private var referralUrl: String = ""
     @State private var isLoadingReferral = false
     @State private var linkCopied = false
+    @State private var referralCredit: Int = 0  // dollars of earned credit
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +57,7 @@ struct PaywallSheet: View {
         }
         .frame(width: 400, height: 560)
         .background(FazmColors.backgroundPrimary)
+        .onAppear { loadReferralCredit() }
     }
 
     // MARK: - Paywall View
@@ -85,6 +87,24 @@ struct PaywallSheet: View {
             .padding(.top, 16)
             .padding(.bottom, 12)
 
+            // Referral credit banner
+            if referralCredit > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "gift.fill")
+                        .scaledFont(size: 14)
+                        .foregroundColor(FazmColors.success)
+                    Text("You have $\(referralCredit) in referral credits!")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(FazmColors.success)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(FazmColors.success.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 4)
+            }
+
             // Option cards
             VStack(spacing: 10) {
                 // Option 1: Subscribe
@@ -102,9 +122,15 @@ struct PaywallSheet: View {
                             Text("Start Free Trial")
                                 .scaledFont(size: 14, weight: .semibold)
                                 .foregroundColor(FazmColors.textPrimary)
-                            Text("21 days free, then $49/mo")
-                                .scaledFont(size: 12)
-                                .foregroundColor(FazmColors.textTertiary)
+                            if referralCredit > 0 {
+                                Text("21 days free, then $49/mo ($\(referralCredit) credit applied)")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(FazmColors.success)
+                            } else {
+                                Text("21 days free, then $49/mo")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            }
                         }
 
                         Spacer()
