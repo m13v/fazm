@@ -2948,6 +2948,25 @@ struct SettingsContentView: View {
         // The next PTT activation will pick up the new language from AssistantSettings
     }
 
+    // MARK: - Referral Status
+
+    private func loadReferralStatus() {
+        guard !isLoadingReferralStatus else { return }
+        isLoadingReferralStatus = true
+        Task {
+            do {
+                let status = try await ReferralService.shared.fetchReferralStatus()
+                await MainActor.run {
+                    self.referralStatus = status
+                    self.isLoadingReferralStatus = false
+                }
+            } catch {
+                log("Settings: referral status load error: \(error.localizedDescription)")
+                await MainActor.run { self.isLoadingReferralStatus = false }
+            }
+        }
+    }
+
 }
 
 #Preview {
