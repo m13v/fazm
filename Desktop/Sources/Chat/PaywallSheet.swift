@@ -402,6 +402,16 @@ struct PaywallSheet: View {
             linkCopied = false
         }
     }
+
+    private func loadReferralCredit() {
+        Task {
+            if let status = try? await ReferralService.shared.fetchReferralStatus() {
+                await MainActor.run {
+                    referralCredit = status.reward_months * 49
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Window Content Wrapper
