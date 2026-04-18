@@ -316,9 +316,10 @@ class ShortcutSettings: ObservableObject {
             self.selectedModel = "sonnet"
         } else if let saved = savedModel {
             // Normalize legacy full IDs to short aliases
-            self.selectedModel = Self.normalizeModelId(saved)
-            if self.selectedModel != saved {
-                UserDefaults.standard.set(self.selectedModel, forKey: "shortcut_selectedModel")
+            let normalized = Self.normalizeModelId(saved)
+            self.selectedModel = normalized
+            if normalized != saved {
+                UserDefaults.standard.set(normalized, forKey: "shortcut_selectedModel")
             }
         } else {
             self.selectedModel = "sonnet"
