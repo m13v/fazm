@@ -97,7 +97,7 @@ impl Config {
             stripe_trial_days: std::env::var("STRIPE_TRIAL_DAYS")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(21),
+                .unwrap_or(1),
             resend_api_key: std::env::var("RESEND_API_KEY").unwrap_or_default(),
         }
     }
