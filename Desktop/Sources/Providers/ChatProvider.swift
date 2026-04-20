@@ -2285,10 +2285,8 @@ class ChatProvider: ObservableObject {
         }
 
         // Pre-query paywall: block the message if no active subscription and free limit exceeded.
-        // Builtin mode uses the bundled Anthropic key and is always allowed.
         SubscriptionService.shared.incrementMessageCount()
-        if bridgeMode != "builtin"
-            && !SubscriptionService.shared.isActive
+        if !SubscriptionService.shared.isActive
             && SubscriptionService.shared.dailyMessageCount > SubscriptionService.shared.freeMessagesPerDay {
             await SubscriptionService.shared.refreshStatus()
             if SubscriptionService.shared.shouldShowPaywall() {
