@@ -2,7 +2,7 @@ import SwiftUI
 import GRDB
 
 /// Summary of a conversation session for the history list.
-struct ConversationSummary: Identifiable {
+struct ConversationSummary: Identifiable, Equatable {
     let id: String           // taskId (context key: "__floating__", "__detached-UUID__")
     let firstMessage: String // First user message (preview)
     let lastMessageDate: Date
@@ -24,7 +24,10 @@ struct ConversationHistorySection: View {
     // Onboarding skipped state
     @AppStorage("onboardingWasSkipped") private var onboardingWasSkipped = false
 
-    private let refreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
+    // @State so the timer publisher initializes exactly once across the view's lifetime.
+    // A `let` stored property is recreated on every parent invalidation, which produces
+    // overlapping autoconnect subscriptions and storms the list with refreshes.
+    @State private var refreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -75,7 +78,7 @@ struct ConversationHistorySection: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(conversations) { conversation in
+                        ForEach(conversations, id: \.id) { conversation in
                             ConversationRow(
                                 conversation: conversation,
                                 isLoading: loadingConversationId == conversation.id
@@ -292,8 +295,15 @@ struct ConversationHistorySection: View {
                 }
 
                 await MainActor.run {
-                    conversations = results
-                    isLoading = false
+                    // Only reassign if contents differ. Otherwise the array gets a fresh
+                    // identity every 10s and ForEach re-diffs the entire list, churning
+                    // row closures and LazyVStack placements.
+                    if conversations != results {
+                        conversations = results
+                    }
+                    if isLoading {
+                        isLoading = false
+                    }
                 }
             } catch {
                 logError("ConversationHistorySection: Failed to load conversations", error: error)
