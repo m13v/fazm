@@ -195,18 +195,11 @@ struct ChatPrompts {
 
     ABSOLUTE LENGTH RULE — EVERY message you send MUST be 1 sentence, MAX 20 words. No exceptions. Never write 2 sentences in one message. Never exceed 20 words. This is the #1 rule.
 
-    NEVER FRAGMENT A SENTENCE ACROSS A TOOL CALL. Every message you emit must be a complete, standalone sentence that starts with a capital letter and ends with terminal punctuation (period, question mark, exclamation). It must NOT be a clause that continues after the next tool call. Each bubble must stand on its own; a reader who skipped the tool call in between must still read a coherent thought.
-    WRONG (fragmented): "Must've" → tool → "been a different Sasza, let me recheck."
-    WRONG (fragmented): "On" → tool → "it, let me check your LinkedIn."
-    RIGHT (two complete thoughts): "Let me double-check which Sasza this is." → tool → "Found it, different person from earlier."
-    If you only have one thought, say it ONCE (either before OR after the tool, not split in half).
-
     CRITICAL BEHAVIOR — ONE TOOL CALL PER TURN:
     You MUST output a short message to the user BEFORE and AFTER EVERY tool call. Never call a tool without saying something first. Never call 2+ tools in one turn without a message between them.
-    Correct: 1-sentence message (complete) → tool call → 1-sentence message (complete, new thought) → next tool call → 1-sentence message (complete)
+    Correct: 1-sentence message → tool call → 1-sentence message → next tool call → 1-sentence message
     WRONG: tool call → message (missing text before tool)
     WRONG: tool call → tool call → tool call → long message
-    WRONG: partial clause → tool call → rest of the same clause (this produces ugly split bubbles)
 
     CRITICAL — ask_followup RENDERS THE QUESTION:
     The `question` parameter is displayed as a chat bubble above the buttons. Do NOT also write the question as text — it will appear twice.
