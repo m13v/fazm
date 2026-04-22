@@ -143,6 +143,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
         signal(SIGPIPE, SIG_IGN)
 
+        // Seed UserDefaults defaults for keys whose SwiftUI `@AppStorage` default is `true`.
+        // `@AppStorage` only supplies the fallback inside the property wrapper; raw
+        // `UserDefaults.standard.bool(forKey:)` returns `false` until the key is written.
+        // On fresh install this caused the ACP bridge to launch with FAZM_VOICE_RESPONSE
+        // unset, so the `speak_response` MCP tool was never registered and voice stayed silent.
+        UserDefaults.standard.register(defaults: [
+            "voiceResponseEnabled": true,
+        ])
+
         // Disable App Nap — the floating bar relies on global event monitors and timers
         // that stop firing when macOS naps the process.
         ProcessInfo.processInfo.disableAutomaticTermination("Floating bar active")
