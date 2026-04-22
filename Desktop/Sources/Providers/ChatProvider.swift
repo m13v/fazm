@@ -2285,16 +2285,19 @@ class ChatProvider: ObservableObject {
         }
 
         // Pre-query paywall: block the message if no active subscription and free limit exceeded.
-        SubscriptionService.shared.incrementMessageCount()
-        if !SubscriptionService.shared.isActive
-            && SubscriptionService.shared.dailyMessageCount > SubscriptionService.shared.freeMessagesPerDay {
-            await SubscriptionService.shared.refreshStatus()
-            if SubscriptionService.shared.shouldShowPaywall() {
-                showPaywall = true
-                PaywallWindowController.shared.show(chatProvider: self)
-                sendingSessionKeys.remove(effectiveKey)
-                isSending = !sendingSessionKeys.isEmpty
-                return
+        // Skipped during onboarding so the user can finish the chat flow without being gated.
+        if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+            SubscriptionService.shared.incrementMessageCount()
+            if !SubscriptionService.shared.isActive
+                && SubscriptionService.shared.dailyMessageCount > SubscriptionService.shared.freeMessagesPerDay {
+                await SubscriptionService.shared.refreshStatus()
+                if SubscriptionService.shared.shouldShowPaywall() {
+                    showPaywall = true
+                    PaywallWindowController.shared.show(chatProvider: self)
+                    sendingSessionKeys.remove(effectiveKey)
+                    isSending = !sendingSessionKeys.isEmpty
+                    return
+                }
             }
         }
 
