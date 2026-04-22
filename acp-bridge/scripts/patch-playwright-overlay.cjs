@@ -52,7 +52,20 @@ if (!fs.existsSync(targetFile)) {
 
 let code = fs.readFileSync(targetFile, "utf-8");
 
-// Already patched?
+// Migration: if the old patch (without immediate injection on already-loaded pages)
+// is present, upgrade it in place. The old _setupPage only registered load/
+// domcontentloaded listeners, which don't fire for pages already loaded at CDP-attach
+// time, so overlay never appeared in extension mode unless the agent navigated.
+const OLD_SETUP = 'const _setupPage = (p) => { p.on("load", () => _injectOverlay(p)); p.on("domcontentloaded", () => _injectOverlay(p)); };';
+const NEW_SETUP = 'const _setupPage = (p) => { p.on("load", () => _injectOverlay(p)); p.on("domcontentloaded", () => _injectOverlay(p)); _injectOverlay(p); };';
+if (code.includes(OLD_SETUP)) {
+  code = code.replace(OLD_SETUP, NEW_SETUP);
+  fs.writeFileSync(targetFile, code);
+  console.log("[patch-overlay] Upgraded existing patch to inject on already-loaded pages");
+  process.exit(0);
+}
+
+// Already fully patched?
 if (code.includes("_fazmOverlayScript")) {
   console.log("[patch-overlay] Already patched, skipping");
   process.exit(0);
