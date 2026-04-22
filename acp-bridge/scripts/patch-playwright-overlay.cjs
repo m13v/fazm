@@ -98,11 +98,17 @@ code = code.replace(
   `async createContext(clientInfo, abortSignal, options) {
     const browser = await this._obtainBrowser(clientInfo, abortSignal, options?.toolName);
     const browserContext = browser.contexts()[0];
-    // Fazm: inject overlay on every page load via event listeners
-    // addInitScript does NOT work on CDP-connected contexts, so we use page events
+    // Fazm: inject overlay on every page load via event listeners AND immediately on
+    // already-loaded pages (load/domcontentloaded won't re-fire for pages whose load
+    // completed before the CDP attach — in extension mode this is the common case).
+    // addInitScript does NOT work on CDP-connected contexts, so we use page events.
     if (_fazmOverlayScript && browserContext) {
       const _injectOverlay = async (p) => { try { await p.evaluate(_fazmOverlayScript); } catch (e) {} };
-      const _setupPage = (p) => { p.on("load", () => _injectOverlay(p)); p.on("domcontentloaded", () => _injectOverlay(p)); };
+      const _setupPage = (p) => {
+        p.on("load", () => _injectOverlay(p));
+        p.on("domcontentloaded", () => _injectOverlay(p));
+        _injectOverlay(p);
+      };
       for (const p of browserContext.pages()) _setupPage(p);
       browserContext.on("page", (p) => _setupPage(p));
     }
