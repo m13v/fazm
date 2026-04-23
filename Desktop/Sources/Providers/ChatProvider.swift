@@ -2436,7 +2436,7 @@ class ChatProvider: ObservableObject {
                     self?.webRelay.sendToPhone(["type": "text_delta", "text": delta])
                 }
             }
-            let toolCallHandler: ACPBridge.ToolCallHandler = { [weak self] callId, name, input in
+            let toolCallHandler: ACPBridge.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 await MainActor.run { ChatToolExecutor.activeSessionKey = sessionKey }
                 let result = await ChatToolExecutor.execute(toolCall)
