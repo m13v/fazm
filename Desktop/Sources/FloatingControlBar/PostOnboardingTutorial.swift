@@ -340,7 +340,7 @@ class TutorialChatGuide {
                 "Build me a small automation that helps with \(tool.label)",
                 "hands-on creation — experiencing personal software being built"
             )
-        } else if let colleague = personNodes.first(where: { $0.nodeId != "user" }) {
+        } else if personNodes.contains(where: { $0.nodeId != "user" }) {
             prompts[2] = (
                 "Build me something useful — maybe a script or automation for my daily workflow",
                 "hands-on creation — experiencing personal software being built"
