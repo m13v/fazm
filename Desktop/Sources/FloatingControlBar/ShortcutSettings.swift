@@ -322,14 +322,9 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
-        // Migrate saved model IDs: old full IDs -> short aliases, and Opus -> Sonnet rate limit fix
+        // Migrate saved model IDs: old full IDs -> short aliases; "opus" -> "default" (ACP SDK v0.29+).
         let savedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel")
-        let didMigrateOpus = UserDefaults.standard.bool(forKey: "shortcut_didMigrateFromOpus")
-        if savedModel?.contains("opus") == true && !didMigrateOpus {
-            UserDefaults.standard.set("sonnet", forKey: "shortcut_selectedModel")
-            UserDefaults.standard.set(true, forKey: "shortcut_didMigrateFromOpus")
-            self.selectedModel = "sonnet"
-        } else if let saved = savedModel {
+        if let saved = savedModel {
             // Normalize legacy full IDs to short aliases
             let normalized = Self.normalizeModelId(saved)
             self.selectedModel = normalized
