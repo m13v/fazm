@@ -192,6 +192,15 @@ step "Checking search coverage..."
 bash scripts/check_search_coverage.sh
 
 step "Building Swift app (swift build -c debug)..."
+# Disable recursive C++ submodule clones inside swift-protobuf (abseil-cpp, protobuf) —
+# they are not needed for the Swift package and can stall the build for 10+ minutes.
+PROTOBUF_CHECKOUT="Desktop/.build/checkouts/swift-protobuf"
+if [ -d "$PROTOBUF_CHECKOUT/.git" ] || [ -f "$PROTOBUF_CHECKOUT/.git" ]; then
+    git -C "$PROTOBUF_CHECKOUT" config submodule.recurse false 2>/dev/null || true
+    for sub in $(git -C "$PROTOBUF_CHECKOUT" config --file .gitmodules --get-regexp path 2>/dev/null | awk '{print $2}'); do
+        git -C "$PROTOBUF_CHECKOUT" config "submodule.$sub.update" none 2>/dev/null || true
+    done
+fi
 # 10-minute timeout prevents hangs (e.g. git submodule fetch stalling on network issues)
 if ! timeout 600 xcrun swift build -c debug --package-path Desktop; then
     echo "[run.sh] ERROR: swift build failed or timed out after 10 minutes"
