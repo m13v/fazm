@@ -1287,40 +1287,48 @@ struct OnboardingChatBubble: View {
                                     .cornerRadius(18)
                             }
                         } else {
-                            // Group consecutive text blocks into single bubbles. `ask_followup`
-                            // is hidden here (its question/buttons render separately via
-                            // QuickReplyButtonsView), so mark it hidden to the grouper to
-                            // merge text blocks the model split around it.
-                            let grouped = ContentBlockGroup.group(
-                                message.contentBlocks,
-                                hiddenToolNames: ["ask_followup"]
-                            )
-                            ForEach(grouped) { group in
-                                switch group {
-                                case .toolCalls(_, let calls):
-                                    ForEach(calls) { call in
-                                        let indicator = OnboardingToolIndicator(toolName: call.name, status: call.status, input: call.input)
-                                        if !indicator.isHidden {
-                                            indicator
-                                        }
-                                    }
-                                case .text(_, let text):
-                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Markdown(text)
-                                            .markdownTheme(.aiMessage())
-                                            .textSelection(.enabled)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 10)
-                                            .background(FazmColors.backgroundSecondary)
-                                            .cornerRadius(18)
-                                    }
-                                case .thinking:
-                                    EmptyView()
-                                case .discoveryCard(_, let title, let summary, let fullText):
-                                    DiscoveryCard(title: title, summary: summary, fullText: fullText)
-                                case .observerCard:
-                                    EmptyView() // Observer cards don't appear during onboarding
+                            // Merge ALL text blocks into one bubble — tool calls between text blocks
+                            // should not split the message into multiple fragments.
+                            // Tool indicators are shown below the text bubble.
+                            let combinedText = message.contentBlocks.compactMap { block -> String? in
+                                if case .text(_, let text) = block { return text }
+                                return nil
+                            }.joined(separator: "\n\n")
+
+                            let toolItems = message.contentBlocks.compactMap { block -> (name: String, status: ToolCallStatus, toolUseId: String?, input: ToolCallInput?)? in
+                                if case .toolCall(_, let name, let status, let toolUseId, let input, _) = block,
+                                   name != "ask_followup" {
+                                    return (name: name, status: status, toolUseId: toolUseId, input: input)
                                 }
+                                return nil
+                            }
+
+                            let discoveryCards = message.contentBlocks.compactMap { block -> (title: String, summary: String, fullText: String)? in
+                                if case .discoveryCard(_, let title, let summary, let fullText) = block {
+                                    return (title: title, summary: summary, fullText: fullText)
+                                }
+                                return nil
+                            }
+
+                            if !combinedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Markdown(combinedText)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(FazmColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+
+                            ForEach(Array(toolItems.enumerated()), id: \.offset) { _, item in
+                                let indicator = OnboardingToolIndicator(toolName: item.name, status: item.status, input: item.input)
+                                if !indicator.isHidden {
+                                    indicator
+                                }
+                            }
+
+                            ForEach(discoveryCards, id: \.title) { card in
+                                DiscoveryCard(title: card.title, summary: card.summary, fullText: card.fullText)
                             }
                         }
                     } else {
