@@ -151,7 +151,7 @@ class ShortcutSettings: ObservableObject {
     static let defaultModels: [ModelOption] = [
         ModelOption(id: "haiku", label: "Scary (Haiku, latest)", shortLabel: "Scary"),
         ModelOption(id: "sonnet", label: "Fast (Sonnet, latest)", shortLabel: "Fast"),
-        ModelOption(id: "opus", label: "Smart (Opus, latest)", shortLabel: "Smart"),
+        ModelOption(id: "default", label: "Smart (Opus, latest)", shortLabel: "Smart"),
     ]
 
     /// Mapping from model family substring to user-friendly labels and ordering.
@@ -160,6 +160,7 @@ class ShortcutSettings: ObservableObject {
         ("haiku", "Scary", "Haiku", 0),
         ("sonnet", "Fast", "Sonnet", 1),
         ("opus", "Smart", "Opus", 2),
+        ("default", "Smart", "Opus", 2),
     ]
 
     /// Available models for Ask Fazm. Updated dynamically from ACP SDK; falls back to defaults.
@@ -170,7 +171,8 @@ class ShortcutSettings: ObservableObject {
         // Map legacy full IDs to short aliases
         if modelId.contains("haiku") { return "haiku" }
         if modelId.contains("sonnet") { return "sonnet" }
-        if modelId.contains("opus") { return "opus" }
+        // ACP SDK v0.29+ uses "default" for Opus 4.7; migrate stored "opus" to match.
+        if modelId.contains("opus") { return "default" }
         return modelId
     }
 
