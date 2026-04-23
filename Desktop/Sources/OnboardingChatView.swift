@@ -1293,7 +1293,7 @@ struct OnboardingChatBubble: View {
                             let combinedText = message.contentBlocks.compactMap { block -> String? in
                                 if case .text(_, let text) = block { return text }
                                 return nil
-                            }.joined(separator: "\n\n")
+                            }.joined(separator: " ")
 
                             let toolItems = message.contentBlocks.compactMap { block -> (name: String, status: ToolCallStatus, toolUseId: String?, input: ToolCallInput?)? in
                                 if case .toolCall(_, let name, let status, let toolUseId, let input, _) = block,

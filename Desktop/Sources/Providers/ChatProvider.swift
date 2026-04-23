@@ -3084,10 +3084,10 @@ class ChatProvider: ObservableObject {
                     // Skip the duplicate text block entirely
                 } else {
                     messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: textBuffered))
-                    // Add separator to plain text when starting a new text block
-                    // so copy-paste and fallback rendering have proper paragraph breaks
-                    if !messages[index].text.isEmpty {
-                        messages[index].text += "\n\n"
+                    // Join text fragments with a space — fragments are mid-stream splits,
+                    // not separate paragraphs. Using "\n\n" caused visual breaks mid-sentence.
+                    if !messages[index].text.isEmpty && !textBuffered.hasPrefix("\n") {
+                        messages[index].text += " "
                     }
                     messages[index].text += textBuffered
                 }
