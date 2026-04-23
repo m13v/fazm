@@ -1098,6 +1098,15 @@ struct OnboardingChatView: View {
 
                 await bridge.stop()
                 await MainActor.run { explorationBridge = nil }
+            } catch let bridgeError as BridgeError where bridgeError.isCreditOrRateLimitError {
+                let msg = bridgeError.errorDescription ?? bridgeError.localizedDescription
+                log("OnboardingChat: Profile exploration blocked by credit/rate limit: \(msg)")
+                if let bridge = await MainActor.run(body: { explorationBridge }) { await bridge.stop() }
+                await MainActor.run {
+                    explorationRunning = false
+                    explorationBridge = nil
+                    onboardingError = .general(msg)
+                }
             } catch {
                 log("OnboardingChat: Profile exploration failed (non-fatal): \(error.localizedDescription)")
                 if let bridge = await MainActor.run(body: { explorationBridge }) {
