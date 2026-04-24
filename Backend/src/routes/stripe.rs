@@ -139,6 +139,13 @@ pub async fn checkout_redirect(Query(query): Query<RedirectQuery>) -> impl IntoR
         return Redirect::temporary("https://fazm.ai").into_response();
     }
 
+    let is_cancel = query.to.contains("/cancel");
+    let (heading, subtext) = if is_cancel {
+        ("Checkout cancelled", "Taking you back to Fazm...")
+    } else {
+        ("✓ Payment successful!", "Redirecting you back to Fazm...")
+    };
+
     // Return an HTML page that redirects to the custom URL scheme.
     // Custom URL schemes don't work with HTTP 302 redirects in all browsers,
     // so we use JavaScript + meta refresh as fallback.
@@ -159,14 +166,16 @@ pub async fn checkout_redirect(Query(query): Query<RedirectQuery>) -> impl IntoR
 </head>
 <body>
     <div class="container">
-        <h1>✓ Payment Successful!</h1>
-        <p>Redirecting you back to Fazm...</p>
+        <h1>{heading}</h1>
+        <p>{subtext}</p>
         <p><a href="{url}">Click here if not redirected automatically</a></p>
     </div>
     <script>window.location.href = "{url}";</script>
 </body>
 </html>"#,
-        url = query.to
+        url = query.to,
+        heading = heading,
+        subtext = subtext,
     );
 
     axum::response::Html(html).into_response()
