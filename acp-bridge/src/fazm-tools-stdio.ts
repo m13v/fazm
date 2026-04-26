@@ -282,7 +282,12 @@ const ALL_TOOLS = [
     description: `Run SQL on the local fazm.db database.
 Supports: SELECT, INSERT, UPDATE, DELETE.
 SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
-Use for: app usage stats, time queries, task management, aggregations, anything structured.`,
+Use for: app usage stats, time queries, task management, aggregations, anything structured.
+
+Schema notes:
+- observer_activity columns: id, type, content, status, userResponse, createdAt, actedAt.
+  Card fields like title/body/options live INSIDE content (JSON blob), NOT as columns.
+  Use json_extract(content, '$.body') to read them.`,
     inputSchema: {
       type: "object" as const,
       properties: {
