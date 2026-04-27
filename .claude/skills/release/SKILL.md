@@ -1,6 +1,6 @@
 ---
 name: release
-description: Release a new version of OMI Desktop. Analyzes changes since last release, generates changelog, and runs the full release pipeline.
+description: Use when the user says "release", "cut a release", "ship a new version", "release new version", "do the desktop release", or "tag a release". Analyzes changes since the last release, generates the changelog, and runs the full release pipeline for OMI Desktop.
 allowed-tools: Bash, Read, Edit, Grep
 ---
 

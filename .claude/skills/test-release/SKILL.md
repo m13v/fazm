@@ -1,3 +1,8 @@
+---
+name: test-release
+description: Use when the user says "test the release", "smoke test", "verify the build works", "test staging", "test the new version", or after promoting a release to staging/beta/stable. Smoke-tests the shipped Fazm production app via Sparkle auto-update on local + MacStadium, sends test queries via distributed notifications, checks logs. Does NOT build anything.
+---
+
 # test-release: Smoke Test a Fazm Release
 
 Smoke test a Fazm release. Use when the user says "test the release", "smoke test", or "verify the build works".
