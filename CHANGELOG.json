@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Restored the browser overlay that signals when Fazm is controlling a browser tab"
+  ],
   "releases": [
     {
       "version": "2.4.2",
