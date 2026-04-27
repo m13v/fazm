@@ -81,6 +81,9 @@ pub async fn create_checkout_session(
         ("payment_method_types[0]", "card".to_string()),
         ("line_items[0][price]", config.stripe_price_id.clone()),
         ("line_items[0][quantity]", "1".to_string()),
+        // Show the "Add promotion code" link on the Checkout page so users can
+        // redeem promo codes (e.g. SEZGI1MO) without manual customer balance edits.
+        ("allow_promotion_codes", "true".to_string()),
         ("subscription_data[metadata][firebase_uid]", firebase_uid),
         ("subscription_data[metadata][device_id]", auth.device_id),
     ];
