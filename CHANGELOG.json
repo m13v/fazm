@@ -1,8 +1,18 @@
 {
-  "unreleased": [
-    "Restored the browser overlay that signals when Fazm is controlling a browser tab"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.5.0",
+      "date": "2026-04-27",
+      "changes": [
+        "Restored the browser overlay that signals when Fazm is controlling a browser tab",
+        "Fixed duplicate error text appearing at the end of AI responses",
+        "Fixed timed-out and error messages not persisting after app restart",
+        "Added promo code support to the subscription checkout",
+        "Checkout now pre-fills your email address",
+        "Removed the Help Center link from Settings"
+      ]
+    },
     {
       "version": "2.4.2",
       "date": "2026-04-26",
