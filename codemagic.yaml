@@ -362,6 +362,12 @@ workflows:
             cp -Rf acp-bridge/dist        "$APP_BUNDLE/Contents/Resources/acp-bridge/"
             cp -f  acp-bridge/package.json "$APP_BUNDLE/Contents/Resources/acp-bridge/"
             cp -Rf acp-bridge/node_modules "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+            # Browser overlay assets (read at runtime by patched playwright extensionContextFactory)
+            for f in browser-overlay-init.js browser-overlay-init-page.cjs browser-overlay-init-page.ts; do
+              if [ -f "acp-bridge/$f" ]; then
+                cp -f "acp-bridge/$f" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+              fi
+            done
           else
             echo "ERROR: acp-bridge/dist not found"
             exit 1
