@@ -44,6 +44,7 @@ pub async fn create_checkout_session(
     }
 
     let firebase_uid = auth.firebase_uid.unwrap_or_default();
+    let firebase_email = auth.firebase_email.clone().unwrap_or_default();
 
     // Stripe Checkout requires https:// URLs. Use backend redirect endpoints
     // that will forward to the app's fazm:// custom URL scheme.
@@ -55,11 +56,19 @@ pub async fn create_checkout_session(
 
     let client = reqwest::Client::new();
 
-    // First, ensure a Stripe customer exists for this user (idempotent lookup/create)
-    let customer_id =
-        get_or_create_customer(&client, stripe_secret, &firebase_uid, &auth.device_id)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    // First, ensure a Stripe customer exists for this user (idempotent lookup/create).
+    // Pass the Firebase email so the Stripe customer record matches the signup email,
+    // and Stripe Checkout pre-fills + locks the email field (prevents email mismatches
+    // that break support lookups).
+    let customer_id = get_or_create_customer(
+        &client,
+        stripe_secret,
+        &firebase_uid,
+        &auth.device_id,
+        &firebase_email,
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     // Create checkout session with a free trial subscription.
     // Card is collected upfront but not charged until the trial ends.
@@ -419,20 +428,28 @@ async fn get_or_create_customer(
     secret: &str,
     firebase_uid: &str,
     device_id: &str,
+    firebase_email: &str,
 ) -> Result<String, String> {
     // Search for existing customer
     if let Some(id) = find_customer(client, secret, firebase_uid).await? {
         return Ok(id);
     }
 
-    // Create new customer
+    // Create new customer with the Firebase login email pre-set so:
+    // (1) Stripe Checkout pre-fills + locks the email field (prevents user typing a different one)
+    // (2) Support tools can find the customer by their actual signup email
+    let mut form_params: Vec<(&str, &str)> = vec![
+        ("metadata[firebase_uid]", firebase_uid),
+        ("metadata[device_id]", device_id),
+    ];
+    if !firebase_email.is_empty() {
+        form_params.push(("email", firebase_email));
+    }
+
     let resp = client
         .post("https://api.stripe.com/v1/customers")
         .bearer_auth(secret)
-        .form(&[
-            ("metadata[firebase_uid]", firebase_uid),
-            ("metadata[device_id]", device_id),
-        ])
+        .form(&form_params)
         .send()
         .await
         .map_err(|e| format!("Stripe customer create error: {e}"))?;
