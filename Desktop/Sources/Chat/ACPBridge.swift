@@ -643,6 +643,11 @@ actor ACPBridge {
     model: String? = nil,
     resume: String? = nil,
     attachments: [[String: String]]? = nil,
+    /// Recent local conversation history (oldest first). Only consulted when a
+    /// `session/resume` attempt fails on the bridge side; bridge then prepends
+    /// a recovery preamble to the prompt so context isn't silently lost. Pass
+    /// only when `resume` is set, to keep the common path cheap.
+    priorContext: [(role: String, text: String)]? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolCall: @escaping ToolCallHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -680,6 +685,12 @@ actor ACPBridge {
     }
     if let attachments = attachments, !attachments.isEmpty {
       queryDict["attachments"] = attachments
+    }
+    // Only ship priorContext when we're actually attempting a resume — the bridge
+    // ignores it on the happy path, so sending it without `resume` would be wasted
+    // bytes (and risks token cost on edge paths).
+    if let priorContext = priorContext, !priorContext.isEmpty, resume != nil {
+      queryDict["priorContext"] = priorContext.map { ["role": $0.role, "text": $0.text] }
     }
     let jsonData = try JSONSerialization.data(withJSONObject: queryDict)
     guard let jsonString = String(data: jsonData, encoding: .utf8) else {
@@ -910,6 +921,10 @@ actor ACPBridge {
       case .mcpServersAvailable(_):
         // Handled immediately in deliverMessage(); should never reach here
         break
+
+      case .sessionExpired(let oldSessionId, let newSessionId, let contextRestored, let restoredMessageCount, let reason, _):
+        log("ACPBridge: session_expired old=\(oldSessionId) new=\(newSessionId) restored=\(contextRestored) count=\(restoredMessageCount)")
+        onStatusEvent(.sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason))
       }
     }
   }
@@ -1139,6 +1154,15 @@ actor ACPBridge {
     case "mcp_servers_available":
       let servers = dict["servers"] as? [[String: Any]] ?? []
       return .mcpServersAvailable(servers: servers)
+
+    case "session_expired":
+      let oldSessionId = dict["oldSessionId"] as? String ?? ""
+      let newSessionId = dict["newSessionId"] as? String ?? ""
+      let contextRestored = dict["contextRestored"] as? Bool ?? false
+      let restoredMessageCount = dict["restoredMessageCount"] as? Int ?? 0
+      let reason = dict["reason"] as? String ?? "Previous session expired."
+      let sessionKey = dict["sessionKey"] as? String
+      return .sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason, sessionKey: sessionKey)
 
     default:
       log("ACPBridge: unknown message type: \(type)")
