@@ -161,6 +161,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             reason: "Push-to-talk event monitors must stay active"
         )
 
+        // FAZM-20 mitigation: disable AppKit auto touch bar + window tabbing globally.
+        // Crash signature is EXC_BAD_ACCESS in NSConcreteMapTable dealloc inside the
+        // NSTouchBarFinder update path. Fazm has no TouchBar code; the heavy
+        // floating-bar/popout window churn is hitting an AppKit weak-ref bug.
+        NSWindow.applyAppGlobalCrashWorkarounds()
+
         // Configure Firebase and AuthService
         AuthService.shared.configure()
 
