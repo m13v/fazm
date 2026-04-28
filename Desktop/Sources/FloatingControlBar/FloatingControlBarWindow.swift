@@ -101,6 +101,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         self.delegate = self
         self.minSize = FloatingControlBarWindow.minBarSize
         self.maxSize = FloatingControlBarWindow.maxBarSize
+        self.applyCrashWorkarounds()  // FAZM-20: disable auto touch bar / tabbing
 
         setupViews()
 
