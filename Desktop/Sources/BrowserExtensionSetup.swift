@@ -63,6 +63,7 @@ final class BrowserExtensionSetupWindowController {
         window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
         window.level = .floating
+        window.applyCrashWorkarounds()  // FAZM-20: disable auto touch bar / tabbing
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
