@@ -485,6 +485,7 @@ final class PaywallWindowController {
         window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
         window.level = .floating
+        window.applyCrashWorkarounds()  // FAZM-20: disable auto touch bar / tabbing
 
         let mouseScreen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
             ?? NSScreen.main ?? NSScreen.screens.first
