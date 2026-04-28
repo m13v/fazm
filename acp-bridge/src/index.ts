@@ -1761,6 +1761,31 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           return;
         }
 
+        // Detect stuck-empty-turn: session/prompt resolved with stopReason=end_turn,
+        // zero notifications, zero output, in under 2s. This typically happens after
+        // a prior credit_exhausted left the ACP session in a drain state. The session
+        // is poisoned; recreate it on a fresh resume so the user's prompt reaches Claude.
+        const isStuckEmptyTurn = (
+          notificationCount === 0 &&
+          outputTokens === 0 &&
+          fullText.length === 0 &&
+          promptResult.stopReason === "end_turn" &&
+          promptDurationMs < 2000 &&
+          !isNewSession &&
+          _retryDepth < MAX_QUERY_RETRIES
+        );
+        if (isStuckEmptyTurn) {
+          logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms with no notifications — session ${sessionId} is in drain state. Recreating session and retrying (depth=${_retryDepth}).`);
+          const stuckSessionId = sessionId;
+          unregisterSession(sessionKey);
+          imageTurnCounts.delete(sessionKey);
+          activeSessionId = "";
+          // Try to resume the stuck session ID first; the resume path falls back
+          // to session/new automatically if the session file is gone or corrupt.
+          msg.resume = stuckSessionId;
+          return handleQuery(msg, _retryDepth + 1);
+        }
+
         // Increment image turn counter so we know when to stop including screenshots.
         // Image turn counting removed — screenshots are now read by the model via Read tool
 
