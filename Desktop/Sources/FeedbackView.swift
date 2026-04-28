@@ -52,6 +52,7 @@ class FeedbackWindow {
         newWindow.styleMask = [.titled, .closable]
         newWindow.setContentSize(NSSize(width: 400, height: 300))
         newWindow.center()
+        newWindow.applyCrashWorkarounds()  // FAZM-20: disable auto touch bar / tabbing
         newWindow.makeKeyAndOrderFront(nil)
         newWindow.level = .floating
 
