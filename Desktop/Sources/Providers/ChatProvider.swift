@@ -383,6 +383,21 @@ class ChatProvider: ObservableObject {
     /// Current utilization (0-1) of the rate limit
     @Published var rateLimitUtilization: Double?
 
+    // MARK: - Session Recovery Notice
+    /// Set when the bridge had to abandon a previous (upstream-expired) session
+    /// and create a new one. UI can render this as a transient banner inside the
+    /// conversation; cleared on the next user send.
+    @Published var sessionExpiredNotice: SessionExpiredNotice?
+
+    struct SessionExpiredNotice: Equatable {
+        let sessionKey: String?
+        let oldSessionId: String
+        let newSessionId: String
+        let contextRestored: Bool
+        let restoredMessageCount: Int
+        let firedAt: Date
+    }
+
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
 
@@ -2268,6 +2283,46 @@ class ChatProvider: ObservableObject {
             }
         }
 
+        // If we're attempting a resume, gather recent local history for the bridge.
+        // The bridge ignores priorContext on the happy path; it only consults it when
+        // session/resume fails upstream and we fall back to creating a fresh session.
+        // This is what stops the "what did you want me to kick off?" amnesia bug.
+        var priorContextForBridge: [(role: String, text: String)]? = nil
+        if let resumeId = resume, !resumeId.isEmpty {
+            let storeContext: String?
+            if sessionKey == "floating" {
+                storeContext = "__floating__"
+            } else if let key = sessionKey, key.hasPrefix("detached-") {
+                storeContext = "__\(key)__"
+            } else {
+                // "main" / nil don't write to ChatMessageStore today (they live in
+                // self.messages). Use the in-memory list as the source instead.
+                storeContext = nil
+            }
+
+            if let ctx = storeContext {
+                let recent = await ChatMessageStore.loadMessages(context: ctx, limit: 20)
+                let mapped = recent.compactMap { msg -> (role: String, text: String)? in
+                    let role = msg.sender == .user ? "user" : "assistant"
+                    let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return nil }
+                    return (role: role, text: text)
+                }
+                if !mapped.isEmpty { priorContextForBridge = mapped }
+            } else {
+                // main / nil: pull from in-memory messages (oldest first, last 20)
+                let recent = self.messages.suffix(20)
+                let mapped = recent.compactMap { msg -> (role: String, text: String)? in
+                    let role = msg.sender == .user ? "user" : "assistant"
+                    let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return nil }
+                    return (role: role, text: text)
+                }
+                if !mapped.isEmpty { priorContextForBridge = mapped }
+            }
+            log("ChatProvider: Prepared \(priorContextForBridge?.count ?? 0) priorContext entries for resume of \(resumeId)")
+        }
+
         // Pre-query guard: check if builtin cost cap is reached
         if bridgeMode == "builtin" && builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
             log("ChatProvider: Builtin cost cap reached ($\(String(format: "%.2f", builtinCumulativeCostUsd))/$\(String(format: "%.0f", Self.builtinCostCapUsd))) — switching to personal mode")
@@ -2566,6 +2621,7 @@ class ChatProvider: ObservableObject {
                 model: model ?? modelOverride,
                 resume: resume,
                 attachments: attachments,
+                priorContext: priorContextForBridge,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -2622,6 +2678,31 @@ class ChatProvider: ObservableObject {
                             log("ChatProvider: Tool summary — \(summary.prefix(100))")
                         case .rateLimit(let status, let resetsAt, let rateLimitType, let utilization):
                             self.handleRateLimitEvent(status: status, resetsAt: resetsAt, rateLimitType: rateLimitType, utilization: utilization)
+                        case .sessionExpired(let oldSessionId, let newSessionId, let contextRestored, let restoredMessageCount, let reason):
+                            log("ChatProvider: session expired upstream — old=\(oldSessionId) new=\(newSessionId) restored=\(contextRestored)/\(restoredMessageCount) reason=\(reason)")
+                            self.sessionExpiredNotice = SessionExpiredNotice(
+                                sessionKey: sessionKey,
+                                oldSessionId: oldSessionId,
+                                newSessionId: newSessionId,
+                                contextRestored: contextRestored,
+                                restoredMessageCount: restoredMessageCount,
+                                firedAt: Date()
+                            )
+                            // Persist the new session id so future restarts resume the
+                            // replacement session, not the dead one we just abandoned.
+                            if let key = sessionKey {
+                                let storageKey: String
+                                if key == "floating" {
+                                    storageKey = self.floatingSessionIdKey
+                                } else if key.hasPrefix("detached-") {
+                                    storageKey = "acpSessionId_\(key)_\(self.bridgeMode)"
+                                } else {
+                                    storageKey = self.mainSessionIdKey
+                                }
+                                UserDefaults.standard.set(newSessionId, forKey: storageKey)
+                            } else {
+                                UserDefaults.standard.set(newSessionId, forKey: self.mainSessionIdKey)
+                            }
                         }
                     }
                 }
