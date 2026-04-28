@@ -9,6 +9,11 @@ export interface QueryAttachment {
   mimeType: string;
 }
 
+export interface PriorContextEntry {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface QueryMessage {
   type: "query";
   id: string;
@@ -20,6 +25,14 @@ export interface QueryMessage {
   model?: string;
   resume?: string;
   attachments?: QueryAttachment[];
+  /**
+   * Recent local conversation history (most recent last). Only consulted by the
+   * bridge when a `session/resume` attempt fails and we fall back to creating a
+   * new session; in that case the bridge prepends a recovery preamble to the
+   * prompt so context is not silently lost. Sent by Swift only when `resume` is
+   * set, to keep the common case cheap.
+   */
+  priorContext?: PriorContextEntry[];
 }
 
 export interface ToolResultMessage {
@@ -281,6 +294,23 @@ export interface ModelsAvailableMessage {
 export interface McpServersAvailableMessage {
   type: "mcp_servers_available";
   servers: Array<{ name: string; command: string; builtin: boolean }>;
+}
+
+/**
+ * The bridge attempted `session/resume` but the upstream session was gone, so
+ * a new session was created in its place. Emitted before the prompt result so
+ * the UI can render an inline notice. `contextRestored` reports whether the
+ * client supplied `priorContext` that the bridge replayed into the new session.
+ */
+export interface SessionExpiredMessage {
+  type: "session_expired";
+  reason: string;
+  oldSessionId: string;
+  newSessionId: string;
+  contextRestored: boolean;
+  restoredMessageCount: number;
+  sessionId?: string;
+  sessionKey?: string;
 }
 
 export type OutboundMessage =
