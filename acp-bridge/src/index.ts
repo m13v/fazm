@@ -1912,6 +1912,14 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         pendingTools.length = 0;
         clearAllToolTimers();
         sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
+        // Drop the ACP session so the next prompt is a fresh session/resume.
+        // Without this, the Claude Code SDK leaves the session in a stuck state
+        // where the very next session/prompt resolves instantly with
+        // stopReason=end_turn and zero notifications, surfacing as
+        // "Failed to get a response. Please try again." in the UI.
+        unregisterSession(sessionKey);
+        imageTurnCounts.delete(sessionKey);
+        activeSessionId = "";
         lastApiRetry = null;
         return;
       }
@@ -2035,6 +2043,12 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     if (outerStructuredCredit || outerRegexCredit) {
       logErr(`Credit/rate limit exhausted (outer): ${errMsg}`);
       sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
+      // Same stuck-session cleanup as the inner credit_exhausted branch.
+      // Use incomingSessionKey here because the inner-scoped sessionKey
+      // is not visible in the outer catch.
+      unregisterSession(incomingSessionKey);
+      imageTurnCounts.delete(incomingSessionKey);
+      activeSessionId = "";
       lastApiRetry = null;
       return;
     }
