@@ -2882,35 +2882,17 @@ class ChatProvider: ObservableObject {
             // Keep the AI message in the array (even if empty) so Combine subscribers
             // and handlePostQuery can find it. Removing it broke detached window error
             // handling because the $messages subscription guard (count > before) would fail.
+            // Note: the partial-save backend Task is spawned LATER (below, after the
+            // ⚠️ error suffix is appended) so the saved text always includes the warning
+            // and the backend stays consistent with the local DB.
+            var hadPartialContent = false
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 messages[index].isStreaming = false
                 completeRemainingToolCalls(messageId: aiMessageId)
                 await Task.yield()  // Let UI update immediately
-
-                let partialText = messages[index].text
-                if !partialText.isEmpty {
-                    log("Bridge error after partial response — keeping \(partialText.count) chars of streamed text")
-                    let partialToolMetadata = self.serializeToolCallMetadata(messageId: aiMessageId)
-                    Task { [weak self] in
-                        do {
-                            let response = try await APIClient.shared.saveMessage(
-                                text: partialText,
-                                sender: "ai",
-                                appId: capturedAppId,
-                                sessionId: nil,
-                                metadata: partialToolMetadata
-                            )
-                            await MainActor.run {
-                                if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {
-                                    self?.messages[syncIndex].id = response.id
-                                    self?.messages[syncIndex].isSynced = true
-                                }
-                            }
-                            log("Saved partial AI response to backend: \(response.id)")
-                        } catch {
-                            logError("Failed to persist partial AI response", error: error)
-                        }
-                    }
+                hadPartialContent = !messages[index].text.isEmpty
+                if hadPartialContent {
+                    log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
                 }
             }
 
@@ -3002,6 +2984,38 @@ class ChatProvider: ObservableObject {
                     } else if effectiveKey.hasPrefix("detached-") {
                         let sid = UserDefaults.standard.string(forKey: "acpSessionId_\(effectiveKey)_\(bridgeMode)")
                         Task { await ChatMessageStore.saveMessage(updatedMessage, context: "__\(effectiveKey)__", sessionId: sid) }
+                    }
+                }
+            }
+
+            // Backend partial-save: spawn AFTER the suffix has been appended so the
+            // text persisted to the backend includes the ⚠️ rate-limit/error warning.
+            // Previously this ran BEFORE the suffix append, causing two bugs:
+            // (1) the backend stored the suffix-less version, diverging from local DB,
+            // and (2) a race where the Task's id mutation could land before the
+            // suffix-append's id-based lookup, dropping the suffix from memory too.
+            if hadPartialContent,
+               let aiIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                let textWithSuffix = messages[aiIndex].text
+                let partialToolMetadata = self.serializeToolCallMetadata(messageId: aiMessageId)
+                Task { [weak self] in
+                    do {
+                        let response = try await APIClient.shared.saveMessage(
+                            text: textWithSuffix,
+                            sender: "ai",
+                            appId: capturedAppId,
+                            sessionId: nil,
+                            metadata: partialToolMetadata
+                        )
+                        await MainActor.run {
+                            if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {
+                                self?.messages[syncIndex].id = response.id
+                                self?.messages[syncIndex].isSynced = true
+                            }
+                        }
+                        log("Saved partial AI response to backend: \(response.id) (\(textWithSuffix.count) chars including warning)")
+                    } catch {
+                        logError("Failed to persist partial AI response", error: error)
                     }
                 }
             }
