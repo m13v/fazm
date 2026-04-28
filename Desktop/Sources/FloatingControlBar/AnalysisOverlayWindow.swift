@@ -85,6 +85,7 @@ class AnalysisOverlayWindow {
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.becomesKeyOnlyIfNeeded = false
+        panel.applyCrashWorkarounds()  // FAZM-20: disable auto touch bar / tabbing
 
         hostingView.frame = NSRect(origin: .zero, size: overlaySize)
         panel.contentView = hostingView
