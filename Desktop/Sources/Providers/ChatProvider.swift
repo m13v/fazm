@@ -2357,6 +2357,10 @@ class ChatProvider: ObservableObject {
         }
 
         errorMessage = nil
+        // Clear any "session restored" banner from the previous turn — if it fires
+        // again on this new turn, the bridge will re-emit session_expired and the
+        // handler below will repopulate it.
+        sessionExpiredNotice = nil
         pendingRetryMessage = trimmedText
 
         // Track user message sent
