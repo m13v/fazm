@@ -596,6 +596,16 @@ class AssistantSettings: ObservableObject {
             UserDefaults.standard.set(transcriptionVocabulary, forKey: "transcription_vocabulary")
         }
     }
+
+    /// Lowercased keys of system vocabulary entries the user has chosen to remove.
+    /// Persisted so removals survive app restarts. The user can restore them via
+    /// `restoreSystemVocabulary(...)` (re-adds the term and clears the disabled flag).
+    @Published var disabledSystemVocabulary: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "disabled_system_vocabulary") ?? []) {
+        didSet {
+            UserDefaults.standard.set(Array(disabledSystemVocabulary), forKey: "disabled_system_vocabulary")
+        }
+    }
+
     @Published var analysisDelay: Int = 3
     @Published var glowOverlayEnabled: Bool = false
 
@@ -610,27 +620,58 @@ class AssistantSettings: ObservableObject {
         return transcriptionLanguage
     }
 
+    /// Built-in domain vocabulary biased to Deepgram for ALL users (existing + new),
+    /// derived from analysis of production voice queries. These are proper nouns the
+    /// model otherwise mishears (or hallucinates around) with near-zero false-positive
+    /// risk because they aren't common English words. Users can remove individual
+    /// entries from the Dictionary settings; removals are tracked in
+    /// `disabledSystemVocabulary` and persisted across launches.
+    /// Nova-3 caps total keyterms at 500; effectiveness drops past ~30 terms — keep
+    /// this list curated.
+    static let systemVocabulary: [String] = [
+        // Product
+        "Fazm",
+        // Anthropic AI models
+        "Claude", "Sonnet", "Opus", "Haiku", "Anthropic",
+        // Protocols / frameworks
+        "MCP", "ACP",
+        // Infrastructure / services
+        "Supabase", "Firestore", "PostHog", "Sentry", "Stripe", "Vercel",
+        "Deepgram", "Whisper",
+        // Dev tooling
+        "Xcode", "SwiftUI", "Tauri", "Screenpipe",
+        // Legacy product name still spoken
+        "OMI",
+    ]
+
+    /// System terms the user has NOT removed, in canonical order.
+    var activeSystemVocabulary: [String] {
+        Self.systemVocabulary.filter { !disabledSystemVocabulary.contains($0.lowercased()) }
+    }
+
+    /// Combined list sent to Deepgram: user-added terms first, then any active
+    /// system terms not already present (case-insensitive de-dup).
     var effectiveVocabulary: [String] {
-        var vocab = Set(transcriptionVocabulary)
-        // Domain vocabulary: product names, AI models, and tech stack terms
-        // that Deepgram Nova-3 should recognise accurately
-        let domainTerms: [String] = [
-            // Product
-            "Fazm",
-            // Anthropic AI models
-            "Claude", "Sonnet", "Opus", "Haiku", "Anthropic",
-            // Protocols / frameworks
-            "MCP", "ACP",
-            // Infrastructure / services
-            "Supabase", "Firestore", "PostHog", "Sentry", "Stripe", "Vercel",
-            "Deepgram", "Whisper",
-            // Dev tooling
-            "Xcode", "SwiftUI", "Tauri", "Screenpipe",
-            // Common spoken-form corrections
-            "OMI",
-        ]
-        for term in domainTerms { vocab.insert(term) }
-        return Array(vocab)
+        var seen = Set<String>()
+        var vocab: [String] = []
+        for term in transcriptionVocabulary + activeSystemVocabulary {
+            let key = term.lowercased()
+            if !key.isEmpty && !seen.contains(key) {
+                seen.insert(key)
+                vocab.append(term)
+            }
+        }
+        return vocab
+    }
+
+    /// Mark a built-in term as removed. Used by the Dictionary settings panel.
+    func disableSystemTerm(_ term: String) {
+        disabledSystemVocabulary.insert(term.lowercased())
+    }
+
+    /// Restore a previously-removed built-in term.
+    func restoreSystemTerm(_ term: String) {
+        disabledSystemVocabulary.remove(term.lowercased())
     }
 
     /// Languages that support multi-language (auto-detect) mode in Deepgram Nova-3
