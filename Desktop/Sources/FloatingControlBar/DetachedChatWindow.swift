@@ -362,6 +362,23 @@ class DetachedChatWindowController {
     fileprivate(set) weak var lastActiveWindow: DetachedChatWindow?
     /// Set during app termination so window-close handlers preserve the registry.
     private var isTerminating = false
+    /// Global observer for `chatProviderDidDequeue` — keeps detached windows in sync
+    /// when a queued message is auto-chained by ChatProvider after the previous
+    /// response completes. Without this, sending a follow-up while a response is
+    /// streaming (which routes through `onEnqueueMessage`, never through `sendQuery`)
+    /// leaves `state.displayedQuery` stuck on the previous question and the new
+    /// answer ends up paired with the wrong question.
+    private var globalDequeueObserver: NSObjectProtocol?
+
+    private init() {
+        globalDequeueObserver = NotificationCenter.default.addObserver(
+            forName: .chatProviderDidDequeue, object: nil, queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                self?.handleProviderDequeue(notification: notification)
+            }
+        }
+    }
 
     var isShowing: Bool { entries.values.contains { $0.window.isVisible } }
 
@@ -1009,6 +1026,65 @@ class DetachedChatWindowController {
         entries[winId]?.chatCancellable = cancellable
     }
 
+    /// Handle `chatProviderDidDequeue` for any detached session.
+    ///
+    /// When the user enqueues a follow-up while the previous response is streaming,
+    /// `AIResponseView.sendFollowUp` routes the message through `onEnqueueMessage`
+    /// (not through `sendQuery`'s busy path), so no per-window dequeue listener gets
+    /// installed. This global handler picks up the chain notification, finds the
+    /// matching detached window, archives the previous exchange, and rewires the
+    /// streaming subscription so the new answer pairs with the new question.
+    private func handleProviderDequeue(notification: Notification) {
+        guard let dequeuedSessionKey = notification.userInfo?["sessionKey"] as? String,
+              dequeuedSessionKey.hasPrefix("detached-"),
+              let dequeuedText = notification.userInfo?["text"] as? String else { return }
+        guard let (winId, entry) = entries.first(where: { $0.value.sessionKey == dequeuedSessionKey }) else { return }
+        guard let provider = FloatingControlBarManager.shared.chatProvider else { return }
+        let state = entry.window.state
+
+        log("[DetachedChat] global dequeue: session=\(dequeuedSessionKey) text='\(dequeuedText.prefix(40))' historyCount=\(state.chatHistory.count) queue=\(state.messageQueue.count)")
+
+        // Drop the matching item from the per-window queue UI.
+        if let idx = state.messageQueue.firstIndex(where: { $0.text == dequeuedText }) {
+            state.messageQueue.remove(at: idx)
+        }
+
+        // Archive the previous exchange. If the per-window dequeue listener (busy
+        // path of sendQuery) already ran first, displayedQuery will already match
+        // and we skip the archive — same guard as that listener.
+        let currentQuery = state.displayedQuery
+        var aiMessage = state.currentAIMessage
+        if aiMessage == nil,
+           let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == dequeuedSessionKey }),
+           !latestAI.text.isEmpty {
+            aiMessage = latestAI
+        }
+        if currentQuery != dequeuedText, !currentQuery.isEmpty {
+            var resolved = aiMessage ?? ChatMessage(
+                id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
+                isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
+            )
+            resolved.contentBlocks = resolved.contentBlocks.map { block in
+                if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = block {
+                    return .toolCall(id: id, name: name, status: .completed, toolUseId: toolUseId, input: input, output: output)
+                }
+                return block
+            }
+            state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
+        }
+        state.flushPendingChatObserverExchanges()
+        state.displayedQuery = dequeuedText
+        state.isAILoading = true
+        state.currentAIMessage = nil
+        state.showUpgradeClaudeButton = false
+
+        // Re-anchor streaming for the chained query. Capture countBefore now,
+        // before ChatProvider.sendMessage (which is awaited on the same main-actor
+        // task that posted this notification synchronously) appends the new
+        // user/AI placeholder. The subscriber will then see them when @Published fires.
+        let countBefore = provider.messages.count
+        subscribeToResponse(provider: provider, state: state, winId: winId, messageCountBefore: countBefore)
+    }
 
     /// Focus the input field of the detached window that owns the given state.
     func focusInputField(for state: FloatingControlBarState) {
