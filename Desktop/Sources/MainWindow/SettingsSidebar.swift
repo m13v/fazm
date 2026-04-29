@@ -106,6 +106,16 @@ struct SettingsSidebar: View {
     @State private var discoveredTasksUnread = 0
     @FocusState private var isSearchFocused: Bool
 
+    // Surfaces the Sparkle 4005 install error state so users can recover after
+    // dismissing the setup guide. Set in UpdaterViewModel when 4005 fires; cleared
+    // (via `hasSuccessfullyInstalledSparkleUpdate`) once an update installs cleanly.
+    @AppStorage("hasSeenAppManagementError") private var hasSeenAppManagementError: Bool = false
+    @AppStorage("hasSuccessfullyInstalledSparkleUpdate") private var hasInstalledSparkleUpdate: Bool = false
+
+    private var showAppManagementWarning: Bool {
+        hasSeenAppManagementError && !hasInstalledSparkleUpdate
+    }
+
     private let unreadRefreshTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
     private let expandedWidth: CGFloat = 260
@@ -194,6 +204,14 @@ struct SettingsSidebar: View {
             if !appState.hasScreenRecordingPermission {
                 screenRecordingWidget
                     .padding(.horizontal, 8)
+                    .padding(.bottom, (showAppManagementWarning || updaterViewModel.updateAvailable) ? 8 : 16)
+                    .transition(.opacity)
+            }
+
+            // App Management permission warning (Sparkle 4005 recovery)
+            if showAppManagementWarning {
+                appManagementWarningWidget
+                    .padding(.horizontal, 8)
                     .padding(.bottom, updaterViewModel.updateAvailable ? 8 : 16)
                     .transition(.opacity)
             }
@@ -260,6 +278,60 @@ struct SettingsSidebar: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - App Management Warning Widget
+    // Shown when a Sparkle 4005 install error occurred and the user dismissed
+    // the recovery guide. Tapping reopens the guide so they can grant App
+    // Management permission. Auto-hides once an update installs successfully.
+    private var appManagementWarningWidget: some View {
+        Button(action: {
+            let version = updaterViewModel.availableVersion.isEmpty
+                ? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+                : updaterViewModel.availableVersion
+            AppManagementSetupWindowController.shared.show(
+                version: version,
+                onDone: {
+                    UserDefaults.standard.set(true, forKey: "hasSuccessfullyInstalledSparkleUpdate")
+                    UpdaterViewModel.shared.checkForUpdatesInBackground()
+                },
+                onDismiss: { /* keep widget visible until permission granted */ }
+            )
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: 17)
+                    .foregroundColor(.red)
+                    .frame(width: iconWidth)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto-updates blocked")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(FazmColors.textPrimary)
+
+                    Text("App Management permission needed")
+                        .scaledFont(size: 11)
+                        .foregroundColor(FazmColors.textSecondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .scaledFont(size: 12)
+                    .foregroundColor(FazmColors.textTertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(FazmColors.backgroundTertiary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.red.opacity(0.35), lineWidth: 1)
                     )
             )
         }
