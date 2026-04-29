@@ -115,6 +115,15 @@ function startToolTimer(
   const timer = setTimeout(() => {
     activeToolTimers.delete(toolCallId);
 
+    // Defensive: if the tool already completed in the brief window between
+    // the timer firing and this callback executing, don't synthesize a
+    // failure or kill the session. inFlightTools.delete() runs in the
+    // tool_call_update terminal branch; absence here means the tool finished.
+    if (!inFlightTools.has(toolCallId)) {
+      logErr(`Tool watchdog: ${title} (id=${toolCallId}) already completed — skipping synthetic timeout`);
+      return;
+    }
+
     logErr(`Tool TIMEOUT: ${title} (id=${toolCallId}) exceeded ${timeoutMs / 1000}s — synthesizing failure`);
 
     // Remove from pendingTools (same as normal completion path)
