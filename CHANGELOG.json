@@ -1,16 +1,22 @@
 {
-  "unreleased": [
-    "Fixed duplicate pop-out chat windows when the global shortcut fires twice in quick succession",
-    "Fixed stale prior AI response showing under a paywall-blocked chat message",
-    "New pop-out windows (Cmd+Shift+N) now inherit the workspace of the currently focused pop-out instead of the global default",
-    "Fixed an intermittent crash on macOS that surfaced during heavy floating-bar and pop-out activity",
-    "Fixed rate-limit/credit-exhausted errors leaving sessions in a stuck state where the next message returned an empty response. The bridge now drops the ACP session on credit_exhausted and detects zero-output empty turns, recreating the session so follow-up messages reach Claude",
-    "Fixed mid-stream rate-limit warnings sometimes missing from the partial response bubble and from backend persistence. The error suffix is now appended before the partial-save runs, so backend, local DB, and UI stay consistent",
-    "Improved Fazm self-knowledge so the floating bar can answer common capability questions (what can it do, how to share screen, how to pay, voice control)",
-    "Improved voice transcription accuracy for product names and tech terms (Claude, Sonnet, Opus, MCP, Tauri, Supabase, etc.) by biasing Deepgram with a built-in domain vocabulary",
-    "Fixed Stop button in pop-out chat not clearing the loading spinner or \"Not Responding\" banner"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.6.2",
+      "date": "2026-04-28",
+      "changes": [
+        "Fixed duplicate pop-out chat windows when the global shortcut fires twice in quick succession",
+        "Fixed stale prior AI response showing under a paywall-blocked chat message",
+        "New pop-out windows (Cmd+Shift+N) now inherit the workspace of the currently focused pop-out instead of the global default",
+        "Fixed an intermittent crash on macOS that surfaced during heavy floating-bar and pop-out activity",
+        "Fixed rate-limit/credit-exhausted errors leaving sessions in a stuck state where the next message returned an empty response. The bridge now drops the ACP session on credit_exhausted and detects zero-output empty turns, recreating the session so follow-up messages reach Claude",
+        "Fixed mid-stream rate-limit warnings sometimes missing from the partial response bubble and from backend persistence. The error suffix is now appended before the partial-save runs, so backend, local DB, and UI stay consistent",
+        "Improved Fazm self-knowledge so the floating bar can answer common capability questions (what can it do, how to share screen, how to pay, voice control)",
+        "Improved voice transcription accuracy for product names and tech terms (Claude, Sonnet, Opus, MCP, Tauri, Supabase, etc.) by biasing Deepgram with a built-in domain vocabulary",
+        "Fixed Stop button in pop-out chat not clearing the loading spinner or \"Not Responding\" banner",
+        "Added a Vocabulary section to Settings to view, disable, and restore the built-in transcription terms"
+      ]
+    },
     {
       "version": "2.5.0",
       "date": "2026-04-27",
