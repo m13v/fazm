@@ -639,9 +639,7 @@ class AssistantSettings: ObservableObject {
         "Supabase", "Firestore", "PostHog", "Sentry", "Stripe", "Vercel",
         "Deepgram", "Whisper",
         // Dev tooling
-        "Xcode", "SwiftUI", "Tauri", "Screenpipe",
-        // Legacy product name still spoken
-        "OMI",
+        "Xcode", "SwiftUI", "Tauri",
     ]
 
     /// System terms the user has NOT removed, in canonical order.
