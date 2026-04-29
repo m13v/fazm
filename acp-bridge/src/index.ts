@@ -1467,6 +1467,18 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
 
     // Reuse existing session if alive, resume a persisted one, or create a new one
     let resumeFailedFromId: string | null = null;
+    // Source of the recovery: how should the user-facing notice be phrased?
+    let recoveryCause: "stuck_session" | "resume_failed" | null = null;
+    // Stuck-session recovery: if a prior turn detected the SDK session was
+    // poisoned (empty text, stopReason=end_turn) and recursed with this field
+    // set, skip the normal resume attempt entirely and treat it as if the
+    // resume had failed → forces session/new with priorContext replay and
+    // emits a session_expired notice so the user sees what happened.
+    if (msg._priorStuckSessionId && !sessionId) {
+      resumeFailedFromId = msg._priorStuckSessionId;
+      recoveryCause = "stuck_session";
+      logErr(`Stuck-session recovery: forcing session/new for key=${sessionKey} (dead session was ${msg._priorStuckSessionId})`);
+    }
     if (msg.resume && !sessionId) {
       // Resume a persisted session by ID (survives process restarts via ~/.claude/projects/)
       // Fall back to session/new if the session file is gone or resume fails
@@ -1492,6 +1504,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         // Remember the lost session id so we can emit session_expired and (if
         // the client supplied priorContext) prepend a recovery preamble below.
         resumeFailedFromId = msg.resume;
+        recoveryCause = "resume_failed";
         // Fall through to session/new below
       }
     }
@@ -1581,9 +1594,15 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         logErr(`Session expired: no priorContext provided, starting fresh (key=${sessionKey})`);
       }
 
+      // User-facing reason text. Tailored per cause so the inline notice in
+      // the chat tells the user WHY the session was reset, not just that it was.
+      const reasonText =
+        recoveryCause === "stuck_session"
+          ? "The previous response came back empty, so I restarted this chat."
+          : "The upstream chat session expired and was replaced.";
       sendWithSession(sessionId, {
         type: "session_expired",
-        reason: "Previous session expired upstream; created a new one.",
+        reason: reasonText,
         oldSessionId: resumeFailedFromId,
         newSessionId: sessionId,
         contextRestored: restoredCount > 0,
@@ -1830,28 +1849,43 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           return;
         }
 
-        // Detect stuck-empty-turn: session/prompt resolved with stopReason=end_turn,
-        // zero notifications, zero output, in under 2s. This typically happens after
-        // a prior credit_exhausted left the ACP session in a drain state. The session
-        // is poisoned; recreate it on a fresh resume so the user's prompt reaches Claude.
-        const isStuckEmptyTurn = (
-          notificationCount === 0 &&
-          outputTokens === 0 &&
+        // Detect empty-assistant-turn: session/prompt resolved with stopReason=end_turn
+        // but the agent never produced any text. Two flavors:
+        //   (a) "Fast stuck": zero notifications, zero output tokens, returned in <2s.
+        //       Classic poisoned-session pattern after a prior credit_exhausted left
+        //       the ACP SDK in a drain state.
+        //   (b) "Slow empty": some notifications fired (tool calls, thinking), but the
+        //       agent ended without producing any text. From the user's POV the chat
+        //       looks frozen. Most often also the result of a half-poisoned session
+        //       carried over from a previous error (rate limit, network blip).
+        //
+        // For BOTH flavors the recovery is the same: drop the dead session, force a
+        // fresh session/new, replay priorContext as a preamble, and emit a
+        // session_expired event so the UI renders a "I restarted this chat" notice.
+        // We do NOT try to session/resume the same id again — if the SDK is poisoned,
+        // re-resuming usually produces the same empty turn and we'd burn a retry.
+        const isEmptyAssistantTurn = (
           fullText.length === 0 &&
           promptResult.stopReason === "end_turn" &&
-          promptDurationMs < 2000 &&
           !isNewSession &&
           _retryDepth < MAX_QUERY_RETRIES
         );
-        if (isStuckEmptyTurn) {
-          logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms with no notifications — session ${sessionId} is in drain state. Recreating session and retrying (depth=${_retryDepth}).`);
+        if (isEmptyAssistantTurn) {
+          logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms (notifications=${notificationCount}, outputTokens=${outputTokens}) — session ${sessionId} is poisoned. Forcing fresh session with priorContext replay (depth=${_retryDepth}).`);
           const stuckSessionId = sessionId;
           unregisterSession(sessionKey);
           imageTurnCounts.delete(sessionKey);
           activeSessionId = "";
-          // Try to resume the stuck session ID first; the resume path falls back
-          // to session/new automatically if the session file is gone or corrupt.
-          msg.resume = stuckSessionId;
+          for (const name of pendingTools) {
+            sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
+          }
+          pendingTools.length = 0;
+          clearAllToolTimers();
+          // Skip resume entirely; recurse with stuck-session marker so the next
+          // call goes straight to session/new + priorContext replay + session_expired
+          // notice. This is the recovery path the user is supposed to see in the chat.
+          msg.resume = undefined;
+          msg._priorStuckSessionId = stuckSessionId;
           return handleQuery(msg, _retryDepth + 1);
         }
 
