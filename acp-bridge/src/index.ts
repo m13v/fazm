@@ -1364,6 +1364,13 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
 
           registerSession(cfg.key, { sessionId, cwd: warmCwd, model: cfg.model });
           await acpRequest("session/set_model", { sessionId, modelId: cfg.model });
+          // Tell the Swift client about the pre-warmed sessionId NOW, even though
+          // no user prompt has run yet. Without this, the very first prompt against
+          // a pre-warmed session that immediately rate-limits would lose its
+          // sessionId — handleQuery hits the "Reusing existing ACP session" branch
+          // (which doesn't emit session_started), so Swift never banks the id.
+          // Defense-in-depth on top of handleQuery's own session_started emission.
+          sendWithSession(sessionId, { type: "session_started", isResume: !!cfg.resume });
         } catch (err) {
           if (isAcpAuthError(err)) {
             logErr(`Pre-warm failed with auth error (code=${(err as AcpError).code}), starting OAuth flow`);
