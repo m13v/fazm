@@ -30,6 +30,8 @@ jobs:
           service: fazm-backend
           region: us-east5
           source: Backend/
-          # Keep 1 instance warm to avoid cold start delays on /v1/keys
-          # (cold starts cause ensureKeys timeouts → bridge falls back to personal OAuth)
-          flags: '--min-instances=1'
+          # min-instances=2 keeps two instances warm so bursts (Sparkle 24h-aligned
+          # appcast checks, /v1/keys ensureKeys storms after launch) never hit a cold
+          # start. memory=512Mi gives headroom for the appcast in-memory cache and
+          # concurrent TLS sessions to GitHub/Firestore.
+          flags: '--min-instances=2 --memory=512Mi'
