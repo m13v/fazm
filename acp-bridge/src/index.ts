@@ -1475,6 +1475,11 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         // Set model after resume — without this the session uses the SDK default (possibly Haiku)
         await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
         logErr(`ACP session resumed: ${sessionId} (key=${sessionKey}, model=${requestedModel})`);
+        // Tell the client that this session is alive and resumable, BEFORE the prompt
+        // runs. If the prompt hits a rate limit / credit-exhausted / network error
+        // mid-stream, the client has already banked the sessionId in UserDefaults,
+        // so the next attempt resumes instead of starting a fresh empty session.
+        sendWithSession(sessionId, { type: "session_started", isResume: true });
       } catch (resumeErr) {
         logErr(`ACP session resume failed (will create new session): ${resumeErr}`);
         // Remember the lost session id so we can emit session_expired and (if
@@ -1499,6 +1504,11 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
       }
       logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
+      // Tell the client that this session is alive and resumable, BEFORE the prompt
+      // runs. Critical for popouts: if the very first long task hits a rate limit,
+      // without this the client never sees the sessionId and the follow-up starts a
+      // brand-new session with no memory.
+      sendWithSession(sessionId, { type: "session_started", isResume: false });
     } else {
       isNewSession = false;
       // If the requested model differs from the session's current model, switch it
