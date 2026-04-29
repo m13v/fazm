@@ -612,7 +612,24 @@ class AssistantSettings: ObservableObject {
 
     var effectiveVocabulary: [String] {
         var vocab = Set(transcriptionVocabulary)
-        vocab.insert("Fazm")
+        // Domain vocabulary: product names, AI models, and tech stack terms
+        // that Deepgram Nova-3 should recognise accurately
+        let domainTerms: [String] = [
+            // Product
+            "Fazm",
+            // Anthropic AI models
+            "Claude", "Sonnet", "Opus", "Haiku", "Anthropic",
+            // Protocols / frameworks
+            "MCP", "ACP",
+            // Infrastructure / services
+            "Supabase", "Firestore", "PostHog", "Sentry", "Stripe", "Vercel",
+            "Deepgram", "Whisper",
+            // Dev tooling
+            "Xcode", "SwiftUI", "Tauri", "Screenpipe",
+            // Common spoken-form corrections
+            "OMI",
+        ]
+        for term in domainTerms { vocab.insert(term) }
         return Array(vocab)
     }
 
