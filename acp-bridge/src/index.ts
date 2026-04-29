@@ -837,7 +837,7 @@ async function restartAcpProcess(): Promise<void> {
   // and create its own session without waiting for unrelated sessions.
   if (lastWarmupConfig) {
     logErr("Replaying warmup after OAuth restart (background)...");
-    preWarmPromise = preWarmSession(lastWarmupConfig.cwd, lastWarmupConfig.sessions);
+    preWarmPromise = preWarmSession(lastWarmupConfig.cwd, lastWarmupConfig.sessions, undefined, true);
   }
 }
 
