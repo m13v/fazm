@@ -3076,9 +3076,15 @@ class ChatProvider: ObservableObject {
             // ChatQueryLifecycle's in-state append) and app restart. The error
             // text becomes part of the underlying message in `messages[]` and
             // is saved to the local DB. Idempotent.
+            //
+            // We append the suffix whenever the AI message exists, even if its
+            // `text` is empty — tool-call-only responses (e.g. rate limit hit
+            // mid-stream after only tool calls were emitted) still need the
+            // warning persisted to the underlying message, otherwise the
+            // Combine re-sync will overwrite ChatQueryLifecycle's in-state
+            // suffix and the user sees a blank bubble with no error.
             if let errText = errorMessage,
-               let aiIndex = messages.firstIndex(where: { $0.id == aiMessageId }),
-               !messages[aiIndex].text.isEmpty {
+               let aiIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 let suffix = "\n\n⚠️ \(errText)"
                 if !messages[aiIndex].text.hasSuffix(suffix) {
                     messages[aiIndex].text += suffix
