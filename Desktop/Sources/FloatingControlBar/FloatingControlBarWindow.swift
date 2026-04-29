@@ -943,8 +943,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             || eventType == .otherMouseDown
         guard isMouseClick else { return }
 
-        // Don't collapse while AI is generating a response
-        if state.showingAIResponse, state.currentAIMessage?.isStreaming == true || state.isAILoading { return }
+        // Don't dismiss while ACP is listening for agent output. isStreaming/isAILoading
+        // only cover token streaming and the initial wait — they go false during tool
+        // calls (Playwright, Terminal, macos-use, etc.), which can take minutes. Using
+        // chatCancellable as the source of truth keeps the conversation open through
+        // the entire agent run, including tool execution gaps.
+        if FloatingControlBarManager.shared.isChatActive { return }
 
         dismissConversationAnimated()
     }
@@ -1634,6 +1638,14 @@ class FloatingControlBarManager {
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
+    }
+
+    /// Whether there is an active ACP subscription receiving updates.
+    /// Stays true through tool calls and gaps between streamed text — a stronger
+    /// "agent is working" signal than `isStreaming` or `isAILoading`, which only
+    /// cover token streaming and the initial wait.
+    var isChatActive: Bool {
+        chatCancellable != nil
     }
 
     /// Toggle visibility.
