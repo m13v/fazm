@@ -89,12 +89,39 @@ enum ChatQueryLifecycle {
                 state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
             }
         } else if provider.showPaywall {
-            // Paywall blocked the message before it was sent. The slice search
-            // above may have set currentAIMessage to a stale prior AI response
-            // (when messageCountBefore is older than the next exchange), making
-            // it look like the new question got the old answer. Clear the AI
-            // bubble so the only feedback is the paywall popup itself.
+            // Paywall blocked the message before it was sent. Restore the
+            // user's typed message back into the input field so they don't
+            // have to retype it after dismissing the paywall (or subscribing).
+            //
+            // The slice search above may have set currentAIMessage to a stale
+            // prior AI response (when messageCountBefore is older than the
+            // next exchange), making it look like the new question got the
+            // old answer. Clear it so the only feedback is the paywall popup.
+            let unsentMessage = state.displayedQuery
             state.currentAIMessage = nil
+
+            if state.chatHistory.isEmpty {
+                // First message in the session — collapse the chat view back
+                // to the floating bar input and restore the message text there.
+                state.aiInputText = unsentMessage
+                state.displayedQuery = ""
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    state.showingAIResponse = false
+                }
+            } else {
+                // Mid-conversation — un-archive the previous exchange (it was
+                // moved to chatHistory in onSendFollowUp just before sending)
+                // so the visible question/answer pair matches again, and drop
+                // the unsent message back into the follow-up input via
+                // pendingFollowUpText (AIResponseView's onChange picks it up).
+                if let previous = state.chatHistory.popLast() {
+                    state.displayedQuery = previous.question
+                    state.currentAIMessage = previous.aiMessage
+                } else {
+                    state.displayedQuery = ""
+                }
+                state.pendingFollowUpText = unsentMessage
+            }
             return
         } else if provider.needsBrowserExtensionSetup || provider.pendingRetryMessage != nil {
             log("ChatQueryLifecycle: Suppressing error message — browser setup retry pending")
