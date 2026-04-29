@@ -1707,6 +1707,56 @@ struct SettingsContentView: View {
                     }
                 }
             }
+
+            // Built-in vocabulary: shown after user terms, removable but visually
+            // distinct so users see what's already covered out of the box.
+            let activeBuiltins = AssistantSettings.shared.activeSystemVocabulary
+            if !activeBuiltins.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Built-in")
+                        .scaledFont(size: 11, weight: .medium)
+                        .foregroundColor(FazmColors.textTertiary)
+                        .padding(.top, 12)
+
+                    ForEach(activeBuiltins, id: \.self) { term in
+                        HStack {
+                            Text(term)
+                                .scaledFont(size: 14)
+                                .foregroundColor(FazmColors.textSecondary)
+
+                            Spacer()
+
+                            Button {
+                                AssistantSettings.shared.disableSystemTerm(term)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(FazmColors.backgroundTertiary.opacity(0.5))
+                        )
+                    }
+                }
+            }
+
+            // Restore button — only shows when at least one built-in has been removed.
+            if !AssistantSettings.shared.disabledSystemVocabulary.isEmpty {
+                Button {
+                    AssistantSettings.shared.disabledSystemVocabulary.removeAll()
+                } label: {
+                    Text("Restore built-in defaults")
+                        .scaledFont(size: 12)
+                        .foregroundColor(FazmColors.purplePrimary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
         }
         .padding(.horizontal, 32)
     }
