@@ -2284,11 +2284,15 @@ class ChatProvider: ObservableObject {
         }
 
         // If we're attempting a resume, gather recent local history for the bridge.
-        // The bridge ignores priorContext on the happy path; it only consults it when
-        // session/resume fails upstream and we fall back to creating a fresh session.
-        // This is what stops the "what did you want me to kick off?" amnesia bug.
+        // Always compute priorContext (last 20 messages) and send it to the bridge,
+        // even when no resume id is provided. The bridge ignores it on the happy
+        // path and only consults it for recovery: (1) session/resume fails upstream,
+        // or (2) a prior turn returned empty text (poisoned ACP session). Without
+        // priorContext on every send, those recovery paths can't replay history,
+        // and the user would see the model wake up with no memory of the conversation.
+        // Tradeoff: one DB read (~20 rows) per send. Worth it for robustness.
         var priorContextForBridge: [(role: String, text: String)]? = nil
-        if let resumeId = resume, !resumeId.isEmpty {
+        do {
             let storeContext: String?
             if sessionKey == "floating" {
                 storeContext = "__floating__"
@@ -2320,7 +2324,8 @@ class ChatProvider: ObservableObject {
                 }
                 if !mapped.isEmpty { priorContextForBridge = mapped }
             }
-            log("ChatProvider: Prepared \(priorContextForBridge?.count ?? 0) priorContext entries for resume of \(resumeId)")
+            let resumeDesc = resume.map { "resume=\($0)" } ?? "no resume"
+            log("ChatProvider: Prepared \(priorContextForBridge?.count ?? 0) priorContext entries (\(resumeDesc))")
         }
 
         // Pre-query guard: check if builtin cost cap is reached
@@ -2732,10 +2737,14 @@ class ChatProvider: ObservableObject {
                             // the session was reset rather than wondering why the assistant
                             // sounds confused. Inserted just above the in-flight AI message
                             // so it reads in conversation order. Persisted via the normal
-                            // save path so it survives reload.
-                            let noticeText: String = contextRestored
-                                ? "_(Session restored: the upstream chat session expired and was replaced. Replayed the last \(restoredMessageCount) message\(restoredMessageCount == 1 ? "" : "s") from local history so I can keep going.)_"
-                                : "_(Session restored: the upstream chat session expired and was replaced. No prior context was available locally — starting fresh.)_"
+                            // save path so it survives reload. The bridge's `reason` field
+                            // tells us WHY the recovery happened (upstream expiry vs. stuck
+                            // session vs. other) so the notice can be specific instead of
+                            // a generic "session restored" — the user wanted clarity here.
+                            let restoredSuffix: String = contextRestored
+                                ? " Replayed the last \(restoredMessageCount) message\(restoredMessageCount == 1 ? "" : "s") from local history so we can keep going."
+                                : " No prior context was available locally, so we're starting fresh."
+                            let noticeText = "_(\(reason)\(restoredSuffix))_"
                             let notice = ChatMessage(
                                 text: noticeText,
                                 sender: .ai,
