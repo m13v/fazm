@@ -109,6 +109,14 @@ let ignoredTextLabels: Set<String> = [
     "Backend API, auth, and sync logic are read-only",
     "Could not toggle automatically.",
     "You will be signed out of Fazm.",
+
+    // Tool Timeout card sub-labels (card itself is searchable as "Tool Timeout")
+    "Seconds:",
+    "0 for smart defaults",
+
+    // Referral card stat headers (card itself is searchable under Subscription)
+    "Your code",
+    "Completed",
 ]
 
 // MARK: - Extraction

@@ -87,6 +87,9 @@ struct SettingsContentView: View {
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
 
+    // Observe transcription vocabulary so Dictionary section re-renders on add/remove.
+    @ObservedObject private var assistantSettings = AssistantSettings.shared
+
     // Ask Fazm floating bar state
     @State private var showAskFazmBar: Bool = false
 
