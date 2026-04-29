@@ -953,7 +953,13 @@ class DetachedChatWindowController {
         let initialKey = entries[winId]?.sessionKey
         log("[DetachedChat] subscribeToResponse: messageCountBefore=\(messageCountBefore) session=\(initialKey ?? "?")")
         entries[winId]?.chatCancellable?.cancel()
-        entries[winId]?.chatCancellable = provider.$messages
+        // Build the chain into a local first; assigning directly into
+        // entries[winId]?.chatCancellable holds an exclusive (_modify) access on
+        // `entries` while the RHS evaluates. `.sink` subscribes synchronously and
+        // @Published delivers its current value to the new subscriber immediately,
+        // firing `.compactMap` — which then re-reads `entries[winId]?.sessionKey`
+        // and trips Swift's exclusivity check (crash: swift_beginAccess / SIGABRT).
+        let cancellable = provider.$messages
             // Filter BEFORE the main-queue hop so unrelated streaming events
             // never reach `.sink`. This is the load-bearing change.
             .compactMap { [weak self] messages -> ChatMessage? in
@@ -1000,6 +1006,7 @@ class DetachedChatWindowController {
                     provider?.clearTransferredMessages()
                 }
             }
+        entries[winId]?.chatCancellable = cancellable
     }
 
 
