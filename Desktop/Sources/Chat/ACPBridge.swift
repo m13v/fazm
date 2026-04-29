@@ -154,6 +154,12 @@ actor ACPBridge {
     /// Session/resume failed upstream — bridge created a fresh session in its place.
     /// `contextRestored` is true when the bridge was able to replay local history.
     case sessionExpired(oldSessionId: String, newSessionId: String, contextRestored: Bool, restoredMessageCount: Int, reason: String)
+    /// New ACP session was created (`isResume == false`) or resumed (`isResume == true`).
+    /// Fires BEFORE the first prompt notification, so the client can persist the
+    /// sessionId immediately. Without this, errors mid-stream (rate limit, credit
+    /// exhausted, network) lose the conversation because sessionId was only saved on
+    /// the success path. See ChatProvider.onStatusEvent for the persistence wiring.
+    case sessionStarted(sessionId: String, sessionKey: String?, isResume: Bool)
   }
 
   /// Callback for status events (compaction, tasks, tool progress)
@@ -190,6 +196,7 @@ actor ACPBridge {
     case modelsAvailable(models: [[String: Any]])
     case mcpServersAvailable(servers: [[String: Any]])
     case sessionExpired(oldSessionId: String, newSessionId: String, contextRestored: Bool, restoredMessageCount: Int, reason: String, sessionKey: String?)
+    case sessionStarted(sessionId: String, sessionKey: String?, isResume: Bool)
   }
 
   // MARK: - Configuration
@@ -925,6 +932,10 @@ actor ACPBridge {
       case .sessionExpired(let oldSessionId, let newSessionId, let contextRestored, let restoredMessageCount, let reason, _):
         log("ACPBridge: session_expired old=\(oldSessionId) new=\(newSessionId) restored=\(contextRestored) count=\(restoredMessageCount)")
         onStatusEvent(.sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason))
+
+      case .sessionStarted(let sid, let evtKey, let isResume):
+        log("ACPBridge: session_started \(isResume ? "(resumed)" : "(new)") sessionId=\(sid) key=\(evtKey ?? "nil")")
+        onStatusEvent(.sessionStarted(sessionId: sid, sessionKey: evtKey, isResume: isResume))
       }
     }
   }
@@ -1163,6 +1174,12 @@ actor ACPBridge {
       let reason = dict["reason"] as? String ?? "Previous session expired."
       let sessionKey = dict["sessionKey"] as? String
       return .sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason, sessionKey: sessionKey)
+
+    case "session_started":
+      let sessionId = dict["sessionId"] as? String ?? ""
+      let sessionKey = dict["sessionKey"] as? String
+      let isResume = dict["isResume"] as? Bool ?? false
+      return .sessionStarted(sessionId: sessionId, sessionKey: sessionKey, isResume: isResume)
 
     default:
       log("ACPBridge: unknown message type: \(type)")
