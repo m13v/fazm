@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed: AI response in one chat could bleed into the next question after a timeout, causing the model to answer with a duplicate of the previous reply"
+    "Fixed: AI response in one chat could bleed into the next question after a timeout, causing the model to answer with a duplicate of the previous reply",
+    "Fixed repeated Claude account re-auth prompts caused by session reconnect flood after OAuth restart"
   ],
   "releases": [
     {
