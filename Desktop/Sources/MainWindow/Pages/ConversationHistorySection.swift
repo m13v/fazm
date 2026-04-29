@@ -10,7 +10,8 @@ struct ConversationSummary: Identifiable, Equatable {
     let acpSessionId: String? // ACP session ID for resuming
 }
 
-/// Conversation History tab: scrollable list of past conversations with "New Chat" button.
+/// Conversation History tab: scrollable list of past conversations with a
+/// "New Chat Window" button and a live count of currently open chat windows.
 struct ConversationHistorySection: View {
     var chatProvider: ChatProvider? = nil
     var appState: AppState? = nil
@@ -20,6 +21,11 @@ struct ConversationHistorySection: View {
     @State private var conversations: [ConversationSummary] = []
     @State private var isLoading = true
     @State private var loadingConversationId: String? = nil
+
+    /// Live count of detached chat windows currently open. Driven by
+    /// `Notification.Name.detachedChatWindowsDidChange`, which the controller
+    /// posts on every open/close, so the badge updates without polling.
+    @State private var openWindowCount: Int = DetachedChatWindowController.shared.openWindowCount
 
     // Onboarding skipped state
     @AppStorage("onboardingWasSkipped") private var onboardingWasSkipped = false
@@ -37,8 +43,16 @@ struct ConversationHistorySection: View {
                     .padding(.bottom, 16)
             }
 
-            // Header with New Chat button (shortcut inside)
-            HStack {
+            // Header with New Chat Window button (shortcut inside) and an open-window
+            // count badge to the left, so it's clear that each click spawns another
+            // window and that multiple can be open at once.
+            HStack(spacing: 10) {
+                Text("\(openWindowCount) open")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(FazmColors.textTertiary)
+                    .help(openWindowCount == 1
+                        ? "1 chat window is open right now"
+                        : "\(openWindowCount) chat windows are open right now")
                 Spacer()
                 Button(action: startNewChat) {
                     HStack(spacing: 6) {
@@ -51,7 +65,7 @@ struct ConversationHistorySection: View {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(Color.white.opacity(0.15))
                             )
-                        Text("New Chat")
+                        Text("New Chat Window")
                     }
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(.white)
@@ -61,6 +75,7 @@ struct ConversationHistorySection: View {
                     .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
+                .help("Opens a new chat in a separate window. You can have multiple windows open at the same time.")
             }
             .padding(.bottom, 16)
 
@@ -92,8 +107,15 @@ struct ConversationHistorySection: View {
                 }
             }
         }
-        .onAppear { loadConversations() }
+        .onAppear {
+            loadConversations()
+            // Sync the badge in case windows were opened/closed while this view was off-screen.
+            openWindowCount = DetachedChatWindowController.shared.openWindowCount
+        }
         .onReceive(refreshTimer) { _ in loadConversations() }
+        .onReceive(NotificationCenter.default.publisher(for: .detachedChatWindowsDidChange)) { _ in
+            openWindowCount = DetachedChatWindowController.shared.openWindowCount
+        }
     }
 
     // MARK: - Complete Setup Banner
