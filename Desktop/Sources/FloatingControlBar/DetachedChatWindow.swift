@@ -473,6 +473,7 @@ class DetachedChatWindowController {
         win.setupViews()
 
         entries[winId] = WindowEntry(window: win, sessionKey: sessionKey)
+        notifyWindowsChanged()
         // Subscribe to ChatProvider messages for streaming updates
         subscribeToResponse(provider: chatProvider, state: detachedState, winId: winId, messageCountBefore: messageCountBefore)
         // Subscribe to shared provider state (auth, suggested replies, compaction)
@@ -666,6 +667,7 @@ class DetachedChatWindowController {
                 )
 
                 win.makeKeyAndOrderFront(nil)
+                self.notifyWindowsChanged()
                 restoredCount += 1
                 log("DetachedChatWindowController: Restored window for \(sessionKey) with \(savedMessages.count) messages")
             }
@@ -840,6 +842,7 @@ class DetachedChatWindowController {
             self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
+            self.notifyWindowsChanged()
             if self.isTerminating {
                 log("DetachedChatWindowController: Window closed during termination (\(sessionKey)), registry preserved")
             } else if self.entries.isEmpty {
