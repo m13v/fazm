@@ -938,6 +938,18 @@ struct AIResponseView: View {
                 if (isLoading || currentMessage?.isStreaming == true) && !followUpHasInput {
                     Button(action: {
                         isStopping = true
+                        // Eagerly clear local UI so the spinner and "Not Responding"
+                        // banner vanish instantly, even if the bridge takes a while
+                        // (or forever) to actually abort. The onChange(of: isLoading)
+                        // handler also clears these when state.isAILoading flips
+                        // false, but doing it here makes Stop feel instant.
+                        loadingHideTask?.cancel()
+                        loadingHideTask = nil
+                        debouncedIsLoading = false
+                        hangTask?.cancel()
+                        hangTask = nil
+                        isHanging = false
+                        isHangingFromCrash = false
                         onStopAgent?()
                     }) {
                         Image(systemName: isStopping ? "ellipsis.circle" : "stop.circle.fill")
