@@ -1194,6 +1194,14 @@ class ChatProvider: ObservableObject {
         return id
     }
 
+    /// Phase 3.2 — kick a `codex_init_probe` through the bridge. Updates
+    /// `CodexBackendManager.shared.lastProbe` when the result arrives.
+    func probeCodexBackend() {
+        Task {
+            await acpBridge.sendCodexProbe()
+        }
+    }
+
     /// Start Claude OAuth authentication
     /// Opens the OAuth URL (provided by the bridge) in Chrome (where the user's sessions live).
     /// The bridge handles the full OAuth flow: local callback server, token exchange,
