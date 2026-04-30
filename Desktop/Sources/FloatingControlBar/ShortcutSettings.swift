@@ -236,12 +236,43 @@ class ShortcutSettings: ObservableObject {
         if merged.contains(where: { $0.id == normalizedSelection }) {
             selectedModel = normalizedSelection
             log("ShortcutSettings: normalized selectedModel to \(normalizedSelection)")
+        } else if selectedModel.hasPrefix("gpt-"),
+                  let preferred = Self.preferredGptModel(in: merged, sameEffortAs: selectedModel) {
+            // GPT model was filtered out (e.g. gpt-5.4/high after upgrading to 5.5).
+            // Pick the same effort tier within the new generation, falling back
+            // to the first GPT model if no effort match.
+            selectedModel = preferred
+            log("ShortcutSettings: upgraded GPT selectedModel \(normalizedSelection) -> \(preferred)")
         } else if let upgraded = merged.first(where: { $0.id.contains(normalizedSelection) }) {
             selectedModel = upgraded.id
             log("ShortcutSettings: upgraded selectedModel \(normalizedSelection) -> \(upgraded.id)")
         } else {
             log("ShortcutSettings: current selectedModel \(selectedModel) not in new model list")
         }
+    }
+
+    /// When a user's GPT selection (e.g. gpt-5.4/high) gets filtered out, find
+    /// the best replacement among `merged`: prefer the same effort tier on the
+    /// newest available generation; otherwise fall back to the first GPT model.
+    private static func preferredGptModel(in merged: [ModelOption], sameEffortAs oldId: String) -> String? {
+        let effort = oldId.split(separator: "/").last.map(String.init) ?? "high"
+        // Match base family (no variants like -mini, -codex) at requested effort first.
+        let plainSameEffort = merged.first { opt in
+            guard opt.id.hasPrefix("gpt-") else { return false }
+            let parts = opt.id.split(separator: "/")
+            guard parts.count == 2, parts[1] == effort else { return false }
+            // Plain family = "gpt-X.Y" with no extra dashes after the version.
+            let family = String(parts[0])
+            let dashCount = family.filter { $0 == "-" }.count
+            return dashCount == 1
+        }
+        if let plain = plainSameEffort { return plain.id }
+        // Then any GPT at the requested effort.
+        if let anySameEffort = merged.first(where: { $0.id.hasPrefix("gpt-") && $0.id.hasSuffix("/\(effort)") }) {
+            return anySameEffort.id
+        }
+        // Last resort: first GPT model in the list.
+        return merged.first(where: { $0.id.hasPrefix("gpt-") })?.id
     }
 
     /// Human-readable short label for an arbitrary model id, falling through
