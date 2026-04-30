@@ -1225,6 +1225,42 @@ actor ACPBridge {
   }
 
   private func deliverMessage(_ message: InboundMessage, sessionKey: String? = nil) {
+    // Maintain sessionId → sessionKey reverse map from session lifecycle events.
+    // This is the source of truth for the routing fallback below — without it
+    // we cannot recover when an inbound message arrives without a sessionKey.
+    switch message {
+    case .sessionStarted(let sid, let evtKey, _):
+      if let evtKey = evtKey {
+        sessionIdToKey[sid] = evtKey
+      }
+    case .sessionExpired(let oldSid, let newSid, _, _, _, let evtKey):
+      sessionIdToKey.removeValue(forKey: oldSid)
+      if let evtKey = evtKey {
+        sessionIdToKey[newSid] = evtKey
+      }
+    default:
+      break
+    }
+
+    // Routing fallback: if the bridge dropped the sessionKey from this message
+    // (typically a cancellation `result` emitted from a catch block after
+    // unregisterSession ran), recover the key by sessionId. The map is kept
+    // alive across unregister so this lookup still works.
+    var effectiveSessionKey = sessionKey
+    if effectiveSessionKey == nil {
+      let sid: String? = {
+        switch message {
+        case .result(_, let s, _, _, _, _, _): return s.isEmpty ? nil : s
+        default: return nil
+        }
+      }()
+      if let sid = sid, let recovered = sessionIdToKey[sid] {
+        log("ACPBridge: deliverMessage recovered sessionKey=\(recovered) from sessionId=\(sid) (bridge dropped sessionKey field)")
+        effectiveSessionKey = recovered
+      }
+    }
+    let sessionKey = effectiveSessionKey
+
     // Debug: log routing for text/thinking/tool messages
     switch message {
     case .textDelta(let text):
