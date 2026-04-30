@@ -129,6 +129,8 @@ struct SettingsContentView: View {
     // Voice Response (TTS) settings
     @AppStorage("voiceResponseEnabled") private var voiceResponseEnabled = true
     @AppStorage("voiceResponseSpeed") private var voiceResponseSpeed: Double = 1.0
+    @AppStorage("voiceResponseLanguageMode") private var voiceResponseLanguageMode: String = "auto"
+    @AppStorage("voiceResponseLanguageOverride") private var voiceResponseLanguageOverride: String = "en"
 
     // Tool timeout (0 = smart defaults per tool class)
     @AppStorage("toolTimeoutSeconds") private var toolTimeoutSeconds: Int = 0
@@ -820,6 +822,42 @@ struct SettingsContentView: View {
                                     .scaledFont(size: 10)
                                     .foregroundColor(FazmColors.textTertiary)
                             }
+                        }
+
+                        Divider()
+                            .background(FazmColors.border)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Voice language")
+                                    .scaledFont(size: 13, weight: .medium)
+                                    .foregroundColor(FazmColors.textSecondary)
+                                Spacer()
+                                Picker("", selection: $voiceResponseLanguageMode) {
+                                    Text("Auto-detect").tag("auto")
+                                    Text("Manual").tag("manual")
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                                .controlSize(.small)
+                                .frame(width: 180)
+                            }
+
+                            if voiceResponseLanguageMode == "manual" {
+                                Picker("", selection: $voiceResponseLanguageOverride) {
+                                    ForEach(VoiceLanguageRouter.pickerLanguages, id: \.code) { entry in
+                                        Text(entry.label).tag(entry.code)
+                                    }
+                                }
+                                .labelsHidden()
+                                .controlSize(.small)
+                            }
+
+                            Text(voiceResponseLanguageMode == "auto"
+                                 ? "Voice follows the language you write in. Quick replies stay in the current voice to avoid flipping back and forth."
+                                 : "Voice always uses the selected language. English, Spanish, French, German, Italian, Dutch and Japanese use Deepgram voices; other languages use the macOS system voice.")
+                                .scaledFont(size: 11)
+                                .foregroundColor(FazmColors.textTertiary)
                         }
                     }
                 }
