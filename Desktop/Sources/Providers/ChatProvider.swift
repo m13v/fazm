@@ -710,6 +710,11 @@ class ChatProvider: ObservableObject {
     private var aiProfileLoaded = false
     private var cachedDatabaseSchema: String = ""
     private var schemaLoaded = false
+    /// Briefing about active routines, refreshed on initialize() and whenever
+    /// `com.fazm.routinesChanged` fires (posted by the routines tools after
+    /// create/update/remove). Empty string means "no routines currently".
+    private var cachedRoutinesBriefing: String = ""
+    private var routinesLoaded = false
     /// System prompt built once at warmup and reused for every query.
     /// The ACP session is pre-warmed with this prompt via session/new.
     /// On subsequent queries the bridge reuses the same session, so the
