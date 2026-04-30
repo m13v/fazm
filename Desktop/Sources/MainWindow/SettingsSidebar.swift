@@ -508,6 +508,7 @@ struct SettingsSidebarItem: View {
         case .conversationHistory: return "clock.arrow.circlepath"
         case .home: return "menubar.dock.rectangle"
         case .chatWithFounder: return "bubble.left.and.bubble.right"
+        case .routines: return "repeat.circle"
         case .discoveredTasks: return "wand.and.stars"
         case .remoteControl: return "iphone"
         case .general: return "gearshape"
