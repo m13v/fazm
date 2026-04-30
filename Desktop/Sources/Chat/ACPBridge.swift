@@ -936,6 +936,10 @@ actor ACPBridge {
         // Handled immediately in deliverMessage(); should never reach here
         break
 
+      case .codexProbeResult:
+        // Handled immediately in deliverMessage(); should never reach here
+        break
+
       case .sessionExpired(let oldSessionId, let newSessionId, let contextRestored, let restoredMessageCount, let reason, _):
         log("ACPBridge: session_expired old=\(oldSessionId) new=\(newSessionId) restored=\(contextRestored) count=\(restoredMessageCount)")
         onStatusEvent(.sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason))
