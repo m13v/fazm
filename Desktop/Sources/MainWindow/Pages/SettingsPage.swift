@@ -2074,6 +2074,142 @@ struct SettingsContentView: View {
         }
     }
 
+    // MARK: Codex Backend (Phase 3.3)
+
+    private var codexBackendSubsection: some View {
+        VStack(spacing: 20) {
+            // Header card with toggle
+            settingsCard(settingId: "advanced.codex.toggle") {
+                HStack(spacing: 16) {
+                    Image(systemName: "sparkles")
+                        .scaledFont(size: 16)
+                        .foregroundColor(FazmColors.textSecondary)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Codex Backend (experimental)")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(FazmColors.textPrimary)
+                        Text("Route GPT-5 family models through OpenAI's Codex CLI using your ChatGPT subscription. Text-only for now; tools and MCP support coming.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(FazmColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: Binding(
+                        get: { codexBackend.enabled },
+                        set: { newValue in
+                            codexBackend.enabled = newValue
+                            if newValue {
+                                codexBackend.markProbing()
+                                chatProvider?.probeCodexBackend()
+                            } else {
+                                ShortcutSettings.shared.updateCodexModels([])
+                            }
+                        }
+                    ))
+                    .labelsHidden()
+                }
+            }
+
+            if codexBackend.enabled {
+                // Status card
+                settingsCard(settingId: "advanced.codex.status") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(codexStatusColor)
+                                .frame(width: 8, height: 8)
+                            Text(codexStatusText)
+                                .scaledFont(size: 14, weight: .medium)
+                                .foregroundColor(FazmColors.textPrimary)
+                            Spacer()
+                            Button(action: {
+                                codexBackend.markProbing()
+                                chatProvider?.probeCodexBackend()
+                            }) {
+                                HStack(spacing: 4) {
+                                    if codexBackend.probing {
+                                        ProgressView().controlSize(.mini)
+                                    }
+                                    Text(codexBackend.probing ? "Checking..." : "Check connection")
+                                }
+                                .scaledFont(size: 12)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(FazmColors.backgroundQuaternary.opacity(0.4)))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(codexBackend.probing)
+                        }
+
+                        if let probe = codexBackend.lastProbe {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let agent = probe.agent {
+                                    codexInfoRow(label: "Adapter", value: agent)
+                                }
+                                codexInfoRow(label: "Auth mode", value: probe.authMode)
+                                if let current = codexBackend.currentModelId {
+                                    codexInfoRow(label: "Default model", value: current)
+                                }
+                                if !codexBackend.availableModels.isEmpty {
+                                    codexInfoRow(label: "Models", value: "\(codexBackend.availableModels.count) available")
+                                }
+                                if let err = probe.error {
+                                    codexInfoRow(label: "Error", value: err)
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+
+                        if codexBackend.authMode == "none" {
+                            Text("Not authenticated. Run `codex login` in your terminal once to connect your ChatGPT subscription, then click Check connection above.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 4)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var codexStatusColor: Color {
+        if codexBackend.probing { return .orange }
+        guard let probe = codexBackend.lastProbe else { return FazmColors.textTertiary }
+        if !probe.ok { return .red }
+        return probe.authMode == "none" ? .orange : .green
+    }
+
+    private var codexStatusText: String {
+        if codexBackend.probing { return "Probing codex-acp..." }
+        guard let probe = codexBackend.lastProbe else { return "Not yet probed" }
+        if !probe.ok { return "Unreachable" }
+        switch probe.authMode {
+        case "chatgpt": return "Connected (ChatGPT subscription)"
+        case "api_key": return "Connected (API key)"
+        default: return "Reachable but not authenticated"
+        }
+    }
+
+    private func codexInfoRow(label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(label)
+                .scaledFont(size: 12)
+                .foregroundColor(FazmColors.textTertiary)
+                .frame(width: 96, alignment: .leading)
+            Text(value)
+                .scaledFont(size: 12)
+                .foregroundColor(FazmColors.textSecondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+            Spacer()
+        }
+    }
+
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Floating bar visibility toggle
