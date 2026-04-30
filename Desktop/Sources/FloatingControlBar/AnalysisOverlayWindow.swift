@@ -39,7 +39,7 @@ class AnalysisOverlayWindow {
                 category: category,
                 onDiscuss: { [weak self] in
                     log("AnalysisOverlay: Discuss tapped (activityId=\(activityId), category=\(category))")
-                    PostHogSDK.shared.capture("discovered_task_overlay_discuss", properties: [
+                    PostHogManager.shared.track("discovered_task_overlay_discuss", properties: [
                         "task_title": String(task.prefix(100)),
                         "activity_id": activityId,
                         "category": category,
@@ -57,7 +57,7 @@ class AnalysisOverlayWindow {
                 },
                 onHide: { [weak self] in
                     log("AnalysisOverlay: Hide tapped (activityId=\(activityId), category=\(category))")
-                    PostHogSDK.shared.capture("discovered_task_overlay_dismissed", properties: [
+                    PostHogManager.shared.track("discovered_task_overlay_dismissed", properties: [
                         "task_title": String(task.prefix(100)),
                         "activity_id": activityId,
                         "category": category,
@@ -100,7 +100,7 @@ class AnalysisOverlayWindow {
         panel.makeKeyAndOrderFront(nil)
         self.window = panel
 
-        PostHogSDK.shared.capture("discovered_task_overlay_shown", properties: [
+        PostHogManager.shared.track("discovered_task_overlay_shown", properties: [
             "task_title": String(task.prefix(100)),
             "activity_id": activityId,
             "category": category,
@@ -115,7 +115,7 @@ class AnalysisOverlayWindow {
                 // Distinct from explicit "Hide" — measures passive ignore vs. active dismiss.
                 // Status stays "pending" since the user never engaged; the card remains
                 // in the Discovered Tasks tab until they act on it there.
-                PostHogSDK.shared.capture("discovered_task_overlay_auto_dismissed", properties: [
+                PostHogManager.shared.track("discovered_task_overlay_auto_dismissed", properties: [
                     "task_title": String(task.prefix(100)),
                     "activity_id": activityId,
                     "category": category,

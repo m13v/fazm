@@ -16,6 +16,7 @@ SECTION_LEVEL_IDS=(
     "dictionary.dictionary"
     "conversationhistory.list"
     "memorygraph.view"
+    "routines.list"
 )
 
 # Extract settingIds from the search index
