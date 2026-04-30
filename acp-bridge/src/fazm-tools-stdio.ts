@@ -9,6 +9,9 @@
 
 import { createInterface } from "readline";
 import { createConnection } from "net";
+// @ts-ignore — sibling .mjs without types
+import { computeNextRun, validateSchedule } from "./schedule.mjs";
+import { randomUUID } from "node:crypto";
 
 // Current query mode
 let currentMode: "ask" | "act" = (process.env.FAZM_QUERY_MODE || process.env.OMI_QUERY_MODE) === "ask" ? "ask" : "act";
@@ -505,6 +508,70 @@ Aim for 15-40 nodes with meaningful edges connecting them.`,
       required: ["text"],
     },
   },
+  {
+    name: "routines_create",
+    description: `Create a recurring AI task ("routine"). The routine fires on its schedule, runs the prompt as a fresh conversation turn, and writes the result into the user's chat history under taskId="routine-<id>". Schedule formats:
+  - "cron:0 9 * * 1-5"   (5-field cron — minute hour day-of-month month day-of-week, weekdays at 9am)
+  - "every:1800"         (interval in seconds — every 30 min)
+  - "at:2026-04-30T18:00:00Z"  (one-shot, ISO 8601 UTC)
+The agent should turn natural-language ("every weekday morning at 9") into the right schedule string. session_mode="resume" makes consecutive runs share an ACP session (memory persists); "new" gives each run a fresh session.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string" as const, description: "Short human-readable name, e.g. 'Morning email digest'" },
+        prompt: { type: "string" as const, description: "The prompt to send the agent on each fire — phrase it as if the user typed it" },
+        schedule: { type: "string" as const, description: "Schedule string: 'cron:<expr>' | 'every:<seconds>' | 'at:<ISO 8601>'" },
+        model: { type: "string" as const, description: "Optional model id (e.g. 'claude-sonnet-4-6'); omit for default" },
+        workspace: { type: "string" as const, description: "Optional working directory for the run; omit for $HOME" },
+        session_mode: { type: "string" as const, enum: ["new", "resume"], description: "'new' (default) or 'resume' to keep ACP session memory across runs" },
+      },
+      required: ["name", "prompt", "schedule"],
+    },
+  },
+  {
+    name: "routines_list",
+    description: "List all routines for the current user, with their schedule, enabled state, last status, last/next run timestamps, and run count.",
+    inputSchema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "routines_update",
+    description: "Update a routine. Pass only the fields you want to change. Use enabled=false to pause without deleting; pass a new schedule to reschedule.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "string" as const, description: "Routine UUID" },
+        name: { type: "string" as const },
+        prompt: { type: "string" as const },
+        schedule: { type: "string" as const },
+        enabled: { type: "boolean" as const },
+        model: { type: "string" as const },
+        workspace: { type: "string" as const },
+        session_mode: { type: "string" as const, enum: ["new", "resume"] },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "routines_remove",
+    description: "Delete a routine permanently, including all of its run history.",
+    inputSchema: {
+      type: "object" as const,
+      properties: { id: { type: "string" as const, description: "Routine UUID" } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "routines_runs",
+    description: "List recent routine executions (cron_runs rows). Filter by job_id to see one routine's history. Each row has status, output text, cost, tokens, duration, and started/finished timestamps. Use this when the user asks 'what happened with my morning email routine' or 'why did my routine fail'.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        job_id: { type: "string" as const, description: "Optional routine UUID to filter by" },
+        limit: { type: "number" as const, description: "Max rows to return (default 20, max 100)" },
+      },
+      required: [],
+    },
+  },
 ];
 
 // Tools gated behind the voice response toggle
@@ -764,6 +831,19 @@ async function handleJsonRpc(
       } else if (toolName === "query_browser_profile" || toolName === "edit_browser_profile") {
         // Always-available tools — forward to Swift
         const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName.startsWith("routines_")) {
+        // Routine management tools. All eventually run SQL via Swift's
+        // executeSQL handler (which owns the GRDB pool), but we do the
+        // schedule math + SQL composition in this process to keep tool
+        // input shapes ergonomic.
+        const result = await handleRoutinesTool(toolName, args);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
