@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import PostHog
 import SessionReplay
 
 /// Manages session recording lifecycle, gated by PostHog feature flag.
@@ -36,6 +37,106 @@ class SessionRecordingManager {
     private var isScreenObserverStarted = false
 
     private init() {}
+
+    // MARK: - Stale Recording Cleanup
+
+    /// Reclaim disk space from stale recordings left over by prior app sessions.
+    /// Call once per launch from FazmApp before starting either recorder.
+    ///
+    /// Two failure modes accumulate files:
+    ///   1. Observer mode has no uploader, so before the moveItem fix in
+    ///      GeminiAnalysisService.handleChunk, every analyzed chunk left its raw
+    ///      copy under Caches/observer-recordings/.
+    ///   2. Every short-lived app launch (./run.sh rebuild, Sparkle relaunch, an
+    ///      accidental `Fazm --version` probe) creates a fresh `<UUID>/Videos/`
+    ///      under both cache dirs and exits before producing chunks, leaving the
+    ///      empty shell behind forever.
+    nonisolated static func cleanupStaleRecordings() {
+        DispatchQueue.global(qos: .utility).async {
+            let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            let sessions = sweepRecordingsDir(
+                cachesDir.appendingPathComponent("session-recordings"),
+                maxAge: 7 * 24 * 60 * 60  // research uploader; conservative to protect failed-upload retries
+            )
+            let observers = sweepRecordingsDir(
+                cachesDir.appendingPathComponent("observer-recordings"),
+                maxAge: 24 * 60 * 60  // Gemini cycle is ~1h, anything 24h old is consumed-and-orphaned
+            )
+            let totalBytes = sessions.bytes + observers.bytes
+            let totalFiles = sessions.files + observers.files
+            let totalDirs = sessions.dirs + observers.dirs
+            guard totalFiles > 0 || totalDirs > 0 else { return }
+            log("SessionRecording: cleanup freed \(totalBytes / 1_048_576) MB (\(totalFiles) chunks, \(totalDirs) empty dirs)")
+            PostHogSDK.shared.capture("session_recording_cleanup_completed", properties: [
+                "session_bytes_freed": sessions.bytes,
+                "session_files_deleted": sessions.files,
+                "session_dirs_deleted": sessions.dirs,
+                "observer_bytes_freed": observers.bytes,
+                "observer_files_deleted": observers.files,
+                "observer_dirs_deleted": observers.dirs,
+            ])
+        }
+    }
+
+    private struct SweepResult {
+        var bytes: Int64 = 0
+        var files: Int = 0
+        var dirs: Int = 0
+    }
+
+    nonisolated private static func sweepRecordingsDir(_ dir: URL, maxAge: TimeInterval) -> SweepResult {
+        var result = SweepResult()
+        let fm = FileManager.default
+        guard let uuidDirs = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
+            options: .skipsHiddenFiles
+        ) else { return result }
+        let now = Date()
+
+        for uuidDir in uuidDirs {
+            let values = try? uuidDir.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
+            guard values?.isDirectory == true else { continue }
+
+            // Skip directories touched in the last 5 minutes — could be the
+            // active recorder for the currently-running app instance.
+            if let mtime = values?.contentModificationDate, now.timeIntervalSince(mtime) < 300 {
+                continue
+            }
+
+            var hasRemainingChunk = false
+            if let enumerator = fm.enumerator(
+                at: uuidDir,
+                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                for case let url as URL in enumerator {
+                    guard url.pathExtension == "mp4" else { continue }
+                    let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+                    let age = now.timeIntervalSince(attrs?.contentModificationDate ?? now)
+                    if age > maxAge {
+                        let size = Int64(attrs?.fileSize ?? 0)
+                        do {
+                            try fm.removeItem(at: url)
+                            result.bytes += size
+                            result.files += 1
+                        } catch {
+                            hasRemainingChunk = true
+                        }
+                    } else {
+                        hasRemainingChunk = true
+                    }
+                }
+            }
+
+            if !hasRemainingChunk {
+                if (try? fm.removeItem(at: uuidDir)) != nil {
+                    result.dirs += 1
+                }
+            }
+        }
+        return result
+    }
 
     /// Check the feature flag and start/stop recording accordingly.
     /// Call this after PostHog is initialized. Polls every 5 minutes for flag changes.
