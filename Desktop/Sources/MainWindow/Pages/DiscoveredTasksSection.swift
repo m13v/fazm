@@ -76,6 +76,9 @@ struct DiscoveredTasksSection: View {
 
     private func taskRow(_ task: DiscoveredTask) -> some View {
         let isExpanded = selectedTaskId == task.id
+        let isHeal = task.category == "heal"
+        let accent: Color = isHeal ? .orange : .purple
+        let iconName: String = isHeal ? "stethoscope" : "wand.and.stars"
 
         return VStack(alignment: .leading, spacing: 0) {
             // Header row
@@ -89,15 +92,16 @@ struct DiscoveredTasksSection: View {
                         PostHogSDK.shared.capture("discovered_task_expanded", properties: [
                             "task_id": task.id,
                             "task_status": task.status,
+                            "task_category": task.category,
                             "task_title": String(task.taskTitle.prefix(100)),
                         ])
                     }
                 }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "wand.and.stars")
+                    Image(systemName: iconName)
                         .scaledFont(size: 14)
-                        .foregroundColor(.purple)
+                        .foregroundColor(accent)
                         .frame(width: 20)
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -111,6 +115,7 @@ struct DiscoveredTasksSection: View {
                                 .scaledFont(size: 11)
                                 .foregroundColor(FazmColors.textTertiary)
 
+                            categoryBadge(task.category)
                             statusBadge(task.status)
                         }
                     }
@@ -120,7 +125,7 @@ struct DiscoveredTasksSection: View {
                     // Unread indicator dot
                     if task.status == "pending" {
                         Circle()
-                            .fill(Color.purple)
+                            .fill(accent)
                             .frame(width: 8, height: 8)
                     }
 
@@ -161,12 +166,12 @@ struct DiscoveredTasksSection: View {
                             Button {
                                 discussTask(task)
                             } label: {
-                                Text("Discuss")
+                                Text(isHeal ? "Investigate" : "Discuss")
                                     .scaledFont(size: 12, weight: .medium)
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 6)
-                                    .background(Color.purple.opacity(0.8))
+                                    .background(accent.opacity(0.8))
                                     .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
@@ -216,6 +221,19 @@ struct DiscoveredTasksSection: View {
             .cornerRadius(4)
     }
 
+    private func categoryBadge(_ category: String) -> some View {
+        let isHeal = category == "heal"
+        let text = isHeal ? "Heal" : "Automate"
+        let color: Color = isHeal ? .orange : .purple
+        return Text(text)
+            .scaledFont(size: 10, weight: .medium)
+            .foregroundColor(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15))
+            .cornerRadius(4)
+    }
+
     // MARK: - Actions
 
     private func markAsRead(_ task: DiscoveredTask) {
@@ -229,11 +247,12 @@ struct DiscoveredTasksSection: View {
     private func discussTask(_ task: DiscoveredTask) {
         PostHogSDK.shared.capture("discovered_task_discuss", properties: [
             "task_id": task.id,
+            "task_category": task.category,
             "task_title": String(task.taskTitle.prefix(100)),
         ])
         Task {
             await AnalysisOverlayWindow.updateActivityStatus(activityId: task.id, status: "acted", response: "discuss")
-            AnalysisOverlayWindow.sendDiscussMessage(task: task.taskTitle, description: task.description, document: task.document)
+            AnalysisOverlayWindow.sendDiscussMessage(task: task.taskTitle, category: task.category, description: task.description, document: task.document)
             loadTasks()
         }
     }
@@ -262,9 +281,9 @@ struct DiscoveredTasksSection: View {
             do {
                 let rows = try await dbQueue.read { db -> [DiscoveredTask] in
                     let rows = try Row.fetchAll(db, sql: """
-                        SELECT id, content, status, userResponse, createdAt, actedAt
+                        SELECT id, content, status, userResponse, createdAt, actedAt, category
                         FROM observer_activity
-                        WHERE type = 'gemini_analysis'
+                        WHERE type IN ('gemini_analysis', 'system_signal')
                         ORDER BY createdAt DESC
                         LIMIT 50
                     """)
@@ -278,12 +297,17 @@ struct DiscoveredTasksSection: View {
                         var taskTitle = content
                         var description: String?
                         var document: String?
+                        var contentCategory: String?
                         if let data = content.data(using: .utf8),
                            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                             taskTitle = json["task"] as? String ?? content
                             description = json["description"] as? String
                             document = json["document"] as? String
+                            contentCategory = json["category"] as? String
                         }
+
+                        // Prefer the indexed column; fall back to the JSON copy for older rows.
+                        let category = (row["category"] as? String) ?? contentCategory ?? "automate"
 
                         return DiscoveredTask(
                             id: id,
@@ -291,6 +315,7 @@ struct DiscoveredTasksSection: View {
                             description: description,
                             document: document,
                             status: status,
+                            category: category,
                             createdAt: createdAt,
                             actedAt: row["actedAt"] as? String
                         )
@@ -318,7 +343,7 @@ enum DiscoveredTasksStore {
         guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return 0 }
         do {
             return try await dbQueue.read { db in
-                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM observer_activity WHERE type = 'gemini_analysis' AND status = 'pending'") ?? 0
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM observer_activity WHERE type IN ('gemini_analysis', 'system_signal') AND status = 'pending'") ?? 0
             }
         } catch {
             return 0
@@ -334,6 +359,7 @@ struct DiscoveredTask: Identifiable {
     let description: String?
     let document: String?
     let status: String
+    let category: String
     let createdAt: String
     let actedAt: String?
 
