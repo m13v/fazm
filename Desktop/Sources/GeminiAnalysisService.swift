@@ -1178,7 +1178,7 @@ actor GeminiAnalysisService {
 
                 // Track creation so we can measure discovery rate, automate vs heal mix,
                 // and the funnel from created → shown → discussed/dismissed/ignored.
-                PostHogSDK.shared.capture("discovered_task_created", properties: [
+                PostHogManager.shared.track("discovered_task_created", properties: [
                     "task_id": activityId,
                     "task_category": category,
                     "task_title": String(task.prefix(100)),
