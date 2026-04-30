@@ -4,9 +4,11 @@ import NaturalLanguage
 
 /// Routes TTS output to a language-appropriate voice.
 ///
-/// Deepgram Aura supports en, es, fr, de, it, nl, ja. Other languages fall
-/// back to AVSpeechSynthesizer using a matching system voice (Russian,
-/// Chinese, Korean, Portuguese, Arabic, Hindi, etc.).
+/// Deepgram Aura is preferred for en, es, fr, de, it, nl, ja (cheaper, faster).
+/// Everything else (Russian, Chinese, Korean, Portuguese, Arabic, Hindi,
+/// Polish, Ukrainian, etc.) routes to ElevenLabs `eleven_multilingual_v2`,
+/// which handles 29 languages with a single voice ID. AVSpeechSynthesizer
+/// remains as a last-ditch offline fallback if ElevenLabs is unreachable.
 ///
 /// Anti-thrash: a "sticky" detected language is held in UserDefaults across
 /// utterances. The voice only flips when the new utterance is both long
@@ -21,6 +23,7 @@ enum VoiceLanguageRouter {
 
     enum Resolution {
         case deepgram(model: String, languageCode: String)
+        case elevenlabs(voiceId: String, languageCode: String)
         case system(voice: AVSpeechSynthesisVoice, languageCode: String)
     }
 
@@ -40,8 +43,24 @@ enum VoiceLanguageRouter {
         "ja": "aura-2-izanami-ja",
     ]
 
-    /// Languages exposed in the Settings picker. Tag "(system voice)" makes it
-    /// obvious that quality differs from Deepgram-backed languages.
+    /// Default ElevenLabs voice for languages outside Deepgram coverage.
+    /// "Rachel" (`21m00Tcm4TlvDq8ikWAM`) is a warm, multilingual-friendly female
+    /// voice that pairs well with Deepgram's Luna so the user doesn't get
+    /// jarring timbre changes when switching languages mid-conversation.
+    static let elevenLabsDefaultVoiceId = "21m00Tcm4TlvDq8ikWAM"
+    static let elevenLabsModelId = "eleven_multilingual_v2"
+
+    /// Languages eleven_multilingual_v2 covers natively. Anything outside this
+    /// set falls back to AVSpeechSynthesizer.
+    static let elevenLabsLanguages: Set<String> = [
+        "ru", "zh", "ko", "pt", "ar", "hi", "tr", "pl", "uk",
+        "th", "vi", "id", "he", "sv", "da", "fi", "no", "cs",
+        "el", "ro", "hu", "sk", "ms", "bg", "hr", "ta", "fil",
+    ]
+
+    /// Languages exposed in the Settings picker. All listed languages are
+    /// high-quality TTS (Deepgram or ElevenLabs); the system fallback is
+    /// transparent and never user-facing.
     static let pickerLanguages: [(code: String, label: String)] = [
         ("en", "English"),
         ("es", "Spanish"),
@@ -50,15 +69,15 @@ enum VoiceLanguageRouter {
         ("it", "Italian"),
         ("nl", "Dutch"),
         ("ja", "Japanese"),
-        ("ru", "Russian (system voice)"),
-        ("zh", "Chinese (system voice)"),
-        ("ko", "Korean (system voice)"),
-        ("pt", "Portuguese (system voice)"),
-        ("ar", "Arabic (system voice)"),
-        ("hi", "Hindi (system voice)"),
-        ("tr", "Turkish (system voice)"),
-        ("pl", "Polish (system voice)"),
-        ("uk", "Ukrainian (system voice)"),
+        ("ru", "Russian"),
+        ("zh", "Chinese"),
+        ("ko", "Korean"),
+        ("pt", "Portuguese"),
+        ("ar", "Arabic"),
+        ("hi", "Hindi"),
+        ("tr", "Turkish"),
+        ("pl", "Polish"),
+        ("uk", "Ukrainian"),
     ]
 
     /// Resolve the best voice for the given text. Updates sticky state as a side effect.
@@ -131,6 +150,9 @@ enum VoiceLanguageRouter {
         if let model = deepgramVoices[languageCode] {
             return .deepgram(model: model, languageCode: languageCode)
         }
+        if elevenLabsLanguages.contains(languageCode) {
+            return .elevenlabs(voiceId: elevenLabsDefaultVoiceId, languageCode: languageCode)
+        }
         let bcp47 = bcp47(for: languageCode)
         let voice = AVSpeechSynthesisVoice(language: bcp47)
             ?? AVSpeechSynthesisVoice(language: languageCode)
@@ -141,6 +163,12 @@ enum VoiceLanguageRouter {
         }
         // Last resort: return Deepgram English so we never silently drop audio.
         return .deepgram(model: "aura-luna-en", languageCode: "en")
+    }
+
+    /// Public wrapper around `bcp47(for:)` for callers that need a BCP-47
+    /// tag for AVSpeechSynthesisVoice without re-implementing the mapping.
+    static func bcp47Public(for code: String) -> String {
+        bcp47(for: code)
     }
 
     private static func bcp47(for code: String) -> String {
