@@ -23,7 +23,7 @@ struct DiscoveredTasksSection: View {
         }
         .onAppear {
             loadTasks()
-            PostHogSDK.shared.capture("discovered_tasks_tab_viewed")
+            PostHogManager.shared.track("discovered_tasks_tab_viewed")
         }
         .onReceive(refreshTimer) { _ in loadTasks() }
     }
@@ -89,7 +89,7 @@ struct DiscoveredTasksSection: View {
                     } else {
                         selectedTaskId = task.id
                         markAsRead(task)
-                        PostHogSDK.shared.capture("discovered_task_expanded", properties: [
+                        PostHogManager.shared.track("discovered_task_expanded", properties: [
                             "task_id": task.id,
                             "task_status": task.status,
                             "task_category": task.category,
@@ -245,7 +245,7 @@ struct DiscoveredTasksSection: View {
     }
 
     private func discussTask(_ task: DiscoveredTask) {
-        PostHogSDK.shared.capture("discovered_task_discuss", properties: [
+        PostHogManager.shared.track("discovered_task_discuss", properties: [
             "task_id": task.id,
             "task_category": task.category,
             "task_status": task.status,
@@ -260,7 +260,7 @@ struct DiscoveredTasksSection: View {
     }
 
     private func dismissTask(_ task: DiscoveredTask) {
-        PostHogSDK.shared.capture("discovered_task_dismissed", properties: [
+        PostHogManager.shared.track("discovered_task_dismissed", properties: [
             "task_id": task.id,
             "task_category": task.category,
             "task_status": task.status,
