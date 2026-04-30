@@ -1030,9 +1030,6 @@ class ChatToolExecutor {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
         process.arguments = ["-v", voiceName, "-r", "\(wpm)", text]
-        process.terminationHandler = { _ in
-            ttsSayProcess = nil
-        }
         do {
             try process.run()
             ttsSayProcess = process
