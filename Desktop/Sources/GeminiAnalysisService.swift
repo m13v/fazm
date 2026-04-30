@@ -169,7 +169,7 @@ actor GeminiAnalysisService {
     }
 
     /// Called by SessionRecordingManager when a chunk is finalized.
-    /// Copies the file to a stable location and persists the buffer index.
+    /// Moves the file to a stable location and persists the buffer index.
     func handleChunk(_ info: ChunkInfo) {
         // Check if screen observer is disabled in settings
         guard UserDefaults.standard.object(forKey: "shortcut_screenObserverEnabled") as? Bool ?? true else {
