@@ -692,6 +692,8 @@ class ResourceMonitor {
         await checkICloudRootContamination()
         await checkICloudPendingScans()
         await checkDiskPressure()
+        await checkZoneMapPressure()
+        await checkThermalPressure()
     }
 
     /// Run a short-lived shell command synchronously and return stdout, or nil on failure.
