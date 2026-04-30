@@ -2988,6 +2988,45 @@ async function main(): Promise<void> {
   startAcpProcess();
   logErr("ACP subprocess spawned");
 
+  // 2a. Start the long-running-tool heartbeat. When a tool runs for a while
+  // (especially `kind=think` Task sub-agents) it can stop emitting status
+  // updates while still doing real work. The Swift waitForMessage inactivity
+  // timer would then fire and kill the conversation. Emit a periodic
+  // `status_change` for each in-flight tool that's been running >60s; the
+  // message itself is enough to reset Swift's timer because every inbound
+  // message resets the per-session continuation. We don't emit anything for
+  // freshly-started tools (they typically complete fast) or for tools that
+  // already finished.
+  const HEARTBEAT_INTERVAL_MS = 30_000;          // tick every 30s
+  const HEARTBEAT_QUIET_THRESHOLD_MS = 60_000;   // start emitting after 60s
+  const lastHeartbeatAt = new Map<string, number>();
+  setInterval(() => {
+    if (inFlightTools.size === 0) return;
+    const now = Date.now();
+    for (const [toolCallId, tool] of inFlightTools) {
+      const elapsedMs = now - tool.startedAt;
+      if (elapsedMs < HEARTBEAT_QUIET_THRESHOLD_MS) continue;
+      const lastBeat = lastHeartbeatAt.get(toolCallId) ?? 0;
+      if (now - lastBeat < HEARTBEAT_INTERVAL_MS) continue;
+      lastHeartbeatAt.set(toolCallId, now);
+      // Send a status_change "working" so Swift's waitForMessage timer resets.
+      // Include the tool name so logs make sense.
+      sendWithSession(tool.sessionId, {
+        type: "status_change",
+        status: `working:${tool.title}@${(elapsedMs / 1000).toFixed(0)}s`,
+      });
+      logErr(
+        `Tool heartbeat: ${tool.title} (id=${toolCallId}, kind=${tool.kind}, ` +
+          `session=${tool.sessionKey ?? tool.sessionId ?? "?"}) ` +
+          `still running, elapsed=${(elapsedMs / 1000).toFixed(1)}s`,
+      );
+    }
+    // Drop heartbeat timestamps for tools that have completed
+    for (const id of lastHeartbeatAt.keys()) {
+      if (!inFlightTools.has(id)) lastHeartbeatAt.delete(id);
+    }
+  }, HEARTBEAT_INTERVAL_MS).unref();
+
   // 3. Signal readiness
   send({ type: "init", sessionId: "" });
   logErr("ACP Bridge started, waiting for queries...");
