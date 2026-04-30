@@ -300,6 +300,14 @@ actor ACPBridge {
   private var sessionInterrupted: [String: Bool] = [:]
   /// Per-session ACP tool counts (for timeout deferral)
   private var sessionAcpToolsRunning: [String: Int] = [:]
+  /// Reverse map: ACP sessionId → sessionKey. Populated from session_started
+  /// and session_expired events. Used as a routing fallback in deliverMessage
+  /// when an inbound message (typically a cancellation `result`) arrives
+  /// without a sessionKey field — usually because the bridge unregistered the
+  /// session before emitting the catch-block result. Without this fallback the
+  /// per-pop-out continuation never resumes and the loading spinner spins for
+  /// the full 180s inactivity timeout.
+  private var sessionIdToKey: [String: String] = [:]
 
   /// Set when stderr indicates OOM so handleTermination can throw the right error
   private var lastExitWasOOM = false
