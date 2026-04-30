@@ -40,6 +40,7 @@ import type {
   AuthMethod,
 } from "./protocol.js";
 import { startOAuthFlow, OAuthTokenExchangeError, readStoredCredentials, type OAuthFlowHandle } from "./oauth-flow.js";
+import { CodexProvider } from "./codex-provider.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
