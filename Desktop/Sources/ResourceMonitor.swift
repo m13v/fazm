@@ -935,10 +935,11 @@ class ResourceMonitor {
         ))
     }
 
-    /// Parse `ps -axo pid,rss,etimes,comm` and return the fseventsd row if present.
+    /// Parse `ps -axo pid,rss,etime,comm` and return the fseventsd row if present.
     /// fseventsd runs as root with a stable command name; only one instance exists.
+    /// macOS BSD ps uses `etime` (formatted [[dd-]hh:]mm:ss) rather than Linux's `etimes`.
     nonisolated private func readFseventsdStats() -> (pid: Int, rssBytes: UInt64, uptimeSeconds: TimeInterval)? {
-        guard let out = runShellCommand("/bin/ps", args: ["-axo", "pid,rss,etimes,comm"]) else { return nil }
+        guard let out = runShellCommand("/bin/ps", args: ["-axo", "pid,rss,etime,comm"]) else { return nil }
         for line in out.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty || trimmed.hasPrefix("PID") { continue }
@@ -947,11 +948,31 @@ class ResourceMonitor {
             let comm = parts[parts.count - 1]
             guard comm.hasSuffix("fseventsd") else { continue }
             guard let pid = Int(parts[0]),
-                  let rssKB = UInt64(parts[1]),
-                  let etimes = Int(parts[2]) else { continue }
-            return (pid, rssKB * 1024, TimeInterval(etimes))
+                  let rssKB = UInt64(parts[1]) else { continue }
+            let uptimeSeconds = parseEtime(parts[2])
+            return (pid, rssKB * 1024, uptimeSeconds)
         }
         return nil
+    }
+
+    /// Parse macOS `ps -o etime` output. Format is `[[dd-]hh:]mm:ss`.
+    /// Examples: `45:12` (45m 12s), `02:13:45` (2h 13m 45s), `3-04:15:22` (3 days, 4h 15m 22s).
+    nonisolated private func parseEtime(_ value: String) -> TimeInterval {
+        var days = 0
+        var rest = value
+        if let dashIdx = rest.firstIndex(of: "-") {
+            days = Int(rest[rest.startIndex..<dashIdx]) ?? 0
+            rest = String(rest[rest.index(after: dashIdx)...])
+        }
+        let pieces = rest.split(separator: ":").compactMap { Int($0) }
+        var hours = 0, minutes = 0, seconds = 0
+        switch pieces.count {
+        case 3: hours = pieces[0]; minutes = pieces[1]; seconds = pieces[2]
+        case 2: minutes = pieces[0]; seconds = pieces[1]
+        case 1: seconds = pieces[0]
+        default: return 0
+        }
+        return TimeInterval(days * 86400 + hours * 3600 + minutes * 60 + seconds)
     }
 
     // MARK: iCloud root contamination
