@@ -1022,6 +1022,55 @@ actor AppDatabase {
                           on: "observer_activity", columns: ["category"])
         }
 
+        // V7: Recurring AI tasks ("routines"). Two tables:
+        //   cron_jobs — definitions. The schedule column carries one of three formats:
+        //               "cron:<expr>"   (5-field cron like "0 9 * * 1-5")
+        //               "every:<sec>"   (interval)
+        //               "at:<iso8601>"  (one-shot)
+        //   cron_runs — execution log, one row per fire.
+        // The headless runner (~/fazm/acp-bridge/cron-runner.mjs) writes both
+        // tables; the app reads them. WAL is on so concurrent writes are safe.
+        migrator.registerMigration("fazmV7") { db in
+            try db.create(table: "cron_jobs") { t in
+                t.column("id", .text).primaryKey()
+                t.column("name", .text).notNull()
+                t.column("prompt", .text).notNull()
+                t.column("schedule", .text).notNull()
+                t.column("timezone", .text).notNull().defaults(to: "America/Los_Angeles")
+                t.column("enabled", .boolean).notNull().defaults(to: true)
+                t.column("model", .text)                       // null = bridge default
+                t.column("workspace", .text)                   // null = bridge default
+                t.column("session_mode", .text).notNull().defaults(to: "new") // "new" or "resume"
+                t.column("acp_session_id", .text)              // populated after first run when session_mode=resume
+                t.column("created_at", .double).notNull()
+                t.column("updated_at", .double).notNull()
+                t.column("next_run_at", .double)
+                t.column("last_run_at", .double)
+                t.column("last_status", .text)                 // "ok" | "error" | null
+                t.column("last_error", .text)
+                t.column("run_count", .integer).notNull().defaults(to: 0)
+            }
+            try db.create(index: "idx_cron_jobs_due",
+                          on: "cron_jobs", columns: ["enabled", "next_run_at"])
+
+            try db.create(table: "cron_runs") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("job_id", .text).notNull()
+                t.column("started_at", .double).notNull()
+                t.column("finished_at", .double)
+                t.column("status", .text).notNull()            // "ok" | "error" | "timeout" | "running"
+                t.column("output_text", .text)
+                t.column("error_message", .text)
+                t.column("cost_usd", .double)
+                t.column("input_tokens", .integer)
+                t.column("output_tokens", .integer)
+                t.column("duration_ms", .integer)
+                t.column("chat_message_id", .text)             // links to chat_messages.messageId
+            }
+            try db.create(index: "idx_cron_runs_job",
+                          on: "cron_runs", columns: ["job_id", "started_at"])
+        }
+
         try migrator.migrate(queue)
     }
 
