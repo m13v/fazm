@@ -2171,7 +2171,13 @@ class FloatingControlBarManager {
                 barWindow.state.currentAIMessage = aiMessage
 
                 if aiMessage.isStreaming {
-                    barWindow.state.isAILoading = false
+                    // Keep "thinking" indicator visible until the first text or
+                    // tool/thinking block arrives. The placeholder lands with
+                    // isStreaming=true but empty content; flipping isAILoading
+                    // off here would leave the user staring at near-blank UI
+                    // during TTFT (sometimes >60s).
+                    let hasContent = !aiMessage.text.isEmpty || !aiMessage.contentBlocks.isEmpty
+                    barWindow.state.isAILoading = !hasContent
                     if !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
                         if !barWindow.state.showingAIResponse {
