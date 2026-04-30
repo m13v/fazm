@@ -930,16 +930,22 @@ class ChatToolExecutor {
 
     /// Shared audio player for TTS playback (kept alive to prevent dealloc during playback)
     private static var ttsAudioPlayer: AVAudioPlayer?
+    /// System fallback synthesizer used for languages Deepgram Aura doesn't cover.
+    private static let speechSynthesizer = AVSpeechSynthesizer()
 
-    /// Stop any currently playing TTS audio.
+    /// Stop any currently playing TTS audio (Deepgram or system).
     static func stopTTSPlayback() {
         if let player = ttsAudioPlayer, player.isPlaying {
             player.stop()
         }
         ttsAudioPlayer = nil
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
     }
 
-    /// Speak text aloud using Deepgram Aura TTS
+    /// Speak text aloud. The voice follows the detected language of the text:
+    /// Deepgram Aura for en/es/fr/de/it/nl/ja, AVSpeechSynthesizer for everything else.
     private static func executeSpeakResponse(_ args: [String: Any]) async -> String {
         guard let text = args["text"] as? String, !text.isEmpty else {
             return "Error: missing 'text' parameter"
@@ -947,16 +953,27 @@ class ChatToolExecutor {
 
         log("speak_response: synthesizing \(text.count) chars")
 
+        let speed = UserDefaults.standard.double(forKey: "voiceResponseSpeed")
+        let clampedSpeed = speed > 0 ? min(max(speed, 0.25), 2.0) : 1.0
+
+        let resolution = VoiceLanguageRouter.resolve(forText: text)
+        stopTTSPlayback()
+
+        switch resolution {
+        case .deepgram(let model, let lang):
+            return await speakViaDeepgram(text: text, model: model, languageCode: lang, speed: clampedSpeed)
+        case .system(let voice, let lang):
+            return speakViaSystem(text: text, voice: voice, languageCode: lang, speed: clampedSpeed)
+        }
+    }
+
+    private static func speakViaDeepgram(text: String, model: String, languageCode: String, speed: Double) async -> String {
         do {
             let apiKey = try await TranscriptionService.resolveDeepgramKey()
 
-            // Read user's speed preference (default 1.0)
-            let speed = UserDefaults.standard.double(forKey: "voiceResponseSpeed")
-            let clampedSpeed = speed > 0 ? min(max(speed, 0.25), 2.0) : 1.0
-
             var components = URLComponents(string: "https://api.deepgram.com/v1/speak")!
             components.queryItems = [
-                URLQueryItem(name: "model", value: "aura-luna-en"),
+                URLQueryItem(name: "model", value: model),
                 URLQueryItem(name: "encoding", value: "linear16"),
                 URLQueryItem(name: "sample_rate", value: "24000"),
             ]
@@ -974,11 +991,10 @@ class ChatToolExecutor {
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
                 let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
-                log("speak_response: Deepgram API error \(statusCode): \(errorBody)")
+                log("speak_response: Deepgram API error \(statusCode) (model=\(model)): \(errorBody)")
                 return "Error: Deepgram TTS failed with status \(statusCode)"
             }
 
-            // Validate we received audio data, not an error page
             let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
             guard contentType.contains("audio") || data.count > 1000 else {
                 let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
@@ -986,23 +1002,28 @@ class ChatToolExecutor {
                 return "Error: Deepgram returned non-audio response"
             }
 
-            log("speak_response: received \(data.count) bytes of audio, playing at speed \(clampedSpeed)...")
-
-            // Stop any currently playing audio cleanly before starting new playback
-            if let existing = ttsAudioPlayer, existing.isPlaying {
-                existing.stop()
-            }
+            log("speak_response: received \(data.count) bytes (model=\(model), lang=\(languageCode)), playing at speed \(speed)...")
 
             let player = try AVAudioPlayer(data: data)
             player.enableRate = true
-            player.rate = Float(clampedSpeed)
+            player.rate = Float(speed)
             ttsAudioPlayer = player
             player.play()
 
-            return "OK: speaking \(text.count) chars"
+            return "OK: speaking \(text.count) chars (\(languageCode))"
         } catch {
-            log("speak_response: error: \(error)")
+            log("speak_response: deepgram error: \(error)")
             return "Error: \(error.localizedDescription)"
         }
+    }
+
+    private static func speakViaSystem(text: String, voice: AVSpeechSynthesisVoice, languageCode: String, speed: Double) -> String {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice
+        let target = AVSpeechUtteranceDefaultSpeechRate * Float(speed)
+        utterance.rate = max(AVSpeechUtteranceMinimumSpeechRate, min(AVSpeechUtteranceMaximumSpeechRate, target))
+        speechSynthesizer.speak(utterance)
+        log("speak_response: system TTS lang=\(languageCode), voice=\(voice.identifier), rate=\(utterance.rate)")
+        return "OK: speaking \(text.count) chars (system, \(languageCode))"
     }
 }
