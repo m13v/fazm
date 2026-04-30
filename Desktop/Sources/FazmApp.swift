@@ -300,6 +300,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Calling it here ensures email/firebase_uid are linked to the device UUID.
         AuthService.shared.setPostHogUserContext()
 
+        // Reclaim disk from stale recordings left by prior launches (failed uploads,
+        // empty shells from --version probes / run.sh rebuilds, observer originals
+        // from before the moveItem fix). Runs async on a background queue, so it
+        // does not block startup. Skips dirs touched in the last 5 minutes to avoid
+        // the active recorder's session.
+        SessionRecordingManager.cleanupStaleRecordings()
+
         // Start session recording if feature flag is enabled (PostHog must be initialized first)
         SessionRecordingManager.shared.startIfEnabled()
 
