@@ -35,6 +35,7 @@ class ResourceMonitor {
     // MARK: - State
 
     private var monitorTimer: Timer?
+    private var systemHealthTimer: Timer?
     private var isMonitoring = false
     private var memorySamples: [(timestamp: Date, memoryMB: UInt64)] = []
     private let maxSamples = 20 // Keep last 20 samples for trend analysis
@@ -45,6 +46,9 @@ class ResourceMonitor {
 
     // Minimum time between warnings (prevent spam)
     private let warningCooldown: TimeInterval = 300 // 5 minutes
+
+    // How often to run system-health pollers (kernel panic, fseventsd RSS, iCloud, disk)
+    private let systemHealthInterval: TimeInterval = 3600 // 1 hour
 
     private init() {}
 
@@ -69,10 +73,17 @@ class ResourceMonitor {
             }
         }
 
-        // One-shot system-health checks at startup. Each writes a 'heal' card to
-        // observer_activity if a fresh signal is found (deduped via UserDefaults).
+        // System-health pollers. Each writes a 'heal' card to observer_activity when a
+        // fresh signal is found, deduped via UserDefaults so we never re-flag the same
+        // condition. First run is delayed 60s to avoid competing with launch IO.
         Task.detached(priority: .background) { [weak self] in
-            await self?.checkKernelPanicReports()
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            await self?.runSystemHealthChecks()
+        }
+        systemHealthTimer = Timer.scheduledTimer(withTimeInterval: systemHealthInterval, repeats: true) { [weak self] _ in
+            Task.detached(priority: .background) { [weak self] in
+                await self?.runSystemHealthChecks()
+            }
         }
     }
 
@@ -82,6 +93,8 @@ class ResourceMonitor {
         isMonitoring = false
         monitorTimer?.invalidate()
         monitorTimer = nil
+        systemHealthTimer?.invalidate()
+        systemHealthTimer = nil
         memorySamples.removeAll()
         log("ResourceMonitor: Stopped resource monitoring")
     }
@@ -666,6 +679,118 @@ class ResourceMonitor {
     }
 
     // MARK: - System Health Signals (Mac Doctor)
+
+    // MARK: - System-Health Pollers
+
+    /// Orchestrator for periodic system-health pollers. Each poller has its own dedup
+    /// cooldown via UserDefaults, so calling this hourly is safe — only fresh conditions
+    /// surface heal cards. Runs on a background priority detached task; never touches
+    /// MainActor state directly.
+    nonisolated func runSystemHealthChecks() async {
+        await checkKernelPanicReports()
+        await checkFseventsdMemory()
+        await checkICloudRootContamination()
+        await checkICloudPendingScans()
+        await checkDiskPressure()
+    }
+
+    /// Run a short-lived shell command synchronously and return stdout, or nil on failure.
+    /// Caps execution at `timeout` seconds so a wedged binary cannot stall the poller.
+    nonisolated private func runShellCommand(_ executablePath: String, args: [String], timeout: TimeInterval = 5.0) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = args
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if process.isRunning {
+            process.terminate()
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Payload for a heal-category observer activity row. Used by every system-health
+    /// poller so heal cards have consistent shape (and consistent PostHog props).
+    private struct HealCardPayload {
+        let source: String                  // "kernel_panic" | "fseventsd_memory" | "icloud_root_contamination" | etc.
+        let task: String                    // user-facing one-liner shown on the card
+        let description: String             // 1-2 sentence explanation under the task
+        let document: String                // full diagnostic markdown handed to the AI on Investigate
+        let metadata: [String: Any]         // extra props (counts, paths, sizes) merged into both DB content and PostHog
+    }
+
+    /// Insert a heal-category row into observer_activity, fire `discovered_task_created`
+    /// on PostHog, and surface the floating overlay if the bar is visible. Shared by
+    /// every system-health poller so they all behave the same way as the original
+    /// kernel-panic detector.
+    nonisolated private func writeHealCard(_ payload: HealCardPayload) async {
+        var contentJson: [String: Any] = [
+            "task": payload.task,
+            "category": "heal",
+            "description": payload.description,
+            "document": payload.document,
+            "source": payload.source,
+        ]
+        for (k, v) in payload.metadata {
+            contentJson[k] = v
+        }
+
+        guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return }
+        do {
+            let contentString = String(data: try JSONSerialization.data(withJSONObject: contentJson), encoding: .utf8) ?? payload.task
+            let activityId = try await dbQueue.write { db -> Int64 in
+                try db.execute(
+                    sql: """
+                        INSERT INTO observer_activity (type, category, content, status, createdAt)
+                        VALUES (?, ?, ?, 'pending', datetime('now'))
+                    """,
+                    arguments: ["system_signal", "heal", contentString]
+                )
+                return db.lastInsertedRowID
+            }
+            log("ResourceMonitor: persisted heal card source=\(payload.source) id=\(activityId)")
+
+            let savedId = activityId
+            let savedTask = payload.task
+            let savedDesc = payload.description
+            let savedDoc = payload.document
+            let source = payload.source
+            let extraProps = payload.metadata
+
+            await MainActor.run {
+                var props: [String: Any] = [
+                    "task_id": savedId,
+                    "task_category": "heal",
+                    "task_title": String(savedTask.prefix(100)),
+                    "source": source,
+                    "type": "system_signal",
+                ]
+                for (k, v) in extraProps { props[k] = v }
+                PostHogManager.shared.track("discovered_task_created", properties: props)
+
+                if let barFrame = FloatingControlBarManager.shared.barWindowFrame {
+                    AnalysisOverlayWindow.shared.show(below: barFrame, task: savedTask, category: "heal", description: savedDesc, document: savedDoc, activityId: savedId)
+                }
+            }
+        } catch {
+            log("ResourceMonitor: failed to persist heal card source=\(payload.source): \(error)")
+        }
+    }
 
     /// Scan /Library/Logs/DiagnosticReports for recent kernel panics.
     /// Writes a 'heal' row to observer_activity for the most recent panic in the last 7 days,
