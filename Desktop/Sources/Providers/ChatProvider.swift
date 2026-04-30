@@ -3174,9 +3174,16 @@ class ChatProvider: ObservableObject {
                 messages[index].isStreaming = false
                 completeRemainingToolCalls(messageId: aiMessageId)
                 await Task.yield()  // Let UI update immediately
-                hadPartialContent = !messages[index].text.isEmpty
-                if hadPartialContent {
-                    log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
+                // Re-resolve the index: the yield above lets the Combine $messages
+                // sink drain, which can fire clearTransferredMessages() and shrink
+                // or empty the array. Using the captured `index` after the suspension
+                // can hit a stale slot and trap Array.subscript's bounds check (the
+                // SIGTRAP we saw in the wild on detached pop-out error paths).
+                if let freshIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    hadPartialContent = !messages[freshIndex].text.isEmpty
+                    if hadPartialContent {
+                        log("Bridge error after partial response — keeping \(messages[freshIndex].text.count) chars of streamed text")
+                    }
                 }
             }
 
