@@ -67,6 +67,12 @@ class ResourceMonitor {
                 await self?.sampleResources()
             }
         }
+
+        // One-shot system-health checks at startup. Each writes a 'heal' card to
+        // observer_activity if a fresh signal is found (deduped via UserDefaults).
+        Task.detached(priority: .background) { [weak self] in
+            await self?.checkKernelPanicReports()
+        }
     }
 
     /// Stop monitoring resources
@@ -656,6 +662,134 @@ class ResourceMonitor {
         guard totalRAM > 0 else { return 0 }
         let footprint = getMemoryFootprintMB()
         return (Double(footprint) / Double(totalRAM)) * 100.0
+    }
+
+    // MARK: - System Health Signals (Mac Doctor)
+
+    /// Scan /Library/Logs/DiagnosticReports for recent kernel panics.
+    /// Writes a 'heal' row to observer_activity for the most recent panic in the last 7 days,
+    /// deduped via UserDefaults so we never flag the same panic twice.
+    nonisolated func checkKernelPanicReports() async {
+        let panicDir = "/Library/Logs/DiagnosticReports"
+        let url = URL(fileURLWithPath: panicDir, isDirectory: true)
+
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        let now = Date()
+        let sevenDaysAgo = now.addingTimeInterval(-7 * 86400)
+
+        let panics: [(URL, Date)] = entries.compactMap { entry in
+            guard entry.pathExtension == "panic" else { return nil }
+            guard let attrs = try? entry.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let mtime = attrs.contentModificationDate else { return nil }
+            guard mtime >= sevenDaysAgo else { return nil }
+            return (entry, mtime)
+        }.sorted { $0.1 > $1.1 }
+
+        guard let mostRecent = panics.first else { return }
+
+        let lastFlaggedKey = "lastFlaggedKernelPanicMtime"
+        let lastFlagged = UserDefaults.standard.double(forKey: lastFlaggedKey)
+        let mostRecentTimestamp = mostRecent.1.timeIntervalSince1970
+
+        guard mostRecentTimestamp > lastFlagged else { return }
+
+        UserDefaults.standard.set(mostRecentTimestamp, forKey: lastFlaggedKey)
+        log("ResourceMonitor: kernel panic detected at \(mostRecent.0.lastPathComponent), surfacing heal card")
+
+        await persistKernelPanicHealCard(panicURL: mostRecent.0, mtime: mostRecent.1, totalCount: panics.count)
+    }
+
+    /// Insert a heal-category row into observer_activity for a kernel panic, and surface the
+    /// floating overlay if the bar is visible. Schema mirrors what GeminiAnalysisService writes.
+    nonisolated private func persistKernelPanicHealCard(panicURL: URL, mtime: Date, totalCount: Int) async {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        let when = formatter.string(from: mtime)
+        let ago = humanTimeAgo(mtime)
+
+        let task = "Your Mac kernel-panicked \(ago), Fazm can read the panic report and explain the likely cause"
+        let description = "macOS wrote a kernel panic report at \(when) (\(panicURL.lastPathComponent)). \(totalCount > 1 ? "There are \(totalCount) panic reports from the last 7 days. " : "")Panic reports name the panicked process and stack; Fazm can identify the likely subsystem (third-party kext, GPU driver, runaway process, namei zone exhaustion, etc.) and recommend safe next steps. All diagnostics are read-only by default."
+        let document = """
+        ## What Was Observed
+
+        macOS kernel panic report:
+        - Path: `\(panicURL.path)`
+        - When: \(when)
+        - Total panic reports in last 7 days: \(totalCount)
+
+        ## The Task
+
+        Read the panic report and explain in plain English what likely caused the kernel panic. Identify whether it is hardware, a third-party kext, a runaway process, or a known macOS bug. Recommend specific next steps the user can take.
+
+        ## Why AI Can Help
+
+        Panic reports are dense and full of stack-trace jargon most users cannot parse. The AI can read the file, identify the panicked subsystem, cross-reference it against known issues, and translate the verdict into something actionable.
+
+        ## Recommended Approach
+
+        1. Read `\(panicURL.path)` (world-readable, no sudo needed) to get the full report.
+        2. Identify the panicked thread, the kext (if any), and the process backtrace.
+        3. Check for known patterns: `vfs.namei` zone exhaustion, third-party kexts (anything not `com.apple.*` in the loaded kexts list), GPU driver crashes, thermal shutdowns.
+        4. Explain the likely cause and the user's options (uninstall a kext, restart a leaky daemon, file a sysdiagnose to Apple, etc.).
+        5. Read-only first. Never run `sudo`, `kextunload`, or anything destructive without explicit user approval.
+        """
+
+        let contentJson: [String: Any] = [
+            "task": task,
+            "category": "heal",
+            "description": description,
+            "document": document,
+            "panic_path": panicURL.path,
+            "panic_mtime": ISO8601DateFormatter().string(from: mtime),
+            "panic_count_7d": totalCount,
+        ]
+
+        guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return }
+        do {
+            let contentString = String(data: try JSONSerialization.data(withJSONObject: contentJson), encoding: .utf8) ?? task
+            let activityId = try await dbQueue.write { db -> Int64 in
+                try db.execute(
+                    sql: """
+                        INSERT INTO observer_activity (type, category, content, status, createdAt)
+                        VALUES (?, ?, ?, 'pending', datetime('now'))
+                    """,
+                    arguments: ["system_signal", "heal", contentString]
+                )
+                return db.lastInsertedRowID
+            }
+            log("ResourceMonitor: persisted kernel panic heal card id=\(activityId)")
+
+            let savedId = activityId
+            let savedTask = task
+            let savedDesc = description
+            let savedDoc = document
+            await MainActor.run {
+                if let barFrame = FloatingControlBarManager.shared.barWindowFrame {
+                    AnalysisOverlayWindow.shared.show(below: barFrame, task: savedTask, category: "heal", description: savedDesc, document: savedDoc, activityId: savedId)
+                }
+            }
+        } catch {
+            log("ResourceMonitor: failed to persist kernel panic heal card: \(error)")
+        }
+    }
+
+    private nonisolated func humanTimeAgo(_ date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        if interval < 3600 { return "less than an hour ago" }
+        if interval < 86400 {
+            let h = Int(interval / 3600)
+            return h == 1 ? "an hour ago" : "\(h) hours ago"
+        }
+        let d = Int(interval / 86400)
+        return d == 1 ? "yesterday" : "\(d) days ago"
     }
 
     /// Get system-wide memory pressure (percentage of total RAM in use by all apps)
