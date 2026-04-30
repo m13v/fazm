@@ -330,6 +330,11 @@ async function main() {
       durationMs, assistantMessageId, JOB_ID,
     ]);
   } else {
+    // Bridge returned but no assistant text (e.g. model end_turn'd after thinking only,
+    // or stopped on a tool call without a final reply). Don't claim status='ok' — the
+    // routine produced no output the user can read, and the <routines> briefing should
+    // surface it as a failure so the agent notices and the user can fix the prompt.
+    if (runStatus === "ok") runStatus = "error";
     exec(`
       UPDATE cron_runs
       SET finished_at = ?, status = ?, error_message = ?, duration_ms = ?
