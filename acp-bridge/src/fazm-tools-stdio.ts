@@ -496,7 +496,7 @@ Aim for 15-40 nodes with meaningful edges connecting them.`,
   },
   {
     name: "speak_response",
-    description: `Speak a short summary of your response aloud to the user using text-to-speech. Call this on EVERY final response when the conversation language is supported. The text should be a natural, conversational summary (1-3 sentences) — not the full written response. Keep it brief and direct, as if you're speaking to the user face-to-face. IMPORTANT: Only call this tool when the conversation is in one of these supported languages: English, Spanish, French, German, Italian, Dutch, Japanese. Do NOT call this tool for any other language (e.g. Russian, Chinese, Korean, Portuguese, Arabic, etc.) — the TTS engine cannot synthesize those languages and will produce garbled audio.`,
+    description: `Speak a short summary of your response aloud to the user using text-to-speech. Call this on EVERY final response, regardless of language. The text should be a natural, conversational summary (1-3 sentences), not the full written response. Keep it brief and direct, as if you're speaking to the user face-to-face. The spoken text MUST be in the same language the user wrote in. The TTS layer auto-detects the language and routes to a matching voice: high-quality Deepgram Aura voices for English, Spanish, French, German, Italian, Dutch, and Japanese; built-in macOS system voices for every other language (Russian, Chinese, Korean, Portuguese, Arabic, Hindi, Turkish, Polish, Ukrainian, etc.). Always call speak_response, no matter the language.`,
     inputSchema: {
       type: "object" as const,
       properties: {
