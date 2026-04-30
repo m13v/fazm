@@ -358,6 +358,8 @@ export interface CodexProbeResultMessage {
   authMethods?: string[];
   /** Default/current model id reported by the adapter, e.g. "gpt-5.4/high". */
   currentModelId?: string;
+  /** Full available models list — used by Swift to render the picker. */
+  availableModels?: Array<{ modelId: string; name: string; description?: string }>;
   /** Auth modes detected on disk (~/.codex/auth.json `auth_mode`). */
   authMode?: "chatgpt" | "api_key" | "none";
   error?: string;
