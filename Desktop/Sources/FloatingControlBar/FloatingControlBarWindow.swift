@@ -1530,7 +1530,7 @@ class FloatingControlBarManager {
                     log("FloatingControlBarManager: Voice set to off")
                     self.writeControlState()
                 } else if command == "stopAgent" {
-                    self.window?.chatProvider?.stopAgent()
+                    self.chatProvider?.stopAgent()
                     log("FloatingControlBarManager: stopAgent invoked via control")
                 } else if command == "show" {
                     self.show()
