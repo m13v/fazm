@@ -41,6 +41,7 @@ import type {
 } from "./protocol.js";
 import { startOAuthFlow, OAuthTokenExchangeError, readStoredCredentials, type OAuthFlowHandle } from "./oauth-flow.js";
 import { CodexProvider } from "./codex-provider.js";
+import { handleCodexQuery, isCodexModel } from "./codex-query.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1555,6 +1556,19 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
 const MAX_QUERY_RETRIES = 2;
 
 async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
+  // Phase 2.3: route Codex models to the codex-acp adapter. The Claude path
+  // below is unchanged — codex models simply never reach it.
+  if (isCodexModel(msg.model)) {
+    await handleCodexQuery(msg, {
+      logErr,
+      send,
+      sendWithSession,
+      getProvider: getCodexProvider,
+      buildMcpServers,
+    });
+    return;
+  }
+
   // Per-session concurrency: only abort the previous query if it's the SAME sessionKey.
   // Different sessions can run concurrently.
   const incomingSessionKey = msg.sessionKey ?? (msg.model || DEFAULT_MODEL);
