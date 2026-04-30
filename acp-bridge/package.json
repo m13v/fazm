@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && cp src/patched-acp-entry.mjs dist/patched-acp-entry.mjs",
+    "build": "tsc && cp src/patched-acp-entry.mjs dist/patched-acp-entry.mjs && cp src/schedule.mjs dist/schedule.mjs && cp src/cron-runner.mjs dist/cron-runner.mjs",
     "postinstall": "node scripts/patch-playwright-overlay.cjs",
     "start": "node dist/index.js"
   },
