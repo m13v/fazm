@@ -771,7 +771,7 @@ class ResourceMonitor {
             // Track creation so we can measure heal-card discovery rate and the funnel
             // from created → shown → investigated/dismissed/ignored.
             await MainActor.run {
-                PostHogSDK.shared.capture("discovered_task_created", properties: [
+                PostHogManager.shared.track("discovered_task_created", properties: [
                     "task_id": activityId,
                     "task_category": "heal",
                     "task_title": String(task.prefix(100)),
