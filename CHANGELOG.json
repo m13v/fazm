@@ -11,7 +11,8 @@
     "Fixed missing thinking indicator in pop-out chat and floating bar while waiting for first AI token",
     "Sticky stack of recent user messages at the top of the chat (floating bar and popout): your past prompts stay visible as you scroll deeper, capped at 50% of the chat height. Click any peek to jump back to that message",
     "Fixed pop-out windows growing taller on every restart (titlebar height was being double-counted when restoring saved frame)",
-    "GPT-5 family models (Codex backend) now appear in the model picker automatically at startup when the toggle is on, no need to re-toggle Settings \u2192 Advanced \u2192 Codex Backend"
+    "GPT-5 family models (Codex backend) now appear in the model picker automatically at startup when the toggle is on, no need to re-toggle Settings \u2192 Advanced \u2192 Codex Backend",
+    "Routines now report failure when the agent ends a turn without producing any text response, instead of being silently marked successful"
   ],
   "releases": [
     {
