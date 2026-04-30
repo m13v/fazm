@@ -5,29 +5,80 @@ Fazm — a macOS desktop app (Swift). Open source at github.com/mediar-ai/fazm.
 
 ## Inbox Pipelines
 
-Three launchd services run autonomous Claude Code agents that handle inbound communication. Pausing/resuming preserves all config and DB state; pipelines pick up where they left off.
+Four launchd services run autonomous agents that handle inbound communication and recurring tasks. Pausing/resuming preserves all config and DB state; pipelines pick up where they left off.
 
 | Service | Plist | Interval | Purpose |
 |---------|-------|----------|---------|
 | Email inbox | `com.m13v.fazm-inbox` | 5 min | Replies to unanswered inbound emails |
 | Founder chat | `com.m13v.fazm-founder-chat` | 15 sec | Responds to in-app chat messages |
 | Session replay | `com.m13v.fazm-session-replay` | 20 min | Analyzes session recordings for bugs |
+| Routines | `com.m13v.fazm-routines` | 60 sec | Polls `cron_jobs` table and fires due user routines |
 
 **Check status:** `launchctl list | grep fazm`
 
 **Pause all:**
 ```bash
-for s in inbox founder-chat session-replay; do launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-$s.plist; done
+for s in inbox founder-chat session-replay routines; do launchctl unload ~/Library/LaunchAgents/com.m13v.fazm-$s.plist; done
 ```
 
 **Resume all:**
 ```bash
-for s in inbox founder-chat session-replay; do launchctl load ~/Library/LaunchAgents/com.m13v.fazm-$s.plist; done
+for s in inbox founder-chat session-replay routines; do launchctl load ~/Library/LaunchAgents/com.m13v.fazm-$s.plist; done
 ```
 
 **Pause/resume one:** replace the loop with a single `launchctl unload/load` targeting the specific plist.
 
 Pipeline code lives in `inbox/` (plists in `inbox/launchd/`, Node.js scripts in `inbox/scripts/`, Claude skills in `inbox/skill/`). The SEO inbox (`com.m13v.fazm-seo-inbox`) is a separate pipeline in `~/fazm-website/seo/inbox/`.
+
+## Routines (recurring AI tasks)
+
+User-defined recurring AI tasks. The `routines` launchd job (`com.m13v.fazm-routines`) polls every 60s, finds due rows in the user's `cron_jobs` table, and spawns the headless ACP runner (`acp-bridge/src/cron-runner.mjs`) for each. The runner spawns the same ACP bridge that the floating bar uses, sends warmup + query, captures the result + cost, and writes back to `cron_jobs`/`cron_runs` plus a `chat_messages` row under `taskId="routine-<id>"` so the conversation appears in chat history.
+
+The agent manages routines via dedicated MCP tools: `routines_create`, `routines_list`, `routines_update`, `routines_remove`, `routines_runs`. Users describe routines in natural language ("every weekday at 9am, check my emails") and the agent translates to a schedule string.
+
+**Schedule formats:** `cron:0 9 * * 1-5`, `every:1800` (seconds), `at:2026-04-30T18:00:00Z`.
+
+**Storage:**
+- DB tables: `cron_jobs` (definitions) and `cron_runs` (execution history) in each user's `~/Library/Application Support/Fazm/users/<UUID>/fazm.db` (added in `fazmV7` migration).
+- Run output is also persisted as `chat_messages` rows under `taskId='routine-<job-id>'` so the result threads into normal conversation history.
+
+**Logs (where to investigate when something goes wrong):**
+- `~/fazm/inbox/skill/logs/routines.log` — pipeline log: every spawn, every error, the high-level "Spawned N routines" tally.
+- `~/fazm/inbox/skill/logs/routines-launchd-stdout.log` / `routines-launchd-stderr.log` — raw launchd capture.
+- `~/fazm/inbox/skill/logs/routine-run-<short-id>-<timestamp>.log` — full per-run output, one file per fire (includes ACP bridge stderr, runner stderr, and final exit code).
+
+**Check status / install:**
+```bash
+~/fazm/inbox/skill/install-routines-pipeline.sh status     # is the launchd job loaded?
+~/fazm/inbox/skill/install-routines-pipeline.sh install    # install + load
+~/fazm/inbox/skill/install-routines-pipeline.sh uninstall  # remove
+```
+
+**Common queries when debugging routines:**
+```sql
+-- All routines
+SELECT id, name, schedule, enabled, last_status, last_error,
+       datetime(last_run_at, 'unixepoch', 'localtime')  AS last_run,
+       datetime(next_run_at, 'unixepoch', 'localtime')  AS next_run,
+       run_count
+FROM cron_jobs ORDER BY enabled DESC, next_run_at ASC;
+
+-- Recent runs (most-recent first)
+SELECT job_id, status,
+       datetime(started_at, 'unixepoch', 'localtime') AS started,
+       duration_ms, cost_usd,
+       substr(COALESCE(output_text, error_message, ''), 1, 200) AS preview
+FROM cron_runs ORDER BY started_at DESC LIMIT 20;
+
+-- Force a routine to fire on the next 60s tick
+UPDATE cron_jobs SET next_run_at = strftime('%s','now') WHERE id = '<job-id>';
+```
+
+When a user asks "what's wrong with my morning email routine":
+1. `SELECT * FROM cron_jobs WHERE name LIKE '%email%'` to find the job + last_error.
+2. `SELECT * FROM cron_runs WHERE job_id = '<id>' ORDER BY started_at DESC LIMIT 5` to see recent run outcomes.
+3. `tail -200 ~/fazm/inbox/skill/logs/routines.log` for pipeline-level issues.
+4. `cat ~/fazm/inbox/skill/logs/routine-run-<short-id>-*.log | tail -200` for the most recent specific run.
 
 ## Session Recording
 See `scripts/SESSION-RECORDING.md` for full guide — toggle per-user recording, view chunks, architecture.
