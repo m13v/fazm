@@ -1480,9 +1480,10 @@ actor ACPBridge {
             // Before timing out, check if ACP tools are still running via stderr.
             // ACP's own tools (Terminal, text_editor) don't send bridge messages,
             // so waitForMessage would time out even though work is progressing.
-            // Defer up to 3 times (total ~12 min) while tools are actively running.
+            // Defer up to 6 times (matching the per-session waitForMessage variant,
+            // total ~1 hour at 600s base) while tools are actively running.
             var deferrals = 0
-            let maxDeferrals = 3
+            let maxDeferrals = 6
             while box.isPending(generation: expectedGeneration),
                   self.acpToolsRunning > 0, deferrals < maxDeferrals {
               deferrals += 1
