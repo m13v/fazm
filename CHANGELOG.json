@@ -10,7 +10,8 @@
     "Codex backend now gets the same MCP servers as Claude (fazm_tools, Playwright, macos-use, WhatsApp, Google Workspace), the same system prompt, plus session resume across app restarts and proper interrupt handling",
     "Fixed missing thinking indicator in pop-out chat and floating bar while waiting for first AI token",
     "Sticky stack of recent user messages at the top of the chat (floating bar and popout): your past prompts stay visible as you scroll deeper, capped at 50% of the chat height. Click any peek to jump back to that message",
-    "Fixed pop-out windows growing taller on every restart (titlebar height was being double-counted when restoring saved frame)"
+    "Fixed pop-out windows growing taller on every restart (titlebar height was being double-counted when restoring saved frame)",
+    "GPT-5 family models (Codex backend) now appear in the model picker automatically at startup when the toggle is on, no need to re-toggle Settings \u2192 Advanced \u2192 Codex Backend"
   ],
   "releases": [
     {
