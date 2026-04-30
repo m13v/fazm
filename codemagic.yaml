@@ -362,7 +362,7 @@ workflows:
             cp -Rf acp-bridge/dist        "$APP_BUNDLE/Contents/Resources/acp-bridge/"
             cp -f  acp-bridge/package.json "$APP_BUNDLE/Contents/Resources/acp-bridge/"
             cp -Rf acp-bridge/node_modules "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-            # Browser overlay assets (read at runtime by patched playwright extensionContextFactory)
+            # Browser overlay assets (read at runtime by patched playwright-core coreBundle.js)
             for f in browser-overlay-init.js browser-overlay-init-page.cjs browser-overlay-init-page.ts; do
               if [ -f "acp-bridge/$f" ]; then
                 cp -f "acp-bridge/$f" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
@@ -382,20 +382,22 @@ workflows:
               fi
             done
             echo "Verified overlay assets present in bundle: $REQUIRED_OVERLAY_FILES"
-            # HARD CHECK: extensionContextFactory.js must be patched. If postinstall
-            # didn't run or the patch regex failed against a new Playwright version,
-            # the overlay won't inject even if the assets are bundled.
-            EXT_FACTORY="$APP_BUNDLE/Contents/Resources/acp-bridge/node_modules/playwright/lib/mcp/extension/extensionContextFactory.js"
+            # HARD CHECK: coreBundle.js must be patched. If postinstall didn't run
+            # or the patch failed against a new Playwright MCP version, the overlay
+            # won't inject even if the assets are bundled.
+            # @playwright/mcp 0.0.71+ collapsed extensionContextFactory.js into
+            # playwright-core/lib/coreBundle.js — the patch now targets that file.
+            EXT_FACTORY="$APP_BUNDLE/Contents/Resources/acp-bridge/node_modules/playwright-core/lib/coreBundle.js"
             if [ ! -f "$EXT_FACTORY" ]; then
               echo "FATAL: $EXT_FACTORY not found — Playwright MCP layout changed?"
               exit 1
             fi
             if ! grep -q "_fazmOverlayScript" "$EXT_FACTORY"; then
-              echo "FATAL: extensionContextFactory.js is NOT patched with _fazmOverlayScript — overlay injection will silently no-op."
+              echo "FATAL: coreBundle.js is NOT patched with _fazmOverlayScript — overlay injection will silently no-op."
               echo "Run: cd acp-bridge && node scripts/patch-playwright-overlay.cjs"
               exit 1
             fi
-            echo "Verified Playwright extensionContextFactory.js is patched with overlay injection"
+            echo "Verified playwright-core/lib/coreBundle.js is patched with overlay injection"
           else
             echo "ERROR: acp-bridge/dist not found"
             exit 1
