@@ -186,7 +186,7 @@ class ShortcutSettings: ObservableObject {
         return modelId
     }
 
-    /// Update the model list from ACP SDK response.
+    /// Update the Claude half of the model list from the ACP SDK response.
     func updateModels(_ acpModels: [(modelId: String, name: String, description: String?)]) {
         guard !acpModels.isEmpty else { return }
         let newModels = acpModels.compactMap { model -> (ModelOption, Int)? in
@@ -203,25 +203,44 @@ class ShortcutSettings: ObservableObject {
         .sorted(by: { $0.1 < $1.1 })
         .map { $0.0 }
 
-        // Only update if the list actually changed
-        if newModels != availableModels {
-            availableModels = newModels
-            let modelDesc = newModels.map { "\($0.id) = \($0.label)" }.joined(separator: ", ")
-            log("ShortcutSettings: updated availableModels to [\(modelDesc)]")
-            // If the user's selected model is not in the new list, keep it (it may still work)
-            // but log a warning
-            if !newModels.contains(where: { $0.id == selectedModel }) {
-                let normalizedSelection = Self.normalizeModelId(selectedModel)
-                if newModels.contains(where: { $0.id == normalizedSelection }) {
-                    selectedModel = normalizedSelection
-                    log("ShortcutSettings: normalized selectedModel to \(normalizedSelection)")
-                } else if let upgraded = newModels.first(where: { $0.id.contains(normalizedSelection) }) {
-                    selectedModel = upgraded.id
-                    log("ShortcutSettings: upgraded selectedModel \(normalizedSelection) -> \(upgraded.id)")
-                } else {
-                    log("ShortcutSettings: current selectedModel \(selectedModel) not in new model list")
-                }
-            }
+        lastClaudeModels = newModels
+        recomputeAvailableModels()
+    }
+
+    /// Phase 3.4 — update the Codex half of the model list. Called when the
+    /// `codex_probe_result` message arrives. Pass an empty array to clear the
+    /// Codex models (e.g. when the user disables the backend).
+    func updateCodexModels(_ codexModels: [CodexBackendManager.CodexModel]) {
+        lastCodexModels = codexModels.map { m in
+            // Use the adapter's display name verbatim (e.g. "GPT-5.5 (high)").
+            // shortLabel mirrors the Claude path: a single word the picker chip
+            // can render. Codex names already include the variant in parens, so
+            // strip the suffix for shortLabel.
+            let short = m.name.split(separator: " ").first.map(String.init) ?? m.name
+            return ModelOption(id: m.modelId, label: m.name, shortLabel: short)
+        }
+        recomputeAvailableModels()
+    }
+
+    private func recomputeAvailableModels() {
+        let merged = lastClaudeModels + lastCodexModels
+        guard merged != availableModels else { return }
+        availableModels = merged
+        let modelDesc = merged.map { "\($0.id) = \($0.label)" }.joined(separator: ", ")
+        log("ShortcutSettings: updated availableModels to [\(modelDesc)]")
+
+        // If the current selection vanished, try to migrate it within the same
+        // backend (Claude alias normalization or longest-prefix match).
+        guard !merged.contains(where: { $0.id == selectedModel }) else { return }
+        let normalizedSelection = Self.normalizeModelId(selectedModel)
+        if merged.contains(where: { $0.id == normalizedSelection }) {
+            selectedModel = normalizedSelection
+            log("ShortcutSettings: normalized selectedModel to \(normalizedSelection)")
+        } else if let upgraded = merged.first(where: { $0.id.contains(normalizedSelection) }) {
+            selectedModel = upgraded.id
+            log("ShortcutSettings: upgraded selectedModel \(normalizedSelection) -> \(upgraded.id)")
+        } else {
+            log("ShortcutSettings: current selectedModel \(selectedModel) not in new model list")
         }
     }
 
