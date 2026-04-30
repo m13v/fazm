@@ -329,6 +329,20 @@ class ChatToolExecutor {
 
         log("Tool execute_sql write: \(changes) row(s) affected")
 
+        // If this write touched the routines tables, notify ChatProvider so it
+        // refreshes the <routines> briefing baked into the next system prompt.
+        // DistributedNotificationCenter is used so the launchd routine runner could
+        // also post the same notification when it updates run state. Case-insensitive
+        // match; a UUID literal in a routine prompt that contains "cron_jobs" is fine
+        // (a spurious refresh is cheap, just a small DB read).
+        let lower = query.lowercased()
+        if lower.contains("cron_jobs") || lower.contains("cron_runs") {
+            DistributedNotificationCenter.default().postNotificationName(
+                NSNotification.Name("com.fazm.routinesChanged"),
+                object: nil, userInfo: nil, deliverImmediately: true
+            )
+        }
+
         return "OK: \(changes) row(s) affected"
     }
 
