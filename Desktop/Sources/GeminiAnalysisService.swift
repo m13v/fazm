@@ -10,7 +10,12 @@ actor GeminiAnalysisService {
     static let shared = GeminiAnalysisService()
 
     private let analysisPromptTemplate = """
-        You are watching ~60 minutes of a user's screen recording. Each video clip captures the active window of whatever app the user was using at that moment. Your job is to identify the ONE most impactful task an AI agent could take off their plate.
+        You are watching ~60 minutes of a user's screen recording. Each video clip captures the active window of whatever app the user was using at that moment. Your job is to identify the ONE most impactful thing an AI agent could do for them. This can be one of two kinds of tasks:
+
+        1. **AUTOMATE** — work the user is doing manually that the AI could take off their plate (default, most common).
+        2. **HEAL** — a visible Mac health/system problem the AI could investigate or fix (kernel panic dialogs, beachballs visible across multiple chunks, "your Mac restarted because of a problem", repeated permission popups, low-disk warnings, frozen apps, system error toasts, login keychain prompts on a loop, network failure dialogs, slow-app symptoms the user is clearly fighting).
+
+        Default to AUTOMATE unless you see a *clear* health symptom in the video. Don't infer health issues from "the user looks frustrated" — only flag HEAL when the screen actually shows a system-level problem.
 
         IMPORTANT: Each recording chunk shows only the focused app window, not the full screen. The metadata below tells you which app and window title was active during each chunk.
 
@@ -56,9 +61,10 @@ actor GeminiAnalysisService {
         After using any tools you need, respond in this exact format:
 
         VERDICT: NO_TASK or TASK_FOUND or UNCLEAR
-        TASK: (only if TASK_FOUND) One sentence: what the user is trying to accomplish overall, and one concrete action the agent would take to help.
-        DESCRIPTION: (only if TASK_FOUND) 3-5 sentences: what you observed the user doing, what apps/tools they were using, what patterns you noticed (e.g. repetitive actions, context switching, manual work that could be automated), and why this specific task is a strong candidate for AI assistance.
-        DOCUMENT: (only if TASK_FOUND) A detailed write-up in markdown format. Include: ## What Was Observed (timeline of what the user did, apps used, files touched), ## The Task (exactly what needs to be done, scope, inputs/outputs), ## Why AI Can Help (what makes this suitable for automation — repetitive, mechanical, well-defined pattern), ## Recommended Approach (step-by-step how an AI agent would execute this). Be specific and reference actual apps, filenames, or patterns you saw in the recording.
+        CATEGORY: (only if TASK_FOUND) automate or heal — see definitions above. Default to automate.
+        TASK: (only if TASK_FOUND) One sentence: what the user is trying to accomplish overall, and one concrete action the agent would take to help. For heal tasks, frame it as the symptom + the diagnostic the agent would run first (read-only, never destructive).
+        DESCRIPTION: (only if TASK_FOUND) 3-5 sentences: what you observed the user doing, what apps/tools they were using, what patterns you noticed (e.g. repetitive actions, context switching, manual work that could be automated; for heal: which system symptom you saw and where on screen). Why this specific task is a strong candidate for AI assistance.
+        DOCUMENT: (only if TASK_FOUND) A detailed write-up in markdown format. Include: ## What Was Observed (timeline of what the user did, apps used, files touched), ## The Task (exactly what needs to be done, scope, inputs/outputs), ## Why AI Can Help (what makes this suitable for automation — repetitive, mechanical, well-defined pattern; for heal: which read-only diagnostics make sense first), ## Recommended Approach (step-by-step how an AI agent would execute this — for heal tasks, read-only diagnostics first, propose fixes only after explicit user approval, never assume sudo). Be specific and reference actual apps, filenames, or patterns you saw in the recording.
 
         Return UNCLEAR if: you can't make out what the user is doing, the content is ambiguous, or you'd be guessing. It's better to say "I'm not sure" than to suggest a task the user never needed.
         Return NO_TASK if: you can clearly see what the user is doing but there's nothing an AI agent could meaningfully help with.
@@ -110,6 +116,7 @@ actor GeminiAnalysisService {
 
     struct AnalysisResult: Sendable {
         let verdict: String  // "NO_TASK" or "TASK_FOUND"
+        let category: String  // "automate" or "heal"
         let task: String?
         let description: String?
         let document: String?
@@ -235,6 +242,7 @@ actor GeminiAnalysisService {
             // Track the analysis result in PostHog
             var properties: [String: Any] = [
                 "verdict": result.verdict,
+                "category": result.category,
                 "chunks_analyzed": result.chunksAnalyzed,
                 "response": result.raw,
                 "tool_call_count": result.toolCallCount,
@@ -272,7 +280,7 @@ actor GeminiAnalysisService {
 
             // Persist TASK_FOUND results to observer_activity and show overlay
             if result.verdict == "TASK_FOUND", let task = result.task {
-                await persistAndShowOverlay(task: task, description: result.description, document: result.document, result: result)
+                await persistAndShowOverlay(task: task, category: result.category, description: result.description, document: result.document, result: result)
             }
 
             // Success — remove only the chunks we analyzed (new ones may have arrived during analysis)
@@ -1052,6 +1060,7 @@ actor GeminiAnalysisService {
         let lines = raw.components(separatedBy: "\n")
 
         var verdict = "NO_TASK"
+        var category = "automate"
         var task: String?
         var description: String?
         var document: String?
@@ -1066,6 +1075,9 @@ actor GeminiAnalysisService {
                 documentLines.append(line)
             } else if trimmed.hasPrefix("VERDICT:") {
                 verdict = trimmed.replacingOccurrences(of: "VERDICT:", with: "").trimmingCharacters(in: .whitespaces)
+            } else if trimmed.hasPrefix("CATEGORY:") {
+                let raw = trimmed.replacingOccurrences(of: "CATEGORY:", with: "").trimmingCharacters(in: .whitespaces).lowercased()
+                category = (raw == "heal") ? "heal" : "automate"
             } else if trimmed.hasPrefix("TASK:") {
                 task = trimmed.replacingOccurrences(of: "TASK:", with: "").trimmingCharacters(in: .whitespaces)
             } else if trimmed.hasPrefix("DESCRIPTION:") {
@@ -1083,6 +1095,7 @@ actor GeminiAnalysisService {
 
         return AnalysisResult(
             verdict: verdict,
+            category: category,
             task: task,
             description: description,
             document: document,
@@ -1133,13 +1146,14 @@ actor GeminiAnalysisService {
     // MARK: - Persistence & Overlay
 
     /// Insert the analysis result into observer_activity and show the overlay above the floating bar.
-    private func persistAndShowOverlay(task: String, description: String?, document: String?, result: AnalysisResult) async {
+    private func persistAndShowOverlay(task: String, category: String, description: String?, document: String?, result: AnalysisResult) async {
         // 1. Persist to observer_activity
         var activityId: Int64 = 0
         if let dbQueue = await AppDatabase.shared.getDatabaseQueue() {
             do {
                 var contentJson: [String: Any] = [
                     "task": task,
+                    "category": category,
                     "chunks_analyzed": result.chunksAnalyzed,
                     "raw": result.raw,
                     "input_tokens": result.inputTokens,
@@ -1153,14 +1167,14 @@ actor GeminiAnalysisService {
                 activityId = try await dbQueue.write { db -> Int64 in
                     try db.execute(
                         sql: """
-                            INSERT INTO observer_activity (type, content, status, createdAt)
-                            VALUES (?, ?, 'pending', datetime('now'))
+                            INSERT INTO observer_activity (type, category, content, status, createdAt)
+                            VALUES (?, ?, ?, 'pending', datetime('now'))
                         """,
-                        arguments: ["gemini_analysis", contentString]
+                        arguments: ["gemini_analysis", category, contentString]
                     )
                     return db.lastInsertedRowID
                 }
-                log("GeminiAnalysis: persisted to observer_activity id=\(activityId)")
+                log("GeminiAnalysis: persisted to observer_activity id=\(activityId) category=\(category)")
             } catch {
                 log("GeminiAnalysis: failed to persist to DB: \(error)")
             }
@@ -1170,9 +1184,10 @@ actor GeminiAnalysisService {
         let savedId = activityId
         let desc = description
         let doc = document
+        let cat = category
         await MainActor.run {
             if let barFrame = FloatingControlBarManager.shared.barWindowFrame {
-                AnalysisOverlayWindow.shared.show(below: barFrame, task: task, description: desc, document: doc, activityId: savedId)
+                AnalysisOverlayWindow.shared.show(below: barFrame, task: task, category: cat, description: desc, document: doc, activityId: savedId)
             } else {
                 log("GeminiAnalysis: no bar frame available, skipping overlay")
             }
