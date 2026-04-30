@@ -1,18 +1,25 @@
 import SwiftUI
 
-/// Overlay shown when Gemini session analysis detects a task the AI agent could help with.
+/// Overlay shown when the screen observer or system-health monitor surfaces a discovered task.
+/// `category` is "automate" (purple, wand) or "heal" (orange, stethoscope) — same layout, different framing.
 struct AnalysisOverlayView: View {
     let task: String
+    var category: String = "automate"
     var onDiscuss: () -> Void
     var onHide: () -> Void
+
+    private var isHeal: Bool { category == "heal" }
+    private var accent: Color { isHeal ? .orange : .purple }
+    private var iconName: String { isHeal ? "stethoscope" : "wand.and.stars" }
+    private var headerText: String { isHeal ? "Mac Health Signal" : "Task Detected" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "wand.and.stars")
-                    .foregroundColor(.purple)
+                Image(systemName: iconName)
+                    .foregroundColor(accent)
                     .scaledFont(size: 13)
-                Text("Task Detected")
+                Text(headerText)
                     .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(.white)
                 Spacer(minLength: 4)
@@ -38,12 +45,12 @@ struct AnalysisOverlayView: View {
                 Button {
                     onDiscuss()
                 } label: {
-                    Text("Discuss")
+                    Text(isHeal ? "Investigate" : "Discuss")
                         .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
-                        .background(Color.purple.opacity(0.8))
+                        .background(accent.opacity(0.8))
                         .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
@@ -68,7 +75,7 @@ struct AnalysisOverlayView: View {
                 .fill(Color.black.opacity(0.85))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.purple.opacity(0.4), lineWidth: 1)
+                        .strokeBorder(accent.opacity(0.4), lineWidth: 1)
                 )
         )
         .padding(8)
