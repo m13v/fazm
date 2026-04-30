@@ -248,7 +248,9 @@ struct DiscoveredTasksSection: View {
         PostHogSDK.shared.capture("discovered_task_discuss", properties: [
             "task_id": task.id,
             "task_category": task.category,
+            "task_status": task.status,
             "task_title": String(task.taskTitle.prefix(100)),
+            "source": "tasks_tab",
         ])
         Task {
             await AnalysisOverlayWindow.updateActivityStatus(activityId: task.id, status: "acted", response: "discuss")
@@ -260,7 +262,10 @@ struct DiscoveredTasksSection: View {
     private func dismissTask(_ task: DiscoveredTask) {
         PostHogSDK.shared.capture("discovered_task_dismissed", properties: [
             "task_id": task.id,
+            "task_category": task.category,
+            "task_status": task.status,
             "task_title": String(task.taskTitle.prefix(100)),
+            "source": "tasks_tab",
         ])
         Task {
             await AnalysisOverlayWindow.updateActivityStatus(activityId: task.id, status: "dismissed", response: "hide")
