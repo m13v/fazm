@@ -306,7 +306,7 @@ actor ACPBridge {
   /// without a sessionKey field — usually because the bridge unregistered the
   /// session before emitting the catch-block result. Without this fallback the
   /// per-pop-out continuation never resumes and the loading spinner spins for
-  /// the full 180s inactivity timeout.
+  /// the full inactivity timeout (currently 600s, up to 6× deferred while tools run).
   private var sessionIdToKey: [String: String] = [:]
 
   /// Set when stderr indicates OOM so handleTermination can throw the right error
@@ -750,12 +750,17 @@ actor ACPBridge {
       }
     }
 
-    // Inactivity timeout: if no message arrives from the bridge for 3 minutes,
-    // consider the query stuck (e.g., a hung Bash command that bypassed the SDK's
-    // own 120s timeout). ChatProvider catches BridgeError.timeout and sends
-    // interrupt() to cancel the stuck session. 3 minutes is well beyond the SDK's
-    // default Bash timeout (2 min) so this only fires as a last-resort safety net.
-    let inactivityTimeout: TimeInterval = 180
+    // Inactivity timeout: if no message arrives from the bridge for 10 minutes,
+    // consider the query stuck. The bridge has its own per-tool watchdog
+    // (TOOL_TIMEOUT_DEFAULT_MS = 5min for non-MCP, 2min for MCP) which fires
+    // first and synthesizes a failure to unblock the agent loop. The deferral
+    // logic in waitForMessage extends this further while ACP tools are still
+    // actively running (up to 6× = 1 hour total budget for legitimate long work
+    // like deep research, large refactors, multi-step Task sub-agents).
+    // Previously 180s caused legitimate long-running queries to be killed;
+    // see logs/fazm.log timeouts on 2026-04-30 (Task sub-agent kind=think
+    // hangs were the dominant offender).
+    let inactivityTimeout: TimeInterval = 600
     var messageCount = 0
     var lastMessageTime = Date()
     while true {
@@ -1419,9 +1424,13 @@ actor ACPBridge {
         if let timeout = timeout {
           Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-            // Defer timeout if ACP tools are running for this session
+            // Defer timeout if ACP tools are running for this session.
+            // Up to 6 deferrals × 600s base = 1 hour budget when tools keep
+            // running. This gives long-running operations (deep research,
+            // multi-step Task sub-agents, large refactors) room to complete
+            // without the conversation being killed.
             var deferrals = 0
-            let maxDeferrals = 3
+            let maxDeferrals = 6
             while box.isPending(generation: gen),
                   (await self?.getSessionAcpToolsRunning(sessionKey) ?? 0) > 0,
                   deferrals < maxDeferrals {
