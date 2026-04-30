@@ -930,8 +930,11 @@ class ChatToolExecutor {
 
     /// Shared audio player for TTS playback (kept alive to prevent dealloc during playback)
     private static var ttsAudioPlayer: AVAudioPlayer?
-    /// System fallback synthesizer used for languages Deepgram Aura doesn't cover.
+    /// AVSpeech fallback synthesizer (only used if /usr/bin/say cannot launch).
     private static let speechSynthesizer = AVSpeechSynthesizer()
+    /// Running /usr/bin/say process for system-voice languages.
+    /// AVSpeechSynthesizer was unreliable inside the bundled app on Sequoia, so we shell out.
+    private static var ttsSayProcess: Process?
 
     /// Stop any currently playing TTS audio (Deepgram or system).
     static func stopTTSPlayback() {
@@ -939,6 +942,10 @@ class ChatToolExecutor {
             player.stop()
         }
         ttsAudioPlayer = nil
+        if let proc = ttsSayProcess, proc.isRunning {
+            proc.terminate()
+        }
+        ttsSayProcess = nil
         if speechSynthesizer.isSpeaking {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
@@ -1018,12 +1025,27 @@ class ChatToolExecutor {
     }
 
     private static func speakViaSystem(text: String, voice: AVSpeechSynthesisVoice, languageCode: String, speed: Double) -> String {
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = voice
-        let target = AVSpeechUtteranceDefaultSpeechRate * Float(speed)
-        utterance.rate = max(AVSpeechUtteranceMinimumSpeechRate, min(AVSpeechUtteranceMaximumSpeechRate, target))
-        speechSynthesizer.speak(utterance)
-        log("speak_response: system TTS lang=\(languageCode), voice=\(voice.identifier), rate=\(utterance.rate)")
-        return "OK: speaking \(text.count) chars (system, \(languageCode))"
+        let voiceName = voice.name
+        let wpm = max(80, min(360, Int(175.0 * speed)))
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        process.arguments = ["-v", voiceName, "-r", "\(wpm)", text]
+        process.terminationHandler = { _ in
+            ttsSayProcess = nil
+        }
+        do {
+            try process.run()
+            ttsSayProcess = process
+            log("speak_response: system TTS via /usr/bin/say lang=\(languageCode), voice=\(voiceName), wpm=\(wpm)")
+            return "OK: speaking \(text.count) chars (system, \(languageCode))"
+        } catch {
+            log("speak_response: /usr/bin/say failed (\(error)), falling back to AVSpeechSynthesizer")
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.voice = voice
+            let target = AVSpeechUtteranceDefaultSpeechRate * Float(speed)
+            utterance.rate = max(AVSpeechUtteranceMinimumSpeechRate, min(AVSpeechUtteranceMaximumSpeechRate, target))
+            speechSynthesizer.speak(utterance)
+            return "OK: speaking \(text.count) chars (system fallback, \(languageCode))"
+        }
     }
 }
