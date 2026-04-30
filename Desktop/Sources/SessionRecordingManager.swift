@@ -65,16 +65,17 @@ class SessionRecordingManager {
             let totalBytes = sessions.bytes + observers.bytes
             let totalFiles = sessions.files + observers.files
             let totalDirs = sessions.dirs + observers.dirs
-            guard totalFiles > 0 || totalDirs > 0 else { return }
             log("SessionRecording: cleanup freed \(totalBytes / 1_048_576) MB (\(totalFiles) chunks, \(totalDirs) empty dirs)")
-            PostHogSDK.shared.capture("session_recording_cleanup_completed", properties: [
-                "session_bytes_freed": sessions.bytes,
-                "session_files_deleted": sessions.files,
-                "session_dirs_deleted": sessions.dirs,
-                "observer_bytes_freed": observers.bytes,
-                "observer_files_deleted": observers.files,
-                "observer_dirs_deleted": observers.dirs,
-            ])
+            if totalFiles > 0 || totalDirs > 0 {
+                PostHogSDK.shared.capture("session_recording_cleanup_completed", properties: [
+                    "session_bytes_freed": sessions.bytes,
+                    "session_files_deleted": sessions.files,
+                    "session_dirs_deleted": sessions.dirs,
+                    "observer_bytes_freed": observers.bytes,
+                    "observer_files_deleted": observers.files,
+                    "observer_dirs_deleted": observers.dirs,
+                ])
+            }
         }
     }
 
