@@ -159,6 +159,7 @@ struct SettingsContentView: View {
         case conversationHistory = "Conversations"
         case home = "Floating Bar"
         case chatWithFounder = "Chat with Founder"
+        case routines = "Routines"
         case discoveredTasks = "Discovered Tasks"
         case remoteControl = "Remote Control"
         case dictionary = "Dictionary"
@@ -215,6 +216,8 @@ struct SettingsContentView: View {
                     ConversationHistorySection(chatProvider: chatProvider, appState: appState)
                 case .chatWithFounder:
                     FounderChatPage()
+                case .routines:
+                    RoutinesSection(chatProvider: chatProvider)
                 case .discoveredTasks:
                     DiscoveredTasksSection()
                 case .remoteControl:
