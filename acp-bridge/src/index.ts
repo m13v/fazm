@@ -542,15 +542,24 @@ async function handleCodexInitProbe(): Promise<void> {
     const provider = getCodexProvider();
     provider.start();
     const init = await provider.initialize();
-    // Open a transient session purely to learn the default model id (codex-acp
-    // returns it on session/new but not on initialize).
+    // Open a transient session purely to learn the default model id + the
+    // available models list (codex-acp returns both on session/new but not on
+    // initialize).
     let currentModelId: string | undefined;
+    let availableModels: Array<{ modelId: string; name: string; description?: string }> | undefined;
     try {
       const probeSession = (await provider.request("session/new", {
         cwd: homedir(),
         mcpServers: [],
-      })) as { sessionId: string; models?: { currentModelId?: string } };
+      })) as {
+        sessionId: string;
+        models?: {
+          currentModelId?: string;
+          availableModels?: Array<{ modelId: string; name: string; description?: string }>;
+        };
+      };
       currentModelId = probeSession.models?.currentModelId;
+      availableModels = probeSession.models?.availableModels;
       // No need to clean up — codex-acp drops the session when this provider is shut down.
     } catch (probeErr) {
       logErr(`[codex] probe session/new failed: ${probeErr}`);
@@ -561,6 +570,7 @@ async function handleCodexInitProbe(): Promise<void> {
       agent: init.agentInfo ? `${init.agentInfo.name}@${init.agentInfo.version}` : undefined,
       authMethods: init.authMethods?.map((m) => m.id),
       currentModelId,
+      availableModels,
       authMode: readCodexAuthMode(),
     });
   } catch (err) {
