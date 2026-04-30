@@ -77,7 +77,11 @@ function log(msg) {
 const SQLITE_BIN = "/usr/bin/sqlite3";
 
 function buildScript(query, params, mode = "json") {
-  const cmds = [`.mode ${mode}`, "PRAGMA busy_timeout = 5000;"];
+  // NOTE: do NOT include PRAGMA statements here in JSON mode — sqlite3 prints
+  // their result (e.g. `[{"timeout":5000}]`) on stdout, which would concatenate
+  // with the real query result and break JSON.parse. Use `-cmd ".timeout N"`
+  // CLI flag instead (silent).
+  const cmds = [`.mode ${mode}`];
   for (let i = 0; i < params.length; i++) {
     cmds.push(`.param set :p${i} ${sqliteValue(params[i])}`);
   }
@@ -87,9 +91,11 @@ function buildScript(query, params, mode = "json") {
   return cmds.join("\n") + "\n";
 }
 
+const SQLITE_ARGS = ["-cmd", ".timeout 5000", USER_DB];
+
 function sql(query, params = []) {
   try {
-    const out = execFileSync(SQLITE_BIN, [USER_DB], {
+    const out = execFileSync(SQLITE_BIN, SQLITE_ARGS, {
       input: buildScript(query, params, "json"),
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -112,7 +118,7 @@ function sqliteValue(v) {
 
 function exec(query, params = []) {
   try {
-    execFileSync(SQLITE_BIN, [USER_DB], {
+    execFileSync(SQLITE_BIN, SQLITE_ARGS, {
       input: buildScript(query, params, "list"),
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
