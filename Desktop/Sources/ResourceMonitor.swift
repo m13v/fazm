@@ -696,6 +696,8 @@ class ResourceMonitor {
 
     /// Run a short-lived shell command synchronously and return stdout, or nil on failure.
     /// Caps execution at `timeout` seconds so a wedged binary cannot stall the poller.
+    /// Drains stdout/stderr via readabilityHandler so a verbose subprocess (e.g. `brctl
+    /// status` against a large iCloud library) cannot deadlock against a full pipe buffer.
     nonisolated private func runShellCommand(_ executablePath: String, args: [String], timeout: TimeInterval = 5.0) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
@@ -705,9 +707,23 @@ class ResourceMonitor {
         process.standardOutput = outPipe
         process.standardError = errPipe
 
+        let buffer = NSMutableData()
+        let bufferLock = NSLock()
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty { return }
+            bufferLock.lock()
+            buffer.append(chunk)
+            bufferLock.unlock()
+        }
+        // Drain stderr so the writer side never blocks
+        errPipe.fileHandleForReading.readabilityHandler = { handle in _ = handle.availableData }
+
         do {
             try process.run()
         } catch {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             return nil
         }
 
@@ -715,12 +731,23 @@ class ResourceMonitor {
         while process.isRunning && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
         }
-        if process.isRunning {
+        let timedOut = process.isRunning
+        if timedOut {
             process.terminate()
-            return nil
+            // Give it a moment to actually exit so no further writes race with cleanup
+            let killDeadline = Date().addingTimeInterval(0.5)
+            while process.isRunning && Date() < killDeadline {
+                Thread.sleep(forTimeInterval: 0.02)
+            }
         }
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        errPipe.fileHandleForReading.readabilityHandler = nil
+
+        if timedOut { return nil }
         guard process.terminationStatus == 0 else { return nil }
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        bufferLock.lock()
+        let data = buffer as Data
+        bufferLock.unlock()
         return String(data: data, encoding: .utf8)
     }
 
