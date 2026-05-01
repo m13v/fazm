@@ -848,6 +848,12 @@ class DetachedChatWindowController {
             guard let self, let win else { return }
             let id = ObjectIdentifier(win)
             let sessionKey = self.entries[id]?.sessionKey ?? "unknown"
+            // Interrupt any in-flight ACP query so the bridge doesn't hang for 600s
+            // and fire a stray chat_agent_error after the window is gone.
+            if let provider = FloatingControlBarManager.shared.chatProvider,
+               provider.isSending(sessionKey: sessionKey) {
+                provider.stopAgent(sessionKey: sessionKey)
+            }
             // Clean up per-session tool executor callbacks to prevent stale references
             ChatToolExecutor.unregisterCallbacks(sessionKey: sessionKey)
             self.entries[id]?.chatCancellable?.cancel()
