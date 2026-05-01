@@ -919,6 +919,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // If this terminate was scheduled by `restartApp()` / `relaunchApp()`, honor it
+        // and let the spawned `sleep && open` helper bring the app back. Otherwise this
+        // is a user-initiated quit (Cmd-Q, menu Quit, dock Quit) — kill any pending
+        // relaunch helpers so the user actually gets to quit.
+        if !RelaunchSupervisor.consumeProgrammaticTerminateFlag() {
+            let killed = RelaunchSupervisor.cancelPendingHelpers()
+            if killed > 0 {
+                log("AppDelegate: User quit — cancelled \(killed) pending relaunch helper(s)")
+            }
+        }
+        return .terminateNow
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         // Always try to show the main Fazm window when dock icon is clicked
         for window in sender.windows where window.title.hasPrefix("Fazm") {
