@@ -1640,9 +1640,16 @@ class FloatingControlBarManager {
     }
 
     /// Cancel any in-flight chat streaming.
+    /// Also sends an ACP interrupt for the floating session so the bridge stops the
+    /// agent immediately. Without this, an in-flight query would hang silently in the
+    /// bridge for up to 600s after the user closed Ask Fazm, then fire a spurious
+    /// `chat_agent_error` and pollute the next query on the same session.
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
+        if ChatProvider.shared.isSending(sessionKey: "floating") {
+            ChatProvider.shared.stopAgent(sessionKey: "floating")
+        }
     }
 
     /// Whether there is an active ACP subscription receiving updates.
