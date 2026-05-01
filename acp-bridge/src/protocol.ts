@@ -110,6 +110,11 @@ export interface CodexLoginCancelMessage {
   type: "codex_login_cancel";
 }
 
+/** Disconnect Codex by deleting `~/.codex/auth.json` and re-probing. */
+export interface CodexLogoutMessage {
+  type: "codex_logout";
+}
+
 export interface CancelAuthMessage {
   type: "cancel_auth";
 }
@@ -126,7 +131,8 @@ export type InboundMessage =
   | CancelAuthMessage
   | CodexInitProbeMessage
   | CodexLoginMessage
-  | CodexLoginCancelMessage;
+  | CodexLoginCancelMessage
+  | CodexLogoutMessage;
 
 // === Bridge → Swift (stdout) ===
 
