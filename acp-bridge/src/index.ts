@@ -655,6 +655,15 @@ async function handleCodexLogin(): Promise<void> {
     // Wait for the user to complete the OAuth flow in the browser
     await flow.complete;
     activeCodexLogin = null;
+    // Recycle the codex-acp subprocess so the next probe/query picks up the
+    // freshly written auth.json. The existing subprocess was spawned without
+    // auth and won't re-read auth.json on its own — leaving it in place causes
+    // every post-OAuth request to fail with "Authentication required" until a
+    // logout/login cycle restarts it.
+    if (codexProvider) {
+      try { codexProvider.shutdown(); } catch { /* already gone */ }
+      codexProvider = null;
+    }
     send({ type: "codex_login_complete" });
     logErr("[codex-oauth] login complete, auth.json written");
   } catch (err) {
