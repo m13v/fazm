@@ -39,32 +39,41 @@ enum ChatMessageStore {
         }
     }
 
-    static func loadMessages(context: String, limit: Int? = nil) async -> [ChatMessage] {
+    static func loadMessages(context: String, sessionId: String? = nil, limit: Int? = nil) async -> [ChatMessage] {
         guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return [] }
         do {
             return try await dbQueue.read { db in
                 let sql: String
                 let arguments: StatementArguments
+                let sessionFilter = sessionId != nil ? " AND session_id = ?" : ""
                 if let limit = limit {
-                    // Fetch the N most recent messages, then return in chronological order
+                    // Fetch the N most recent messages for this context+session, then return in chronological order
                     sql = """
                         SELECT * FROM (
                             SELECT messageId, sender, messageText, createdAt
                             FROM chat_messages
-                            WHERE taskId = ?
+                            WHERE taskId = ?\(sessionFilter)
                             ORDER BY createdAt DESC
                             LIMIT ?
                         ) ORDER BY createdAt ASC
                     """
-                    arguments = [context, limit]
+                    if let sid = sessionId {
+                        arguments = [context, sid, limit]
+                    } else {
+                        arguments = [context, limit]
+                    }
                 } else {
                     sql = """
                         SELECT messageId, sender, messageText, createdAt
                         FROM chat_messages
-                        WHERE taskId = ?
+                        WHERE taskId = ?\(sessionFilter)
                         ORDER BY createdAt ASC
                     """
-                    arguments = [context]
+                    if let sid = sessionId {
+                        arguments = [context, sid]
+                    } else {
+                        arguments = [context]
+                    }
                 }
                 let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
 
