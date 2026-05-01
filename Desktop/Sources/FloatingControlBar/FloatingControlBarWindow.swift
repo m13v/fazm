@@ -1471,6 +1471,7 @@ class FloatingControlBarManager {
                 guard let provider = self?.chatProvider else { return }
                 log("FloatingControlBarManager: Test paywall triggered")
                 provider.showPaywall = true
+                PaywallWindowController.shared.show(chatProvider: provider)
             }
         }
 
