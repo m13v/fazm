@@ -19,7 +19,8 @@
     "Fixed session recovery replaying messages from old conversations instead of the current session",
     "Fixed memory leak from orphan ACP bridge processes that accumulated across crashes (each consumed ~600MB)",
     "Switched to flat $9.99/month subscription with no free trial; paywall now appears immediately on launch for users without an active subscription",
-    "Fixed empty AI message bubbles in detached chat windows when streaming buffers were silently dropped during long tool-heavy responses"
+    "Fixed empty AI message bubbles in detached chat windows when streaming buffers were silently dropped during long tool-heavy responses",
+    "Check subscription at sign-in instead of post-onboarding so the paywall gates new users immediately"
   ],
   "releases": [
     {
