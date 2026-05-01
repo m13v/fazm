@@ -380,7 +380,88 @@ interface QueryContext {
   interruptRequested: boolean;
   pendingBoundary: boolean;
   mode: "ask" | "act";
+  // Harness-leak suppression: in some setups (Plan mode + personal Claude
+  // account on Opus), the model echoes its own injected `(your turn — ...)`
+  // resume prompt and `<system-reminder>...</system-reminder>` blocks at the
+  // start of its assistant text. We buffer the leading bytes of each turn
+  // and strip those before forwarding to the UI / persistence.
+  prefixStripDone: boolean;
+  prefixBuffer: string;
 }
+
+/**
+ * Streaming-safe stripper for the harness-leak prefix at the start of an
+ * assistant message. Returns:
+ *   - { done: true,  suffix }   → past the harness; emit `suffix` and stop buffering
+ *   - { done: false }           → still inside (or possibly inside) the harness;
+ *                                  caller should keep buffering and not emit yet
+ *
+ * Patterns recognised at the start of `buf`, in order, all optional:
+ *   1. leading whitespace
+ *   2. `(your turn — continue from where the transcript left off)` (literal-ish, any text inside parens)
+ *   3. zero or more `<system-reminder>...</system-reminder>` blocks
+ *
+ * If `buf` clearly does NOT start with one of these markers, we exit fast with
+ * the buffer unchanged so we don't add latency to normal responses.
+ */
+function stripHarnessPrefix(buf: string): { done: true; suffix: string } | { done: false } {
+  const trimmed = buf.trimStart();
+
+  // Fast path: doesn't even look like a harness leak. Be careful about partial
+  // matches though — if the buffer is short and starts with `(` or `<`, the
+  // marker may still be arriving in the next chunk.
+  const startsWithHarness =
+    trimmed.startsWith("(your turn") ||
+    trimmed.startsWith("<system-reminder>") ||
+    // partial markers we should keep buffering for
+    (trimmed.startsWith("(") && trimmed.length < "(your turn".length) ||
+    (trimmed.startsWith("<") && trimmed.length < "<system-reminder>".length);
+
+  if (!startsWithHarness) {
+    return { done: true, suffix: buf };
+  }
+
+  // We *might* be inside a harness leak. Walk through known shapes.
+  let pos = 0;
+  while (pos < buf.length && /\s/.test(buf.charAt(pos))) pos++;
+
+  // Optional `(your turn ...)` line. Match any single-line parenthesised
+  // preamble — be liberal about exact wording, since the harness phrasing
+  // can drift across model versions.
+  if (buf.startsWith("(your turn", pos)) {
+    const close = buf.indexOf(")", pos);
+    if (close === -1) return { done: false }; // wait for more
+    pos = close + 1;
+    while (pos < buf.length && /\s/.test(buf.charAt(pos))) pos++;
+  }
+
+  // Zero-or-more `<system-reminder>...</system-reminder>` blocks
+  while (buf.startsWith("<system-reminder>", pos)) {
+    const close = buf.indexOf("</system-reminder>", pos);
+    if (close === -1) return { done: false }; // wait for closing tag
+    pos = close + "</system-reminder>".length;
+    while (pos < buf.length && /\s/.test(buf.charAt(pos))) pos++;
+  }
+
+  // Past the harness. If real content has arrived, emit the rest.
+  // Otherwise keep buffering — more harness blocks may follow.
+  if (pos < buf.length) {
+    // If the very next non-whitespace char is `<`, it could be a partial
+    // `<system-reminder>` still arriving. Keep buffering until we know.
+    const next = buf.charAt(pos);
+    if (next === "<" && buf.length - pos < "<system-reminder>".length) {
+      return { done: false };
+    }
+    return { done: true, suffix: buf.slice(pos) };
+  }
+  return { done: false };
+}
+
+// Hard cap on prefix-buffer growth. If the model legitimately starts a turn
+// with weird-looking content that resembles harness (unlikely), we don't want
+// to swallow the entire response. Once the buffer exceeds this many bytes
+// without resolving, we give up and emit it as-is.
+const PREFIX_BUFFER_FLUSH_BYTES = 8 * 1024;
 
 /** Active queries keyed by sessionKey */
 const activeQueries = new Map<string, QueryContext>();
@@ -1858,6 +1939,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       interruptRequested: false,
       pendingBoundary: false,
       mode,
+      prefixStripDone: false,
+      prefixBuffer: "",
     };
     activeQueries.set(sessionKey, queryCtx);
 
@@ -2622,6 +2705,36 @@ function handleSessionUpdate(
         // because hung MCP tools (e.g. mcp__playwright__browser_tabs) had
         // their 120s safety net killed by interleaved assistant text.
 
+        // Strip leading harness leaks (`(your turn — ...)` + `<system-reminder>`
+        // blocks) before forwarding. We only buffer at the start of a query
+        // turn; once stripping resolves, it short-circuits for the rest of
+        // the turn so we don't add latency to normal text deltas.
+        let outText = text;
+        if (ctx && !ctx.prefixStripDone) {
+          ctx.prefixBuffer += text;
+
+          if (ctx.prefixBuffer.length > PREFIX_BUFFER_FLUSH_BYTES) {
+            // Safety: don't swallow real content forever if the model emits
+            // something we don't recognise. Flush whatever we have.
+            outText = ctx.prefixBuffer;
+            ctx.prefixBuffer = "";
+            ctx.prefixStripDone = true;
+          } else {
+            const result = stripHarnessPrefix(ctx.prefixBuffer);
+            if (result.done) {
+              outText = result.suffix;
+              ctx.prefixBuffer = "";
+              ctx.prefixStripDone = true;
+            } else {
+              // Still inside (or possibly inside) the harness. Suppress this
+              // chunk; the next one will retry the strip with more context.
+              outText = "";
+            }
+          }
+        }
+
+        if (!outText) break;
+
         // Signal a boundary between text blocks only when resuming text
         // after a tool call (pendingBoundary). We no longer split on content
         // block index changes because the API can use multiple text blocks
@@ -2632,8 +2745,8 @@ function handleSessionUpdate(
           if (ctx) ctx.pendingBoundary = false; else pendingBoundary = false;
         }
 
-        onText(text);
-        sendWithSession(sid, { type: "text_delta", text });
+        onText(outText);
+        sendWithSession(sid, { type: "text_delta", text: outText });
       }
       break;
     }
