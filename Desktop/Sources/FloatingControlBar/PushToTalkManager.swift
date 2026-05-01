@@ -622,28 +622,31 @@ class PushToTalkManager: ObservableObject {
         targetState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
       }
       pttOpenedChat = false
-      if sendOverrideState == nil {
-        // Keyboard PTT — activate app and focus floating bar input
+      // Detached-window button is the only case where override is non-nil AND
+      // is a different state than the floating bar's. Floating-bar button
+      // PTT passes its own barState as override — but it should still focus
+      // the floating bar, not be routed to DetachedChatWindowController
+      // (which only knows about detached windows and would silently no-op).
+      let isDetachedOverride = sendOverrideState != nil && sendOverrideState !== barState
+      if isDetachedOverride, let overrideState = sendOverrideState {
+        DetachedChatWindowController.shared.focusInputField(for: overrideState)
+      } else {
         NSApp.activate(ignoringOtherApps: true)
         FloatingControlBarManager.shared.focusInputField()
-      } else if let overrideState = sendOverrideState {
-        // UI button PTT (detached window) — focus the detached window's input
-        DetachedChatWindowController.shared.focusInputField(for: overrideState)
       }
       if isShowingResponse {
         // Set pendingFollowUpText after activation so the onChange handler runs
         // while the app is active. Then re-focus once SwiftUI has settled the
         // text injection so the caret is visible at the end (otherwise the
-        // floating bar's followup textView ends up with cursor set on a
-        // non-firstResponder view, and the visible caret never appears at end).
-        let captureSendOverride = sendOverrideState
+        // followup textView ends up with cursor set on a non-firstResponder
+        // view, and the visible caret never appears at end).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
           targetState?.pendingFollowUpText = query
           DispatchQueue.main.async {
-            if captureSendOverride == nil {
-              FloatingControlBarManager.shared.focusInputField()
-            } else if let overrideState = captureSendOverride {
+            if isDetachedOverride, let overrideState = sendOverrideState {
               DetachedChatWindowController.shared.focusInputField(for: overrideState)
+            } else {
+              FloatingControlBarManager.shared.focusInputField()
             }
           }
         }
