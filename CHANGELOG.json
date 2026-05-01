@@ -27,7 +27,8 @@
     "Stop chat agent on floating-bar close and detached-window close so abandoned queries no longer hang for 10 minutes and surface a stray error",
     "Capture model, bridge mode, duration, and running tools when chat agent errors fire, so timeouts can be diagnosed",
     "Fixed premature timeout when ACP tool calls run back-to-back; the inactivity deferral now considers tool activity within the last 60s, not just tools running at the exact moment",
-    "Fixed spurious \"Fazm wants to bypass screen recording permission\" system alert and the inability to actually quit the app when a restart was in flight: the app no longer auto-runs tccutil reset on macOS 15+ (it never worked and triggered the alert), and Cmd-Q now cancels any pending relaunch helper instead of being overridden by it"
+    "Fixed spurious \"Fazm wants to bypass screen recording permission\" system alert and the inability to actually quit the app when a restart was in flight: the app no longer auto-runs tccutil reset on macOS 15+ (it never worked and triggered the alert), and Cmd-Q now cancels any pending relaunch helper instead of being overridden by it",
+    "Friendlier error when a Custom API Endpoint (e.g. LM Studio) returns no models loaded or refuses connection"
   ],
   "releases": [
     {

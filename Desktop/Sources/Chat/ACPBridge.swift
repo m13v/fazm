@@ -1956,6 +1956,21 @@ enum BridgeError: LocalizedError {
     case .agentError(let msg):
       // Strip "Internal error: " prefix if present — ACP wraps the real message
       let cleaned = msg.hasPrefix("Internal error: ") ? String(msg.dropFirst("Internal error: ".count)) : msg
+
+      // When the user has a Custom API Endpoint configured (LM Studio, Ollama, corporate proxy, etc.),
+      // raw upstream errors like `API Error: 400 ... "No models loaded ... use the 'lms load' command"`
+      // are confusing — users blame Fazm for an error that's coming from their local server.
+      // Detect known custom-endpoint failures and surface an actionable message instead.
+      let endpoint = UserDefaults.standard.string(forKey: "customApiEndpoint") ?? ""
+      if !endpoint.isEmpty {
+        let lower = cleaned.lowercased()
+        if lower.contains("no models loaded") || lower.contains("lms load") {
+          return "Your custom API endpoint (\(endpoint)) reported no model is loaded. Load a model in your local server (e.g. LM Studio → Developer → Load Model), or turn off Custom API Endpoint in Settings → Advanced → AI Chat to use Fazm's built-in Claude."
+        }
+        if lower.contains("api error") || lower.contains("connection refused") || lower.contains("econnrefused") {
+          return "\(cleaned)\n\nThis came from your custom API endpoint (\(endpoint)). Turn off Custom API Endpoint in Settings → Advanced → AI Chat to use Fazm's built-in Claude."
+        }
+      }
       return cleaned
     }
   }
