@@ -1647,8 +1647,8 @@ class FloatingControlBarManager {
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
-        if ChatProvider.shared.isSending(sessionKey: "floating") {
-            ChatProvider.shared.stopAgent(sessionKey: "floating")
+        if let provider = chatProvider, provider.isSending(sessionKey: "floating") {
+            provider.stopAgent(sessionKey: "floating")
         }
     }
 
