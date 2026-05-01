@@ -2165,11 +2165,41 @@ struct SettingsContentView: View {
                         }
 
                         if codexBackend.authMode == "none" {
-                            Text("Not authenticated. Run `codex login` in your terminal once to connect your ChatGPT subscription, then click Check connection above.")
-                                .scaledFont(size: 12)
-                                .foregroundColor(.orange)
-                                .fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: 8) {
+                                if let loginErr = codexBackend.loginError {
+                                    Text("Login failed: \(loginErr)")
+                                        .scaledFont(size: 12)
+                                        .foregroundColor(.red)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Button(action: {
+                                    if codexBackend.loginInProgress {
+                                        chatProvider?.cancelCodexLogin()
+                                    } else {
+                                        chatProvider?.startCodexLogin()
+                                    }
+                                }) {
+                                    HStack(spacing: 6) {
+                                        if codexBackend.loginInProgress {
+                                            ProgressView().controlSize(.mini)
+                                            Text("Connecting... (click to cancel)")
+                                        } else {
+                                            Image(systemName: "person.badge.key")
+                                            Text("Connect ChatGPT subscription")
+                                        }
+                                    }
+                                    .scaledFont(size: 12, weight: .medium)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 7)
+                                            .fill(codexBackend.loginInProgress ? Color.gray : Color(red: 0.063, green: 0.639, blue: 0.498))
+                                    )
+                                }
+                                .buttonStyle(.plain)
                                 .padding(.top, 4)
+                            }
                         }
                     }
                 }
