@@ -1127,10 +1127,18 @@ class ChatProvider: ObservableObject {
                 onComplete: {
                     Task { @MainActor in
                         CodexBackendManager.shared.loginCompleted()
-                        // Re-probe so the model picker and status badge update immediately
                         CodexBackendManager.shared.markProbing()
                     }
+                    // First probe — fires immediately so authMode flips to "chatgpt"
+                    // and the modal auto-dismisses. codex-acp often returns models=0
+                    // on this probe because it hasn't loaded the list yet.
                     Task { await self.acpBridge.sendCodexProbe() }
+                    // Second probe — fires after a short delay so we pick up the
+                    // real model list once codex-acp finishes warming up.
+                    Task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        await self.acpBridge.sendCodexProbe()
+                    }
                 },
                 onError: { error in
                     Task { @MainActor in
