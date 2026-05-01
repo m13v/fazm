@@ -279,3 +279,14 @@ export function interruptAllCodexSessions(provider: CodexProvider): number {
 export function codexSessionCount(): number {
   return codexSessions.size;
 }
+
+/**
+ * Wipe the cached codex session pool without touching the provider. Call this
+ * right before tearing down `codexProvider` (logout / post-OAuth restart) so
+ * the next prompt doesn't reuse a sessionId that died with the old subprocess
+ * and trip "Resource not found" on session/prompt.
+ */
+export function clearCodexSessions(): void {
+  codexSessions.clear();
+  codexSessionIdToKey.clear();
+}
