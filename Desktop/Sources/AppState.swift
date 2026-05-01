@@ -2,6 +2,40 @@ import AVFoundation
 import SwiftUI
 @preconcurrency import ObjectiveC
 
+/// Tracks pending relaunch helper subprocesses spawned by `restartApp()` /
+/// `relaunchApp()`. The helpers run `sleep N && open <bundle>` detached, so a
+/// user-initiated quit (Cmd-Q, menu Quit) needs to kill them or the app will
+/// "relaunch" against the user's intent. `applicationShouldTerminate` reads
+/// `programmaticTerminateScheduled` to tell its own restart-driven terminate
+/// from a real user quit.
+enum RelaunchSupervisor {
+    static let queue = DispatchQueue(label: "com.fazm.relaunch-supervisor")
+    nonisolated(unsafe) private static var _helperPIDs: [pid_t] = []
+    nonisolated(unsafe) private static var _programmaticTerminateScheduled = false
+
+    static func register(helperPID: pid_t) {
+        queue.sync {
+            _helperPIDs.append(helperPID)
+            _programmaticTerminateScheduled = true
+        }
+    }
+
+    static func cancelPendingHelpers() -> Int {
+        queue.sync {
+            let pids = _helperPIDs
+            _helperPIDs.removeAll()
+            for pid in pids where pid > 0 {
+                kill(pid, SIGTERM)
+            }
+            return pids.count
+        }
+    }
+
+    static var programmaticTerminateScheduled: Bool {
+        queue.sync { _programmaticTerminateScheduled }
+    }
+}
+
 @MainActor
 class AppState: ObservableObject {
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
@@ -266,14 +300,13 @@ class AppState: ObservableObject {
             // Stale TCC entry from old developer signing: CGPreflight says granted but
             // actual capture fails. The user must toggle OFF then ON in System Settings
             // to update the code signing requirement (csreq) stored in the TCC database.
+            // On macOS 15+ calling `tccutil reset ScreenCapture` against our own bundle
+            // triggers a "Fazm wants to bypass screen recording permission" system alert
+            // and never actually clears the SIP-protected entry, so we just flag stale
+            // and surface the toggle-off/on instructions in the UI.
             if !realPermission && !isScreenRecordingStale {
                 log("Screen capture: stale TCC entry detected (developer signing changed)")
                 isScreenRecordingStale = true
-                // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
-                Task.detached {
-                    ScreenCaptureService.ensureLaunchServicesRegistrationSync()
-                    _ = ScreenCaptureService.resetScreenCapturePermission()
-                }
             } else if realPermission {
                 // Permission recovered (user toggled off/on in System Settings)
                 isScreenRecordingStale = false
@@ -424,7 +457,12 @@ class AppState: ObservableObject {
         let task = Process()
         task.launchPath = "/bin/sh"
         task.arguments = ["-c", "sleep 1 && open \"\(bundlePath)\""]
-        try? task.run()
+        do {
+            try task.run()
+            RelaunchSupervisor.register(helperPID: task.processIdentifier)
+        } catch {
+            log("relaunchApp: failed to spawn relaunch helper: \(error)")
+        }
         NSApplication.shared.terminate(nil)
     }
 
@@ -665,7 +703,8 @@ class AppState: ObservableObject {
 
         do {
             try task.run()
-            log("Restart scheduled, terminating current instance...")
+            RelaunchSupervisor.register(helperPID: task.processIdentifier)
+            log("Restart scheduled (helperPID=\(task.processIdentifier)), terminating current instance...")
 
             // Terminate the current app
             DispatchQueue.main.async {
