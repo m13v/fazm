@@ -14,14 +14,6 @@ import Combine
 final class CodexBackendManager: ObservableObject {
     static let shared = CodexBackendManager()
 
-    /// User-facing on/off for the Codex backend. When disabled, the picker hides
-    /// codex models, no probe is sent, and codex-acp is never spawned by the bridge.
-    @Published var enabled: Bool {
-        didSet {
-            UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
-        }
-    }
-
     /// Last probe outcome — nil until first probe completes.
     @Published private(set) var lastProbe: ProbeResult?
     /// True while a probe request is outstanding.
@@ -43,8 +35,6 @@ final class CodexBackendManager: ObservableObject {
     /// click-to-connect flow lands on the model the user wanted.
     @Published var pendingPickerModelId: String?
 
-    static let enabledKey = "fazm.codex.enabled"
-
     struct CodexModel: Identifiable, Equatable {
         var id: String { modelId }
         let modelId: String
@@ -61,16 +51,7 @@ final class CodexBackendManager: ObservableObject {
         let error: String?
     }
 
-    private init() {
-        // Default ON for new installs so GPT models appear in the picker out of the box.
-        // Existing users who explicitly toggled off keep their preference.
-        if UserDefaults.standard.object(forKey: Self.enabledKey) == nil {
-            UserDefaults.standard.set(true, forKey: Self.enabledKey)
-            self.enabled = true
-        } else {
-            self.enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
-        }
-    }
+    private init() {}
 
     /// Called from ACPBridge's onCodexProbeResult handler.
     func consumeProbeResult(
@@ -137,7 +118,7 @@ final class CodexBackendManager: ObservableObject {
     /// so the picker stays populated; once a later probe brings real models,
     /// they take over.
     var modelsForPicker: [CodexModel] {
-        guard enabled, lastProbe?.ok == true else { return [] }
+        guard lastProbe?.ok == true else { return [] }
         if availableModels.isEmpty {
             return Self.fallbackUnauthedGptModels
         }
