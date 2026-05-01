@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::auth::AuthDevice;
 use crate::config::Config;
+use crate::routes::stripe::lookup_subscription_status;
 
 #[derive(Serialize)]
 pub struct KeysResponse {
@@ -15,8 +16,12 @@ pub struct KeysResponse {
 
 /// POST /v1/keys
 /// Returns API keys to authenticated clients.
-/// If the user is on the builtin key blocklist, the anthropic_api_key is returned empty,
-/// which triggers the client to prompt for a personal Claude account.
+///
+/// The bundled `anthropic_api_key` is gated on an active Stripe subscription
+/// (status `active` or `trialing`). Non-subscribers, blocklisted users, or
+/// clients we can't verify against Stripe receive an empty `anthropic_api_key`,
+/// which the desktop client treats as a signal to prompt for a personal Claude
+/// account. Deepgram/Gemini/ElevenLabs keys are unaffected.
 pub async fn get_keys(
     Extension(config): Extension<Arc<Config>>,
     Extension(auth): Extension<AuthDevice>,
@@ -41,11 +46,43 @@ pub async fn get_keys(
         uid_blocked || device_blocked
     };
 
+    // Subscription gate. Blocked users short-circuit to false (no Stripe call needed).
+    // Stripe lookup errors fail closed so a transient outage can't unlock the bundled
+    // key for non-subscribers. Paying users will still see their subscription_status
+    // route succeed independently and the desktop UI handles the empty-key case the
+    // same way it handles the blocklist.
+    let subscription_active = if blocked {
+        false
+    } else {
+        match lookup_subscription_status(&config, &auth).await {
+            Ok(s) => s.active,
+            Err((status, msg)) => {
+                tracing::error!(
+                    device_id = %auth.device_id,
+                    uid = ?auth.firebase_uid,
+                    error = %msg,
+                    stripe_status = %status,
+                    "Subscription lookup failed; failing closed (empty Anthropic key)"
+                );
+                false
+            }
+        }
+    };
+
+    let serve_anthropic = !blocked && subscription_active;
+    if !serve_anthropic && !blocked {
+        tracing::info!(
+            device_id = %auth.device_id,
+            uid = ?auth.firebase_uid,
+            "Withholding builtin Anthropic key — no active Stripe subscription"
+        );
+    }
+
     Ok(Json(KeysResponse {
-        anthropic_api_key: if blocked {
-            String::new()
-        } else {
+        anthropic_api_key: if serve_anthropic {
             config.anthropic_api_key.clone()
+        } else {
+            String::new()
         },
         deepgram_api_key: config.deepgram_api_key.clone(),
         gemini_api_key: config.gemini_api_key.clone(),
