@@ -198,6 +198,9 @@ actor ACPBridge {
     case sessionExpired(oldSessionId: String, newSessionId: String, contextRestored: Bool, restoredMessageCount: Int, reason: String, sessionKey: String?)
     case sessionStarted(sessionId: String, sessionKey: String?, isResume: Bool)
     case codexProbeResult(ok: Bool, agent: String?, authMethods: [String], currentModelId: String?, availableModels: [[String: Any]], authMode: String, error: String?)
+    case codexLoginUrl(url: String)
+    case codexLoginComplete
+    case codexLoginError(error: String)
   }
 
   // MARK: - Configuration
@@ -233,6 +236,12 @@ actor ACPBridge {
   var onModelsAvailable: ((_ models: [(modelId: String, name: String, description: String?)]) -> Void)?
   /// Called when the bridge reports codex_probe_result (Codex backend reachability + auth state)
   var onCodexProbeResult: ((_ ok: Bool, _ agent: String?, _ authMethods: [String], _ currentModelId: String?, _ availableModels: [[String: Any]], _ authMode: String, _ error: String?) -> Void)?
+  /// Called when the bridge starts the Codex OAuth flow and needs the browser opened
+  var onCodexLoginUrl: ((_ url: String) -> Void)?
+  /// Called when Codex OAuth flow completes and auth.json has been written
+  var onCodexLoginComplete: (() -> Void)?
+  /// Called when Codex OAuth flow fails
+  var onCodexLoginError: ((_ error: String) -> Void)?
   /// Global tool call handler for background sessions (chat observer) — processes tool_use even when no query is active
   var onBackgroundToolCall: ToolCallHandler?
 
@@ -250,6 +259,16 @@ actor ACPBridge {
 
   func setCodexProbeResultHandler(_ handler: @escaping @Sendable (_ ok: Bool, _ agent: String?, _ authMethods: [String], _ currentModelId: String?, _ availableModels: [[String: Any]], _ authMode: String, _ error: String?) -> Void) {
     self.onCodexProbeResult = handler
+  }
+
+  func setCodexLoginHandlers(
+    onUrl: @escaping @Sendable (_ url: String) -> Void,
+    onComplete: @escaping @Sendable () -> Void,
+    onError: @escaping @Sendable (_ error: String) -> Void
+  ) {
+    self.onCodexLoginUrl = onUrl
+    self.onCodexLoginComplete = onComplete
+    self.onCodexLoginError = onError
   }
 
   func setBackgroundToolCallHandler(_ handler: @escaping ToolCallHandler) {
@@ -1000,6 +1019,20 @@ actor ACPBridge {
   func sendCodexProbe() {
     guard isRunning else { return }
     sendLine("{\"type\":\"codex_init_probe\"}")
+  }
+
+  /// Start the Codex (ChatGPT) OAuth login flow. The bridge will emit
+  /// `codex_login_url` with the browser URL, then `codex_login_complete`
+  /// or `codex_login_error` when done.
+  func sendCodexLogin() {
+    guard isRunning else { return }
+    sendLine("{\"type\":\"codex_login\"}")
+  }
+
+  /// Cancel an in-progress Codex OAuth login flow.
+  func sendCodexLoginCancel() {
+    guard isRunning else { return }
+    sendLine("{\"type\":\"codex_login_cancel\"}")
   }
 
   // MARK: - Private
