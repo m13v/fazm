@@ -13,7 +13,41 @@ console.info = console.error;
 console.warn = console.error;
 console.debug = console.error;
 
+import { execSync } from "child_process";
 import { ClaudeAcpAgent, runAcp } from "@agentclientprotocol/claude-agent-acp/dist/acp-agent.js";
+
+// --- Parent-death watchdog ---
+// If our parent (the acp-bridge index.js, which itself is owned by the Fazm Swift app)
+// dies, our PPID flips to 1 (launchd) and we'd otherwise live forever, holding ~470MB
+// of `claude` CLI plus 4 MCP server children. Poll PPID every 5s and self-terminate.
+// This was the root cause of the 20+ orphan ACP bridge instances observed Apr 30 2026.
+const __watchdogStartPpid = process.ppid;
+function __killChildrenAndExit(reason) {
+  console.error(`[patched-acp] watchdog: ${reason}, killing children and exiting`);
+  // Walk the process tree depth-first so MCP grandchildren also die.
+  // Re-parented children stay in our process group only if we were spawned with
+  // detached:true (we are — see acp-bridge/src/index.ts), so kill(-pgid) helps too.
+  function killTree(pid) {
+    try {
+      const out = execSync(`pgrep -P ${pid}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      const children = out.trim().split("\n").filter(Boolean).map(Number);
+      for (const c of children) killTree(c);
+      try { process.kill(pid, "SIGTERM"); } catch (_) {}
+    } catch (_) { /* pgrep returns 1 when no children — ignore */ }
+  }
+  try { killTree(process.pid); } catch (_) {}
+  // Belt-and-suspenders: signal the whole process group (we are the pgroup leader
+  // because the bridge spawned us with detached:true).
+  try { process.kill(-process.pid, "SIGTERM"); } catch (_) {}
+  setTimeout(() => process.exit(0), 1500).unref();
+}
+setInterval(() => {
+  // PPID==1 means launchd adopted us → original parent died.
+  // PPID changing from non-1 to 1 is the canonical orphan signal on macOS/Linux.
+  if (process.ppid === 1 && __watchdogStartPpid !== 1) {
+    __killChildrenAndExit("parent died (PPID flipped to 1)");
+  }
+}, 5000).unref();
 
 // Patch createSession (called by newSession, resumeSession, loadSession, forkSession)
 // to wrap query.next() for cost/usage capture and SDK event forwarding.
