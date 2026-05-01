@@ -1071,6 +1071,29 @@ class ChatProvider: ObservableObject {
                     ShortcutSettings.shared.updateCodexModels(CodexBackendManager.shared.modelsForPicker)
                 }
             }
+            // Codex login flow handlers — open browser URL, then re-probe on completion.
+            await acpBridge.setCodexLoginHandlers(
+                onUrl: { url in
+                    Task { @MainActor in
+                        if let nsUrl = URL(string: url) {
+                            NSWorkspace.shared.open(nsUrl)
+                        }
+                    }
+                },
+                onComplete: {
+                    Task { @MainActor in
+                        CodexBackendManager.shared.loginCompleted()
+                        // Re-probe so the model picker and status badge update immediately
+                        CodexBackendManager.shared.markProbing()
+                    }
+                    Task { await self.acpBridge.sendCodexProbe() }
+                },
+                onError: { error in
+                    Task { @MainActor in
+                        CodexBackendManager.shared.loginFailed(error: error)
+                    }
+                }
+            )
             // Set up background tool call handler for observer session tool calls
             // (execute_sql, etc.) that arrive when no main query is active
             await acpBridge.setBackgroundToolCallHandler { callId, name, input in
@@ -1233,6 +1256,26 @@ class ChatProvider: ObservableObject {
     func probeCodexBackend() {
         Task {
             await acpBridge.sendCodexProbe()
+        }
+    }
+
+    /// Start the Codex (ChatGPT) OAuth login flow. The bridge opens a local
+    /// callback server, emits the auth URL, and Fazm opens it in the browser.
+    /// When the user completes login, auth.json is written and a re-probe fires.
+    func startCodexLogin() {
+        CodexBackendManager.shared.markLoginInProgress()
+        Task {
+            await acpBridge.sendCodexLogin()
+        }
+    }
+
+    /// Cancel an in-progress Codex login flow.
+    func cancelCodexLogin() {
+        Task {
+            await acpBridge.sendCodexLoginCancel()
+        }
+        Task { @MainActor in
+            CodexBackendManager.shared.loginFailed(error: "Login cancelled")
         }
     }
 
