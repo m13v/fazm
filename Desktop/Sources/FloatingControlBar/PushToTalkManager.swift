@@ -631,10 +631,21 @@ class PushToTalkManager: ObservableObject {
         DetachedChatWindowController.shared.focusInputField(for: overrideState)
       }
       if isShowingResponse {
-        // Set pendingFollowUpText after activation so the onChange handler's
-        // isFollowUpFocused=true is honored (requires active app)
+        // Set pendingFollowUpText after activation so the onChange handler runs
+        // while the app is active. Then re-focus once SwiftUI has settled the
+        // text injection so the caret is visible at the end (otherwise the
+        // floating bar's followup textView ends up with cursor set on a
+        // non-firstResponder view, and the visible caret never appears at end).
+        let captureSendOverride = sendOverrideState
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
           targetState?.pendingFollowUpText = query
+          DispatchQueue.main.async {
+            if captureSendOverride == nil {
+              FloatingControlBarManager.shared.focusInputField()
+            } else if let overrideState = captureSendOverride {
+              DetachedChatWindowController.shared.focusInputField(for: overrideState)
+            }
+          }
         }
       }
     } else {
