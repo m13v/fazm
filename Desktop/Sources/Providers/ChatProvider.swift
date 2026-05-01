@@ -580,6 +580,20 @@ class ChatProvider: ObservableObject {
             return
         }
 
+        // Refuse switch to built-in if cumulative cost is at/over the cap. Without
+        // this guard, users whose personal Claude OAuth is already valid can flip
+        // back to built-in via the Settings picker after every cap fire and bill
+        // another full query each time (observed: 1,080 personal→builtin flips
+        // and 305 over-cap built-in queries on a single user).
+        if newMode == "builtin" && builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
+            log("ChatProvider: Refusing switchBridgeMode(builtin) — cumulative cost $\(String(format: "%.2f", builtinCumulativeCostUsd)) ≥ cap $\(String(format: "%.0f", Self.builtinCostCapUsd))")
+            // Reset @AppStorage so the Settings picker UI snaps back to personal.
+            bridgeMode = "personal"
+            showCreditExhaustedAlert = true
+            pendingBridgeModeSwitch = nil
+            return
+        }
+
         // Defer the switch if a query is in-flight — killing the bridge mid-query
         // causes the query to hang until the process-exit handler fires.
         if isSending {
@@ -614,11 +628,17 @@ class ChatProvider: ObservableObject {
 
             // If the bridge started successfully with existing credentials (no auth_required
             // event fired), clear the credit exhaustion alert since the user can already use
-            // their personal account without any further action.
+            // their personal account without any further action — but only if they are
+            // not already over the cap. Clearing while over cap re-enables the Settings
+            // picker and lets the user toggle back to built-in to bill another query.
             if !isClaudeAuthRequired {
-                log("ChatProvider: Personal bridge started with existing creds, clearing credit exhaustion alert")
-                showCreditExhaustedAlert = false
                 isClaudeConnected = true
+                if builtinCumulativeCostUsd < Self.builtinCostCapUsd {
+                    log("ChatProvider: Personal bridge started with existing creds, clearing credit exhaustion alert")
+                    showCreditExhaustedAlert = false
+                } else {
+                    log("ChatProvider: Personal bridge started with existing creds, but keeping credit exhaustion alert (cumulative $\(String(format: "%.2f", builtinCumulativeCostUsd)) ≥ cap)")
+                }
             }
         }
     }
@@ -1452,10 +1472,18 @@ class ChatProvider: ObservableObject {
         // 4. Update state
         isClaudeConnected = false
 
-        // 5. Switch back to builtin mode and recreate bridge
+        // 5. Switch back to builtin mode and recreate bridge — unless the user is
+        //    already over the built-in cost cap, in which case we keep them on
+        //    personal-without-creds so the next query triggers OAuth re-auth instead
+        //    of silently billing more built-in queries.
         AnalyticsManager.shared.claudeDisconnected()
-        await switchBridgeMode(to: "builtin")
-        log("ChatProvider: Claude account disconnected, switched to builtin mode")
+        if builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
+            log("ChatProvider: Claude disconnected but over cost cap — staying on personal (re-auth required on next query)")
+            showCreditExhaustedAlert = true
+        } else {
+            await switchBridgeMode(to: "builtin")
+            log("ChatProvider: Claude account disconnected, switched to builtin mode")
+        }
     }
 
     /// Check if an error message from the ACP bridge indicates an auth/OAuth failure.
