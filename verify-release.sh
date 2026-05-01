@@ -8,8 +8,15 @@
 
 set -e
 
-DESKTOP_BACKEND_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
-GITHUB_REPO="BasedHardware/omi"
+# Pull FAZM_BACKEND_URL from .env.app so we hit the same backend the app reads.
+if [ -f ".env.app" ]; then
+    set -a
+    source .env.app
+    set +a
+fi
+
+DESKTOP_BACKEND_URL="${FAZM_BACKEND_URL:-https://fazm-backend-472661769323.us-east5.run.app}"
+GITHUB_REPO="mediar-ai/fazm"
 APP_NAME="Fazm"
 VERIFY_DIR="/tmp/fazm-verify-release"
 
