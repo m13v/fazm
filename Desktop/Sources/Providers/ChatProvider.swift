@@ -615,6 +615,10 @@ class ChatProvider: ObservableObject {
         bridgeMode = newMode
         acpBridge = createBridge()
 
+        // Re-filter the model picker — [1m] context variants are hidden in builtin
+        // mode (no entitlement on pooled credits) but exposed in personal mode.
+        ShortcutSettings.shared.refreshContextVariantFilter()
+
         // Re-register global auth handlers
         setupBridgeAuthHandlers()
 
@@ -3305,8 +3309,21 @@ class ChatProvider: ObservableObject {
 
             let errorDurationMs = Int(Date().timeIntervalSince(queryStartTime) * 1000)
             let hadTokens = firstTokenTime != nil
-            logError("Failed to get AI response (after \(errorDurationMs)ms, hadTokens=\(hadTokens), mode=\(bridgeMode))", error: error)
-            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
+            // toolStartTimes still has entries for tools that started but never reported
+            // "completed" — these are the tools running when the error/timeout fired.
+            // Critical for diagnosing 600s inactivity timeouts ("which tool hung?").
+            let toolsRunning = Array(toolStartTimes.keys)
+            logError("Failed to get AI response (after \(errorDurationMs)ms, hadTokens=\(hadTokens), mode=\(bridgeMode), toolsRunning=\(toolsRunning))", error: error)
+            AnalyticsManager.shared.chatAgentError(
+                error: error.localizedDescription,
+                durationMs: errorDurationMs,
+                hadTokens: hadTokens,
+                bridgeMode: bridgeMode,
+                model: ShortcutSettings.shared.selectedModel,
+                toolsRunning: toolsRunning,
+                toolsUsed: toolNames,
+                sessionKey: effectiveKey
+            )
 
             // Show error to user (unless they intentionally stopped)
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
