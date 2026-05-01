@@ -59,24 +59,7 @@ SPARKLE_ZIP_PATH="$BUILD_DIR/Fazm.zip"
 # GitHub Release
 GITHUB_REPO="mediar-ai/fazm"
 
-# Read changelog from CHANGELOG.json
 CHANGELOG_FILE="CHANGELOG.json"
-if [ -f "$CHANGELOG_FILE" ]; then
-    # Get the latest release entry (first in array)
-    CHANGELOG_ITEMS=$(cat "$CHANGELOG_FILE" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-if data.get('releases') and len(data['releases']) > 0:
-    changes = data['releases'][0].get('changes', [])
-    for c in changes:
-        print(c)
-")
-    # Create markdown bullet list for GitHub notes
-    CHANGELOG_MD=$(echo "$CHANGELOG_ITEMS" | sed 's/^/- /')
-else
-    echo "Warning: $CHANGELOG_FILE not found. Using empty changelog."
-    CHANGELOG_MD="- No changelog available"
-fi
 
 # -----------------------------------------------------------------------------
 # Version handling: auto-increment if not specified
@@ -114,6 +97,66 @@ echo "=============================================="
 echo "  Fazm Release Pipeline v$VERSION (build $BUILD_NUMBER)"
 echo "=============================================="
 echo ""
+
+# -----------------------------------------------------------------------------
+# Consolidate CHANGELOG.json: move `unreleased` items into a new `releases[0]`
+# entry for $VERSION. This is what the (missing) desktop_auto_release.yml
+# workflow was supposed to do. Without this, every release ships with the
+# previous release's notes (e.g. v2.7.0 went out with v2.6.6's 2 entries).
+# Idempotent: if releases[0].version is already $VERSION, leave it alone.
+# -----------------------------------------------------------------------------
+if [ -f "$CHANGELOG_FILE" ]; then
+    python3 - "$VERSION" "$CHANGELOG_FILE" <<'PYEOF'
+import json, sys, datetime
+version, path = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    data = json.load(f)
+releases = data.get('releases', [])
+if releases and releases[0].get('version') == version:
+    print(f"  CHANGELOG: releases[0] already at v{version}, skipping consolidation")
+    sys.exit(0)
+unreleased = data.get('unreleased', [])
+if not unreleased:
+    print(f"  CHANGELOG: no unreleased entries to consolidate for v{version}")
+    sys.exit(0)
+new_entry = {
+    'version': version,
+    'date': datetime.date.today().isoformat(),
+    'changes': list(unreleased),
+}
+data.setdefault('releases', []).insert(0, new_entry)
+data['unreleased'] = []
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+print(f"  CHANGELOG: consolidated {len(unreleased)} unreleased entries into releases[0] (v{version})")
+PYEOF
+fi
+
+# Read changelog for $VERSION (now guaranteed to be releases[0] if entries existed)
+if [ -f "$CHANGELOG_FILE" ]; then
+    CHANGELOG_ITEMS=$(python3 - "$VERSION" "$CHANGELOG_FILE" <<'PYEOF'
+import json, sys
+version, path = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    data = json.load(f)
+for r in data.get('releases', []):
+    if r.get('version') == version:
+        for c in r.get('changes', []):
+            print(c)
+        break
+PYEOF
+)
+    if [ -z "$CHANGELOG_ITEMS" ]; then
+        echo "  Warning: no changelog entries found for v$VERSION in $CHANGELOG_FILE"
+        CHANGELOG_MD="- Bug fixes and improvements"
+    else
+        CHANGELOG_MD=$(echo "$CHANGELOG_ITEMS" | sed 's/^/- /')
+    fi
+else
+    echo "Warning: $CHANGELOG_FILE not found. Using empty changelog."
+    CHANGELOG_MD="- No changelog available"
+fi
 
 # -----------------------------------------------------------------------------
 # Step 1.1: Check settings search coverage
