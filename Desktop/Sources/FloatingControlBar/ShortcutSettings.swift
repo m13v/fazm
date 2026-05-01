@@ -233,8 +233,29 @@ class ShortcutSettings: ObservableObject {
         recomputeAvailableModels()
     }
 
+    /// True when the user's current bridge mode is unlikely to have 1M-context entitlement.
+    /// Builtin (pooled) credits don't include 1M-context; only show those variants in personal mode
+    /// where the user's own Claude account may have the entitlement.
+    private static func shouldHide1mVariants() -> Bool {
+        UserDefaults.standard.string(forKey: "bridgeMode") == "builtin"
+    }
+
+    /// Drop [1m] variants from the merged list when the user can't use them.
+    /// Defense-in-depth on top of the bridge auto-fallback (acp-bridge/src/index.ts) —
+    /// hiding the option from the picker means users never select it in the first place.
+    private static func filterContextVariants(_ models: [ModelOption]) -> [ModelOption] {
+        guard shouldHide1mVariants() else { return models }
+        return models.filter { !$0.id.contains("[1m]") }
+    }
+
+    /// Public hook so ChatProvider can trigger a re-filter when bridgeMode changes
+    /// (the static filter reads from UserDefaults at call time).
+    func refreshContextVariantFilter() {
+        recomputeAvailableModels()
+    }
+
     private func recomputeAvailableModels() {
-        let merged = lastClaudeModels + lastCodexModels
+        let merged = Self.filterContextVariants(lastClaudeModels) + lastCodexModels
         guard merged != availableModels else { return }
         availableModels = merged
         let modelDesc = merged.map { "\($0.id) = \($0.label)" }.joined(separator: ", ")
@@ -247,6 +268,14 @@ class ShortcutSettings: ObservableObject {
         if merged.contains(where: { $0.id == normalizedSelection }) {
             selectedModel = normalizedSelection
             log("ShortcutSettings: normalized selectedModel to \(normalizedSelection)")
+        } else if selectedModel.contains("[1m]") {
+            // User had a [1m] variant saved but it's been filtered out (likely switched
+            // to builtin mode where 1M context isn't available). Strip [1m] and retry.
+            let stripped = normalizedSelection.replacingOccurrences(of: "[1m]", with: "")
+            if let fallback = merged.first(where: { $0.id == stripped }) {
+                selectedModel = fallback.id
+                log("ShortcutSettings: dropped [1m] variant \(selectedModel) -> \(fallback.id)")
+            }
         } else if selectedModel.hasPrefix("gpt-"),
                   let preferred = Self.preferredGptModel(in: merged, sameEffortAs: selectedModel) {
             // GPT model was filtered out (e.g. gpt-5.4/high after upgrading to 5.5).
