@@ -2560,12 +2560,10 @@ class ChatProvider: ObservableObject {
             return
         }
 
-        // Pre-query paywall: block the message if no active subscription and free limit exceeded.
-        // Skipped during onboarding so the user can finish the chat flow without being gated.
+        // Pre-query paywall: hard gate. If no active subscription, block immediately.
+        // Skipped only during onboarding so the user can finish the intro chat flow.
         if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-            SubscriptionService.shared.incrementMessageCount()
-            if !SubscriptionService.shared.isActive
-                && SubscriptionService.shared.dailyMessageCount > SubscriptionService.shared.freeMessagesPerDay {
+            if !SubscriptionService.shared.isActive {
                 await SubscriptionService.shared.refreshStatus()
                 if SubscriptionService.shared.shouldShowPaywall() {
                     showPaywall = true
