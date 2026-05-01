@@ -80,6 +80,7 @@ struct AIResponseView: View {
     var onStopAgent: (() -> Void)?
     var onPopOut: (() -> Void)?
     var onConnectClaude: (() -> Void)?
+    var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
     var onChangeWorkspace: (() -> Void)?
 
@@ -403,7 +404,7 @@ struct AIResponseView: View {
 
             Spacer()
 
-            ModelToggleButton(localModel: localModel)
+            ModelToggleButton(localModel: localModel, onCodexLogin: onCodexLogin)
 
             VoiceMuteButton()
 
@@ -1198,21 +1199,36 @@ struct MessageWithCopyButton<Content: View>: View {
 
 struct ModelToggleButton: View {
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+    @ObservedObject private var codexBackend = CodexBackendManager.shared
     /// When provided, reads and writes model selection to this binding instead of the global setting.
     var localModel: Binding<String>?
+    /// Triggered when the user picks a GPT model while Codex is unauthenticated.
+    /// The bar window wires this to `chatProvider.startCodexLogin()`. After OAuth
+    /// completes, ChatProvider applies `pendingPickerModelId` to actually switch
+    /// the picker to the requested model.
+    var onCodexLogin: (() -> Void)?
 
     private var selectedModelId: String {
         localModel?.wrappedValue ?? shortcutSettings.selectedModel
     }
 
     private var selectedModelShortLabel: String {
-        shortcutSettings.shortLabel(for: selectedModelId) ?? "Fast"
+        if codexBackend.loginInProgress, codexBackend.pendingPickerModelId != nil {
+            return "Connecting…"
+        }
+        return shortcutSettings.shortLabel(for: selectedModelId) ?? "Fast"
     }
 
     var body: some View {
         Menu {
             ForEach(shortcutSettings.availableModels) { model in
                 Button {
+                    let needsCodexAuth = model.id.hasPrefix("gpt-") && codexBackend.authMode == "none"
+                    if needsCodexAuth {
+                        codexBackend.pendingPickerModelId = model.id
+                        onCodexLogin?()
+                        return
+                    }
                     if let localModel {
                         localModel.wrappedValue = model.id
                     }
@@ -1222,6 +1238,8 @@ struct ModelToggleButton: View {
                 } label: {
                     if selectedModelId == model.id {
                         Label(model.label, systemImage: "checkmark")
+                    } else if model.id.hasPrefix("gpt-") && codexBackend.authMode == "none" {
+                        Label(model.label + " — Connect…", systemImage: "person.badge.key")
                     } else {
                         Text(model.label)
                     }
