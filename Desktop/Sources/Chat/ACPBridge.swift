@@ -1616,14 +1616,12 @@ actor ACPBridge {
             // without the conversation being killed.
             var deferrals = 0
             let maxDeferrals = 6
-            while box.isPending(generation: gen),
-                  (
-                    (await self?.getSessionAcpToolsRunning(sessionKey) ?? 0) > 0
-                    || (await self?.hasRecentToolActivity() ?? false)
-                  ),
-                  deferrals < maxDeferrals {
+            while box.isPending(generation: gen), deferrals < maxDeferrals {
+              let toolsRunning = await self?.getSessionAcpToolsRunning(sessionKey) ?? 0
+              let recentActivity = await self?.hasRecentToolActivity() ?? false
+              guard toolsRunning > 0 || recentActivity else { break }
               deferrals += 1
-              log("ACPBridge: waitForMessage[\(sessionKey)] timeout deferred (\(deferrals)/\(maxDeferrals))")
+              log("ACPBridge: waitForMessage[\(sessionKey)] timeout deferred (\(deferrals)/\(maxDeferrals)) running=\(toolsRunning) recentActivity=\(recentActivity)")
               try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
             }
             if box.resume(throwing: BridgeError.timeout, ifGeneration: gen) {
