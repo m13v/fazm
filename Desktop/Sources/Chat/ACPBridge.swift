@@ -1158,6 +1158,14 @@ actor ACPBridge {
     sendLine("{\"type\":\"codex_login_cancel\"}")
   }
 
+  /// Disconnect the Codex backend by deleting `~/.codex/auth.json` and
+  /// shutting down any running codex-acp subprocess. The bridge re-probes
+  /// afterwards, so authMode flips back to "none".
+  func sendCodexLogout() {
+    guard isRunning else { return }
+    sendLine("{\"type\":\"codex_logout\"}")
+  }
+
   // MARK: - Private
 
   private func sendLine(_ line: String) {
