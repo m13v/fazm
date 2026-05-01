@@ -53,6 +53,32 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// --- Parent-death watchdog ---
+// If the Fazm Swift app dies (crash, force-kill, run.sh restart without graceful
+// shutdown), our PPID flips to 1 (launchd) and we'd otherwise live forever, dragging
+// the whole patched-acp-entry + claude CLI + 4 MCP servers chain with us. Poll PPID
+// every 5s; on parent death, walk the descendant tree, SIGTERM everyone, then exit.
+// Root cause of the 20+ orphan ACP bridges observed Apr 30 2026.
+const __watchdogStartPpid = process.ppid;
+function __killBridgeTreeAndExit(reason: string): void {
+  console.error(`[bridge] watchdog: ${reason}, killing children and exiting`);
+  function killTree(pid: number) {
+    try {
+      const out = execSync(`pgrep -P ${pid}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      const children = out.trim().split("\n").filter(Boolean).map(Number);
+      for (const c of children) killTree(c);
+      try { process.kill(pid, "SIGTERM"); } catch (_) {}
+    } catch (_) { /* pgrep returns 1 when no children — ignore */ }
+  }
+  try { killTree(process.pid); } catch (_) {}
+  setTimeout(() => process.exit(0), 1500).unref();
+}
+setInterval(() => {
+  if (process.ppid === 1 && __watchdogStartPpid !== 1) {
+    __killBridgeTreeAndExit("parent (Swift app) died, PPID flipped to 1");
+  }
+}, 5000).unref();
+
 // Resolve paths to bundled tools
 const playwrightCli = join(
   __dirname,
