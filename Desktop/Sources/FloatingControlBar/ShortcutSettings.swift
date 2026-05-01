@@ -178,11 +178,15 @@ class ShortcutSettings: ObservableObject {
 
     /// Normalize a model ID: maps legacy full IDs to short aliases that the ACP SDK expects.
     static func normalizeModelId(_ modelId: String) -> String {
+        // Preserve bracket annotations like "[1m]" so context variants (e.g. sonnet[1m])
+        // don't get collapsed into the plain alias.
+        let bracketSuffix = modelId.range(of: #"\[[^\]]+\]"#, options: .regularExpression)
+            .map { String(modelId[$0]) } ?? ""
         // Map legacy full IDs to short aliases
-        if modelId.contains("haiku") { return "haiku" }
-        if modelId.contains("sonnet") { return "sonnet" }
+        if modelId.contains("haiku") { return "haiku" + bracketSuffix }
+        if modelId.contains("sonnet") { return "sonnet" + bracketSuffix }
         // ACP SDK v0.29+ uses "default" for Opus 4.7; migrate stored "opus" to match.
-        if modelId.contains("opus") { return "default" }
+        if modelId.contains("opus") { return "default" + bracketSuffix }
         return modelId
     }
 
