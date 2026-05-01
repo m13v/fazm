@@ -663,10 +663,31 @@ actor ACPBridge {
     }
 
     log("ACPBridge: sweep — found \(orphanPids.count) orphaned process(es): \(orphanPids)")
+
+    // Collect every descendant of every orphan first (so we can SIGKILL them all
+    // in one pass at the end if SIGTERM isn't enough).
+    var allTargets: [Int32] = []
     for orphanPid in orphanPids {
       // Kill the entire subtree (the orphan plus any children it spawned —
       // claude CLI, playwright-mcp, whatsapp-mcp, macos-use, google-workspace).
       killProcessTree(orphanPid)
+      allTargets.append(orphanPid)
+    }
+
+    // SIGTERM-resistant orphans: the patched-acp-entry process and the underlying
+    // claude CLI register their own SIGTERM handlers that try to "gracefully shut
+    // down" by flushing IPC. When orphaned to launchd they have no functional
+    // parent to flush to, so they hang forever instead of exiting. Wait briefly,
+    // then SIGKILL anything still alive (observed Apr 30 2026 — 14 of 20 swept
+    // orphans survived SIGTERM and only died on SIGKILL).
+    Thread.sleep(forTimeInterval: 1.0)
+    var stillAlive: [Int32] = []
+    for pid in allTargets where kill(pid, 0) == 0 {
+      stillAlive.append(pid)
+      kill(pid, SIGKILL)
+    }
+    if !stillAlive.isEmpty {
+      log("ACPBridge: sweep — SIGKILL escalated for \(stillAlive.count) stubborn orphan(s): \(stillAlive)")
     }
   }
 
