@@ -612,6 +612,10 @@ actor ACPBridge {
     ]
 
     // Snapshot all processes with PID, PPID, and full command line.
+    // CRITICAL: read pipe BEFORE waitUntilExit. ps -axo against the whole system
+    // emits >16KB which overflows the default pipe buffer; if we wait first, ps
+    // blocks writing, we block waiting, and the actor's start() deadlocks
+    // (observed Apr 30 2026 — caused 200%+ CPU and stuck bridge launch).
     let pipe = Pipe()
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -622,9 +626,10 @@ actor ACPBridge {
       log("ACPBridge: sweep — failed to run ps: \(error)")
       return
     }
+    // Drain the pipe as ps writes (this also waits for EOF when ps exits).
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()
 
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
     guard let output = String(data: data, encoding: .utf8) else { return }
 
     let myPid = Int32(ProcessInfo.processInfo.processIdentifier)
