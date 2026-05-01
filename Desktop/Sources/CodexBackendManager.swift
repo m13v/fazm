@@ -34,6 +34,10 @@ final class CodexBackendManager: ObservableObject {
     @Published private(set) var authMode: String = "none"
     /// Last probe error (server-side message). nil on success.
     @Published private(set) var lastError: String?
+    /// True while a ChatGPT OAuth login flow is in progress.
+    @Published private(set) var loginInProgress: Bool = false
+    /// Error message from the last failed login attempt. nil on success or no attempt.
+    @Published private(set) var loginError: String?
 
     static let enabledKey = "fazm.codex.enabled"
 
@@ -90,6 +94,24 @@ final class CodexBackendManager: ObservableObject {
     /// Mark a probe as in-flight. Call before sending `codex_init_probe`.
     func markProbing() {
         self.probing = true
+    }
+
+    /// Mark that a Codex login flow has started.
+    func markLoginInProgress() {
+        self.loginInProgress = true
+        self.loginError = nil
+    }
+
+    /// Call when the Codex login flow completes successfully.
+    func loginCompleted() {
+        self.loginInProgress = false
+        self.loginError = nil
+    }
+
+    /// Call when the Codex login flow fails.
+    func loginFailed(error: String) {
+        self.loginInProgress = false
+        self.loginError = error
     }
 
     /// Convenience: only return models if the user has enabled the backend AND
