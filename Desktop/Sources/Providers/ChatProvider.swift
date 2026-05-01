@@ -2467,7 +2467,18 @@ class ChatProvider: ObservableObject {
             }
 
             if let ctx = storeContext {
-                let recent = await ChatMessageStore.loadMessages(context: ctx, limit: 20)
+                // Resolve the current session ID for this window so we only replay
+                // messages from the active conversation, not from previous chats
+                // that share the same taskId (e.g. multiple __floating__ sessions).
+                let currentSessionId: String?
+                if sessionKey == "floating" {
+                    currentSessionId = floatingChatSessionId
+                } else if let key = sessionKey, key.hasPrefix("detached-") {
+                    currentSessionId = UserDefaults.standard.string(forKey: "acpSessionId_\(key)_\(bridgeMode)")
+                } else {
+                    currentSessionId = nil
+                }
+                let recent = await ChatMessageStore.loadMessages(context: ctx, sessionId: currentSessionId, limit: 20)
                 let mapped = recent.compactMap { msg -> (role: String, text: String)? in
                     let role = msg.sender == .user ? "user" : "assistant"
                     let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
