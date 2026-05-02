@@ -3352,10 +3352,11 @@ class ChatProvider: ObservableObject {
                                     await ChatMessageStore.saveMessage(cancelNotice, context: persistContext, sessionId: nil)
                                 }
                             }
-                            // Flip loading state off so the spinner stops; the
-                            // bridge already aborted the query but the UI was
-                            // still waiting for the result handler to fire.
-                            self.isAILoading = false
+                            // Loading state is owned by FloatingControlBarState
+                            // (`isAILoading`), not ChatProvider. The bridge already
+                            // aborted the query, which surfaces a result/error and
+                            // flows through the normal completion path that flips
+                            // the spinner off; we don't need to nudge it here.
                         }
                     }
                 }
