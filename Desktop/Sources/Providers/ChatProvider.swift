@@ -924,6 +924,9 @@ class ChatProvider: ObservableObject {
                     guard let self = self else { return }
                     // Clear saved floating session so the next bridge start creates a fresh
                     // session with the updated system prompt (voice instructions added/removed).
+                    // Drop the primary id only — keep the chain so the next query's
+                    // priorContext lookup still spans the recent history (replay preamble
+                    // will surface it after the bridge spins up the fresh session).
                     UserDefaults.standard.removeObject(forKey: self.floatingSessionIdKey)
                     guard self.acpBridgeStarted else { return }
                     // If a query is in-flight, defer the bridge restart until the query
@@ -1282,13 +1285,15 @@ class ChatProvider: ObservableObject {
 
     /// Reset a named ACP session so the next query starts fresh (no history).
     /// Messages are kept in the DB for history — only the in-memory and ACP state is cleared.
+    /// This is the "New Chat" path — full reset including the session-id chain so the
+    /// next query's priorContext doesn't accidentally replay the old conversation.
     func resetSession(key: String) async {
         await acpBridge.resetSession(key: key)
         if key == "main" {
-            UserDefaults.standard.removeObject(forKey: mainSessionIdKey)
+            Self.clearSessionId(storageKey: mainSessionIdKey)
         }
         if key == "floating" {
-            UserDefaults.standard.removeObject(forKey: floatingSessionIdKey)
+            Self.clearSessionId(storageKey: floatingSessionIdKey)
             UserDefaults.standard.set(true, forKey: Self.floatingChatClearedKey)
             pendingFloatingResume = nil
             // Only remove floating-session messages; preserve detached-session messages
@@ -1304,18 +1309,25 @@ class ChatProvider: ObservableObject {
     /// the detached window continues the same ACP session under a new key,
     /// while the floating bar's key is cleared so the next query starts fresh.
     func transferSession(fromKey: String, toKey: String) {
-        // Move the saved ACP session ID to the new key
+        // Move the saved ACP session ID (and chain) to the new key.
         let sessionIdKey = "acpSessionId_\(toKey)_\(bridgeMode)"
         if fromKey == "floating" {
-            if let savedId = UserDefaults.standard.string(forKey: floatingSessionIdKey) {
-                UserDefaults.standard.set(savedId, forKey: sessionIdKey)
-                log("ChatProvider: Transferred session ID \(savedId) from '\(fromKey)' to '\(toKey)'")
-            } else if let pendingId = pendingFloatingResume {
-                UserDefaults.standard.set(pendingId, forKey: sessionIdKey)
-                log("ChatProvider: Transferred pending resume ID \(pendingId) from '\(fromKey)' to '\(toKey)'")
+            // Carry the existing chain over so the popout's priorContext can span the
+            // full pre-popout conversation, not just the last sessionId.
+            let floatingChain = Self.loadSessionChain(storageKey: floatingSessionIdKey)
+            for id in floatingChain {
+                Self.appendToSessionChain(id, storageKey: sessionIdKey)
             }
-            // Clear the floating key so next floating query starts fresh
-            UserDefaults.standard.removeObject(forKey: floatingSessionIdKey)
+            if let savedId = UserDefaults.standard.string(forKey: floatingSessionIdKey) {
+                Self.persistSessionId(savedId, storageKey: sessionIdKey)
+                log("ChatProvider: Transferred session ID \(savedId) from '\(fromKey)' to '\(toKey)' (chain=\(floatingChain.count + (floatingChain.contains(savedId) ? 0 : 1)))")
+            } else if let pendingId = pendingFloatingResume {
+                Self.persistSessionId(pendingId, storageKey: sessionIdKey)
+                log("ChatProvider: Transferred pending resume ID \(pendingId) from '\(fromKey)' to '\(toKey)' (chain=\(floatingChain.count + (floatingChain.contains(pendingId) ? 0 : 1)))")
+            }
+            // Floating window is now empty — full reset (id + chain) so the next
+            // floating chat is a clean conversation that won't replay popped-out history.
+            Self.clearSessionId(storageKey: floatingSessionIdKey)
             UserDefaults.standard.set(true, forKey: Self.floatingChatClearedKey)
             pendingFloatingResume = nil
             // Re-key existing messages so the detached window's subscriber can find them.
@@ -3063,12 +3075,12 @@ class ChatProvider: ObservableObject {
                             if self.isOnboarding {
                                 OnboardingChatPersistence.saveSessionId(startedSessionId)
                             } else if routingKey == "floating" {
-                                UserDefaults.standard.set(startedSessionId, forKey: self.floatingSessionIdKey)
+                                Self.persistSessionId(startedSessionId, storageKey: self.floatingSessionIdKey)
                             } else if let key = routingKey, key.hasPrefix("detached-") {
-                                UserDefaults.standard.set(startedSessionId, forKey: "acpSessionId_\(key)_\(self.bridgeMode)")
+                                Self.persistSessionId(startedSessionId, storageKey: "acpSessionId_\(key)_\(self.bridgeMode)")
                             } else {
                                 // nil or "main" — main session
-                                UserDefaults.standard.set(startedSessionId, forKey: self.mainSessionIdKey)
+                                Self.persistSessionId(startedSessionId, storageKey: self.mainSessionIdKey)
                             }
                         case .sessionExpired(let oldSessionId, let newSessionId, let contextRestored, let restoredMessageCount, let reason):
                             log("ChatProvider: session expired upstream — old=\(oldSessionId) new=\(newSessionId) restored=\(contextRestored)/\(restoredMessageCount) reason=\(reason)")
@@ -3082,6 +3094,8 @@ class ChatProvider: ObservableObject {
                             )
                             // Persist the new session id so future restarts resume the
                             // replacement session, not the dead one we just abandoned.
+                            // Append to the chain so a SECOND failure can still replay
+                            // priorContext spanning both the dead and new sessionIds.
                             if let key = sessionKey {
                                 let storageKey: String
                                 if key == "floating" {
@@ -3091,9 +3105,9 @@ class ChatProvider: ObservableObject {
                                 } else {
                                     storageKey = self.mainSessionIdKey
                                 }
-                                UserDefaults.standard.set(newSessionId, forKey: storageKey)
+                                Self.persistSessionId(newSessionId, storageKey: storageKey)
                             } else {
-                                UserDefaults.standard.set(newSessionId, forKey: self.mainSessionIdKey)
+                                Self.persistSessionId(newSessionId, storageKey: self.mainSessionIdKey)
                             }
                             // Inject a small inline AI-side notice so the user can SEE that
                             // the session was reset rather than wondering why the assistant
@@ -3252,18 +3266,21 @@ class ChatProvider: ObservableObject {
             let ttftMs = firstTokenTime.map { Int($0.timeIntervalSince(queryStartTime) * 1000) }
             log("Chat response complete (total=\(totalMs)ms, ttft=\(ttftMs.map { "\($0)ms" } ?? "none"), tools=\(toolNames.count), session=\(sessionKey ?? "main"), mode=\(bridgeMode))")
 
-            // Persist the ACP session ID so we can resume after app restart
+            // Persist the ACP session ID so we can resume after app restart.
+            // Also append to the per-window chain — the chain spans every sessionId
+            // this conversation has ever held, so a future recovery's priorContext
+            // load (which filters by the chain) can surface history saved under any
+            // prior sessionId, not just the current head.
             if !queryResult.sessionId.isEmpty {
                 if isOnboarding {
                     OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
                 }
                 if sessionKey == "floating" {
-                    UserDefaults.standard.set(queryResult.sessionId, forKey: floatingSessionIdKey)
+                    Self.persistSessionId(queryResult.sessionId, storageKey: floatingSessionIdKey)
                 } else if let key = sessionKey, key.hasPrefix("detached-") {
-                    let detachedIdKey = "acpSessionId_\(key)_\(bridgeMode)"
-                    UserDefaults.standard.set(queryResult.sessionId, forKey: detachedIdKey)
+                    Self.persistSessionId(queryResult.sessionId, storageKey: "acpSessionId_\(key)_\(bridgeMode)")
                 } else if !isOnboarding && (sessionKey == nil || sessionKey == "main") {
-                    UserDefaults.standard.set(queryResult.sessionId, forKey: mainSessionIdKey)
+                    Self.persistSessionId(queryResult.sessionId, storageKey: mainSessionIdKey)
                 }
             }
 
