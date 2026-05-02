@@ -1660,39 +1660,78 @@ function encodeCwdForClaudeProjects(cwd: string): string {
 }
 
 /**
- * Returns the absolute path to the JSONL transcript for a (sessionId, cwd) pair, or
- * null if the file does not exist on disk.
+ * Returns the absolute path to the on-disk transcript for a sessionId, or null if
+ * the session has no transcript anywhere.
  *
- * Beyond the primary <encoded-cwd> path, this also walks all sibling project dirs under
- * ~/.claude/projects/ as a fallback — the SDK does the same fallback in `w0()` so a
- * session that was created against a slightly different cwd (e.g. before workingDirectory
- * was canonicalized) still resolves. Returns the first non-empty match.
+ * Two backends to consider:
+ *   1. Claude Agent SDK writes JSONLs at `~/.claude/projects/<encoded-cwd>/<id>.jsonl`.
+ *      We check the encoded-cwd path first, then fall back to scanning all sibling
+ *      project dirs (mirroring the SDK's own `w0()` fallback when cwd was different
+ *      at session creation).
+ *   2. Codex (openai-codex via codex-acp) writes JSONLs at
+ *      `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl`. Different naming —
+ *      timestamp-prefixed and date-bucketed. We scan the most recent date dirs first
+ *      since that's where 99% of recent sessions live.
+ *
+ * `cwd` is only used for the Claude fast-path; passing an empty string still works
+ * (we'll fall through to the project-dir scan and the codex scan).
  */
 function findSessionJsonlPath(sessionId: string, cwd: string): string | null {
-  if (!sessionId || !cwd) return null;
+  if (!sessionId) return null;
+  const fs = require("fs");
+  // 1) Claude SDK fast path
   const projectsRoot = join(homedir(), ".claude", "projects");
-  const primary = join(projectsRoot, encodeCwdForClaudeProjects(cwd), `${sessionId}.jsonl`);
-  try {
-    const st = statSync(primary);
-    if (st.isFile() && st.size > 0) return primary;
-  } catch { /* not found — fall through to scan */ }
-  // Fallback scan: ~/.claude/projects/*/<sessionId>.jsonl
-  let entries: string[] = [];
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    entries = require("fs").readdirSync(projectsRoot);
-  } catch { return null; }
-  for (const dir of entries) {
-    const candidate = join(projectsRoot, dir, `${sessionId}.jsonl`);
+  if (cwd) {
+    const primary = join(projectsRoot, encodeCwdForClaudeProjects(cwd), `${sessionId}.jsonl`);
     try {
-      const st = statSync(candidate);
-      if (st.isFile() && st.size > 0) return candidate;
-    } catch { /* keep scanning */ }
+      const st = statSync(primary);
+      if (st.isFile() && st.size > 0) return primary;
+    } catch { /* not found — fall through to scan */ }
   }
+  // 2) Claude SDK fallback scan across sibling project dirs
+  try {
+    for (const dir of fs.readdirSync(projectsRoot)) {
+      const candidate = join(projectsRoot, dir, `${sessionId}.jsonl`);
+      try {
+        const st = statSync(candidate);
+        if (st.isFile() && st.size > 0) return candidate;
+      } catch { /* keep scanning */ }
+    }
+  } catch { /* projects root missing — that's fine, try codex next */ }
+  // 3) Codex sessions: ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<sessionId>.jsonl
+  // Walk newest dates first so a recent session resolves quickly. Bail after a few
+  // empty days to avoid scanning years of old data.
+  const codexRoot = join(homedir(), ".codex", "sessions");
+  try {
+    const years = fs.readdirSync(codexRoot).filter((y: string) => /^\d{4}$/.test(y)).sort().reverse();
+    for (const year of years) {
+      const yearDir = join(codexRoot, year);
+      const months = fs.readdirSync(yearDir).filter((m: string) => /^\d{2}$/.test(m)).sort().reverse();
+      for (const month of months) {
+        const monthDir = join(yearDir, month);
+        const days = fs.readdirSync(monthDir).filter((d: string) => /^\d{2}$/.test(d)).sort().reverse();
+        for (const day of days) {
+          const dayDir = join(monthDir, day);
+          let entries: string[];
+          try { entries = fs.readdirSync(dayDir); } catch { continue; }
+          // Filename pattern: rollout-<isoTs>-<sessionId>.jsonl. Match on the suffix.
+          const suffix = `${sessionId}.jsonl`;
+          const hit = entries.find((e: string) => e.endsWith(suffix));
+          if (hit) {
+            const candidate = join(dayDir, hit);
+            try {
+              const st = statSync(candidate);
+              if (st.isFile() && st.size > 0) return candidate;
+            } catch { /* keep walking */ }
+          }
+        }
+      }
+    }
+  } catch { /* no codex sessions dir or unreadable */ }
   return null;
 }
 
-/** True if the SDK has a real on-disk transcript for this (sessionId, cwd). */
+/** True if either backend (Claude SDK or Codex) has a real transcript for this id. */
 function sessionJsonlExists(sessionId: string, cwd: string): boolean {
   return findSessionJsonlPath(sessionId, cwd) !== null;
 }
