@@ -8,6 +8,17 @@ enum ChatMessageStore {
     static func saveMessage(_ message: ChatMessage, context: String, sessionId: String? = nil) async {
         guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return }
         let sender = message.sender == .user ? "user" : "ai"
+        // If the message carries a system event content block (e.g. session
+        // recovery card, tool hang notice), serialize it into messageText so
+        // the card survives reload. The plain `text` field is empty for
+        // these messages by design (the card has its own title + body).
+        let storedText: String = {
+            if let block = message.contentBlocks.first,
+               case let .systemEvent(_, event) = block {
+                return event.encodeForMessageText()
+            }
+            return message.text
+        }()
         let now = Date()
         do {
             try await dbQueue.write { db in
@@ -17,7 +28,7 @@ enum ChatMessageStore {
                         (taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced, session_id)
                         VALUES (?, ?, ?, ?, ?, ?, 0, ?)
                     """,
-                    arguments: [context, message.id, sender, message.text, message.createdAt, now, sessionId]
+                    arguments: [context, message.id, sender, storedText, message.createdAt, now, sessionId]
                 )
             }
         } catch {
@@ -88,11 +99,29 @@ enum ChatMessageStore {
                 let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
 
                 return rows.map { row in
-                    ChatMessage(
+                    let rawText: String = row["messageText"]
+                    let createdAt: Date = row["createdAt"]
+                    let sender: ChatSender = (row["sender"] as String) == "user" ? .user : .ai
+                    // Detect persisted system event cards (session recovery,
+                    // tool hang cancellation, etc.) and reify them as a
+                    // content block so the renderer shows a card instead of
+                    // an opaque base64 string. See `SystemEvent` for format.
+                    if let event = SystemEvent.decodeFromMessageText(rawText) {
+                        return ChatMessage(
+                            id: row["messageId"],
+                            text: "",
+                            createdAt: createdAt,
+                            sender: sender,
+                            isStreaming: false,
+                            isSynced: true,
+                            contentBlocks: [.systemEvent(id: row["messageId"], event: event)]
+                        )
+                    }
+                    return ChatMessage(
                         id: row["messageId"],
-                        text: row["messageText"],
-                        createdAt: row["createdAt"],
-                        sender: (row["sender"] as String) == "user" ? .user : .ai,
+                        text: rawText,
+                        createdAt: createdAt,
+                        sender: sender,
                         isStreaming: false,
                         isSynced: true
                     )
