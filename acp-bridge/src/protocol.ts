@@ -350,6 +350,24 @@ export interface SessionExpiredMessage {
 }
 
 /**
+ * Emitted by the tool-timeout watchdog when a tool call exceeds its limit and
+ * the bridge auto-cancels the in-flight ACP session. Surfaces the cancel as a
+ * structured event the UI can render as a card so the user understands that
+ * the turn was halted and why, instead of just seeing the error from
+ * `tool_result_display` and a silent stop. Reason is verbose; toolName is
+ * the un-prefixed display name; durationSeconds is the timeout that fired.
+ */
+export interface ToolHangCanceledMessage {
+  type: "tool_hang_canceled";
+  toolName: string;
+  toolUseId: string;
+  durationSeconds: number;
+  reason: string;
+  sessionId?: string;
+  sessionKey?: string;
+}
+
+/**
  * Emitted immediately after `session/new` or `session/resume` succeeds, BEFORE
  * the prompt is sent to the SDK. Lets the Swift client persist the resumable
  * sessionId early, so that any error path (rate limit, credit exhausted,
@@ -427,6 +445,7 @@ export type OutboundMessage =
   | ModelsAvailableMessage
   | McpServersAvailableMessage
   | SessionExpiredMessage
+  | ToolHangCanceledMessage
   | SessionStartedMessage
   | CodexProbeResultMessage
   | CodexLoginUrlMessage
