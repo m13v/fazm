@@ -1641,6 +1641,62 @@ interface WarmupSessionConfig {
 // CLI sessions started from home.
 const DEFAULT_CWD = homedir();
 
+/**
+ * Encode a cwd path the same way the Claude Agent SDK does for ~/.claude/projects/<dir>.
+ * Replaces every non-alphanumeric character with '-'. Mirrors the `A1()` function in
+ * @anthropic-ai/claude-agent-sdk/sdk.mjs (truncation+hash branch is omitted because no
+ * Fazm cwd exceeds 200 chars, but we keep the behavior strict enough to match real paths).
+ *
+ * Used to locate the JSONL transcript for a given sessionId, so we can pre-flight a
+ * session/resume request and detect "phantom" session IDs — IDs that the bridge handed
+ * out (via session/new) and persisted upstream in UserDefaults, but for which the SDK
+ * never wrote a turn to disk (because no prompt completed before bridge restart). On
+ * the next bridge boot, session/resume against a phantom ID is guaranteed to fail with
+ * "Resource not found", which currently propagates as a session_expired event to the
+ * user even though no real conversation history was lost.
+ */
+function encodeCwdForClaudeProjects(cwd: string): string {
+  return cwd.replace(/[^a-zA-Z0-9]/g, "-");
+}
+
+/**
+ * Returns the absolute path to the JSONL transcript for a (sessionId, cwd) pair, or
+ * null if the file does not exist on disk.
+ *
+ * Beyond the primary <encoded-cwd> path, this also walks all sibling project dirs under
+ * ~/.claude/projects/ as a fallback — the SDK does the same fallback in `w0()` so a
+ * session that was created against a slightly different cwd (e.g. before workingDirectory
+ * was canonicalized) still resolves. Returns the first non-empty match.
+ */
+function findSessionJsonlPath(sessionId: string, cwd: string): string | null {
+  if (!sessionId || !cwd) return null;
+  const projectsRoot = join(homedir(), ".claude", "projects");
+  const primary = join(projectsRoot, encodeCwdForClaudeProjects(cwd), `${sessionId}.jsonl`);
+  try {
+    const st = statSync(primary);
+    if (st.isFile() && st.size > 0) return primary;
+  } catch { /* not found — fall through to scan */ }
+  // Fallback scan: ~/.claude/projects/*/<sessionId>.jsonl
+  let entries: string[] = [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    entries = require("fs").readdirSync(projectsRoot);
+  } catch { return null; }
+  for (const dir of entries) {
+    const candidate = join(projectsRoot, dir, `${sessionId}.jsonl`);
+    try {
+      const st = statSync(candidate);
+      if (st.isFile() && st.size > 0) return candidate;
+    } catch { /* keep scanning */ }
+  }
+  return null;
+}
+
+/** True if the SDK has a real on-disk transcript for this (sessionId, cwd). */
+function sessionJsonlExists(sessionId: string, cwd: string): boolean {
+  return findSessionJsonlPath(sessionId, cwd) !== null;
+}
+
 async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig[], models?: string[], stagger?: boolean): Promise<void> {
   const warmCwd = cwd || DEFAULT_CWD;
   try { mkdirSync(warmCwd, { recursive: true }); } catch {}
@@ -1682,7 +1738,16 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
 
           // Resume existing session if ID provided, otherwise create a new one
           let sessionId: string;
-          if (cfg.resume) {
+          // Phantom-session pre-check: an ID can be persisted upstream (in UserDefaults)
+          // even though the SDK never wrote a turn to disk for it. Resuming such an ID
+          // is guaranteed to throw "Resource not found"; skip the round-trip and go
+          // straight to session/new without alarming the user.
+          const resumeJsonlPath = cfg.resume ? findSessionJsonlPath(cfg.resume, warmCwd) : null;
+          const isPhantomResume = !!cfg.resume && !resumeJsonlPath;
+          if (isPhantomResume) {
+            logErr(`Pre-warm: phantom session id ${cfg.resume} (no JSONL on disk for cwd=${warmCwd}); skipping resume, going to session/new (key=${cfg.key})`);
+          }
+          if (cfg.resume && !isPhantomResume) {
             try {
               await acpRequest("session/resume", {
                 sessionId: cfg.resume,
@@ -1690,17 +1755,23 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
                 mcpServers: buildMcpServers("act", warmCwd, cfg.key),
               });
               sessionId = cfg.resume;
-              logErr(`Pre-warm resumed session: ${sessionId} (key=${cfg.key}, model=${cfg.model})`);
+              logErr(`Pre-warm resumed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, jsonl=${resumeJsonlPath})`);
               // Set model after resume — without this the session uses the SDK default (possibly Haiku)
               await acpRequest("session/set_model", { sessionId, modelId: cfg.model });
               logErr(`Pre-warm set_model after resume: ${cfg.model}`);
             } catch (resumeErr) {
-              logErr(`Pre-warm session/resume failed for ${cfg.key}, falling back to session/new: ${resumeErr}`);
+              logErr(`Pre-warm session/resume failed for ${cfg.key} (jsonl existed: ${resumeJsonlPath}), falling back to session/new: ${resumeErr}`);
               const result = (await acpRequest("session/new", sessionParams)) as { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string; description?: string }> } };
               sessionId = result.sessionId;
               if (result.models?.availableModels) emitModelsIfChanged(result.models.availableModels);
               logErr(`Pre-warmed new session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
             }
+          } else if (cfg.resume && isPhantomResume) {
+            // Phantom path: directly create a fresh session, same as the no-resume branch.
+            const result = (await acpRequest("session/new", sessionParams)) as { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string; description?: string }> } };
+            sessionId = result.sessionId;
+            if (result.models?.availableModels) emitModelsIfChanged(result.models.availableModels);
+            logErr(`Pre-warmed new session (after phantom skip): ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
           } else {
             // Retry once after a short delay if session/new fails
             let result: { sessionId: string; models?: { availableModels?: Array<{ modelId: string; name: string; description?: string }> } };
@@ -1865,6 +1936,21 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       recoveryCause = "stuck_session";
       interruptedSessions.delete(msg.resume);
       msg.resume = undefined;
+    }
+    if (msg.resume && !sessionId) {
+      // Phantom-session pre-check: an ID can be persisted upstream (in UserDefaults)
+      // even though the SDK never wrote a turn to disk for it. Resuming such an ID is
+      // guaranteed to throw "Resource not found" → which would cascade as a
+      // user-facing session_expired notice and a priorContext replay even though no
+      // real conversation history was lost. When the JSONL is missing, treat the
+      // persisted ID as never-realized and silently start a fresh session.
+      const resumeJsonlPath = findSessionJsonlPath(msg.resume, requestedCwd);
+      if (!resumeJsonlPath) {
+        logErr(`session/resume skipped: phantom id ${msg.resume} has no JSONL on disk (cwd=${requestedCwd}); going straight to session/new without session_expired (key=${sessionKey})`);
+        msg.resume = undefined;
+        // Note: NOT setting resumeFailedFromId — this is a silent recovery, the user
+        // never had a real session in the first place.
+      }
     }
     if (msg.resume && !sessionId) {
       // Resume a persisted session by ID (survives process restarts via ~/.claude/projects/)
