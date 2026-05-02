@@ -3240,29 +3240,60 @@ class ChatProvider: ObservableObject {
                             } else {
                                 Self.persistSessionId(newSessionId, storageKey: self.mainSessionIdKey)
                             }
-                            // Inject a small inline AI-side notice so the user can SEE that
+                            // Inject a structured system-event card so the user can SEE that
                             // the session was reset rather than wondering why the assistant
                             // sounds confused. Inserted just above the in-flight AI message
                             // so it reads in conversation order. Persisted via the normal
-                            // save path so it survives reload. The bridge's `reason` field
-                            // tells us WHY the recovery happened (upstream expiry vs. stuck
-                            // session vs. other) so the notice can be specific instead of
-                            // a generic "session restored" — the user wanted clarity here.
-                            let restoredSuffix: String = contextRestored
-                                ? " Replayed the last \(restoredMessageCount) message\(restoredMessageCount == 1 ? "" : "s") from local history so we can keep going."
-                                : " No prior context was available locally, so we're starting fresh."
-                            let noticeText = "_(\(reason)\(restoredSuffix))_"
+                            // save path (encoded into messageText with a magic prefix; see
+                            // SystemEvent.encodeForMessageText) so it survives reload.
+                            let kind: SystemEvent.Kind = contextRestored
+                                ? .sessionRecovered
+                                : .sessionRecoveryEmpty
+                            let body: String = contextRestored
+                                ? "\(reason) I replayed the last \(restoredMessageCount) message\(restoredMessageCount == 1 ? "" : "s") from local history so we can keep going."
+                                : "\(reason) No prior context was available locally, so we're starting fresh."
+                            let title: String = contextRestored
+                                ? "Session restored"
+                                : "Session reset"
+                            var details: [String: String] = [
+                                "old session": String(oldSessionId.prefix(8)) + "…",
+                                "new session": String(newSessionId.prefix(8)) + "…",
+                            ]
+                            if contextRestored {
+                                details["restored messages"] = String(restoredMessageCount)
+                            }
+                            if let key = sessionKey {
+                                details["scope"] = key
+                            }
+                            let event = SystemEvent(
+                                kind: kind,
+                                title: title,
+                                body: body,
+                                details: details
+                            )
+                            let noticeId = UUID().uuidString
                             let notice = ChatMessage(
-                                text: noticeText,
+                                id: noticeId,
+                                text: "",
                                 sender: .ai,
                                 isStreaming: false,
                                 isSynced: false,
+                                contentBlocks: [.systemEvent(id: noticeId, event: event)],
                                 sessionKey: sessionKey
                             )
                             if let liveIdx = self.messages.firstIndex(where: { $0.id == aiMessageId }) {
                                 self.messages.insert(notice, at: liveIdx)
                             } else {
                                 self.messages.append(notice)
+                            }
+                            // Persist the card so it survives reload — taskId mirrors the
+                            // sessionKey routing scheme used elsewhere in the provider.
+                            let persistContext: String = {
+                                if let key = sessionKey { return key }
+                                return "main"
+                            }()
+                            Task {
+                                await ChatMessageStore.saveMessage(notice, context: persistContext, sessionId: newSessionId)
                             }
                         }
                     }
