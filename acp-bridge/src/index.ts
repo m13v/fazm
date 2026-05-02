@@ -211,6 +211,19 @@ function startToolTimer(
           unregisterSession(sessionKey);
           imageTurnCounts.delete(sessionKey);
         }
+
+        // Surface the cancel as a structured event so the UI can render a
+        // distinct card. The user wanted tool-hang detection to "cancel
+        // cleanly and visibly" — this is the visible part. tool_result_display
+        // already shows the error inline; this gives the renderer a card.
+        sendWithSession(sessionId, {
+          type: "tool_hang_canceled",
+          toolName: title,
+          toolUseId: toolCallId,
+          durationSeconds: timeoutMs / 1000,
+          reason: `The "${title}" tool didn't respond within ${timeoutMs / 1000}s, so I canceled this turn. You can retry, or adjust the timeout in Settings.`,
+          sessionKey,
+        });
       } else if (!ctx) {
         logErr(
           `Tool watchdog: no active query for session ${sessionId} ` +
