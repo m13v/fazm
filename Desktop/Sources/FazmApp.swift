@@ -134,6 +134,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var newPopOutChatObserver: NSObjectProtocol?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Single-instance lock for production. If another prod Fazm is running,
+        // this hands off focus and exits BEFORE we touch SQLite, the ACP bridge,
+        // or the global hotkey monitor (all of which break under concurrent use).
+        // Dev builds skip the check so multiple dev instances can coexist.
+        InstanceLock.acquireOrHandoff()
+
         // Crash-loop detection must run before ANY other init.
         // If 3+ rapid crashes are detected, this will restore the previous version and terminate.
         UpdateRollbackManager.checkForCrashLoop()
@@ -953,6 +959,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Release the single-instance lock first so a relaunch can acquire it
+        // even if downstream cleanup hangs. Idempotent + guarded by PID check.
+        InstanceLock.release()
+
         // Freeze detached window registry before windows tear down
         DetachedChatWindowController.shared.prepareForTermination()
 
