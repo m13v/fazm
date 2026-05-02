@@ -407,6 +407,72 @@ class ChatProvider: ObservableObject {
     /// resumed by a different mode (builtin API key vs personal OAuth).
     private var floatingSessionIdKey: String { "floatingACPSessionId_\(bridgeMode)" }
     private var mainSessionIdKey: String { "mainACPSessionId_\(bridgeMode)" }
+
+    // MARK: - Session ID chain (rolls forward on upstream resume failures)
+    //
+    // Each window (floating bar, detached popout, main) has a *logical* identity that
+    // outlives the upstream ACP `sessionId`. The ACP sessionId is a transient handle
+    // that the SDK can lose on rate limit, credit exhaust, bridge process restart, or
+    // any session/resume failure. When that happens the bridge creates a fresh
+    // sessionId and replays priorContext as a preamble. Without a chain, the next
+    // priorContext lookup filters by the new sessionId only and the older messages
+    // (stamped with the previous sessionId) are stranded — recovery silently has no
+    // history. The chain is the deduped append-only list of every sessionId this
+    // window has ever owned in this `bridgeMode`, capped at `sessionChainMaxSize` to
+    // bound UserDefaults growth. Reset only on explicit "New Chat" / sign-out.
+    private static let sessionChainMaxSize = 16
+
+    /// Suffix used to derive the chain key from a `acpSessionId_*` storage key.
+    private static let sessionChainSuffix = "_chain"
+
+    /// Derive the chain UserDefaults key for a given primary session-id storage key.
+    private static func chainKey(forStorageKey storageKey: String) -> String {
+        return storageKey + sessionChainSuffix
+    }
+
+    /// Append an ACP session ID to the chain for a given window. No-op if `id` is
+    /// empty or already at the head; older duplicates are de-duplicated.
+    private static func appendToSessionChain(_ id: String, storageKey: String) {
+        let trimmed = id.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let chainK = chainKey(forStorageKey: storageKey)
+        var chain = UserDefaults.standard.stringArray(forKey: chainK) ?? []
+        if chain.last == trimmed { return }
+        chain.removeAll { $0 == trimmed }
+        chain.append(trimmed)
+        if chain.count > sessionChainMaxSize {
+            chain = Array(chain.suffix(sessionChainMaxSize))
+        }
+        UserDefaults.standard.set(chain, forKey: chainK)
+    }
+
+    /// Load the full chain (oldest → newest) for a window's session-id storage key.
+    private static func loadSessionChain(storageKey: String) -> [String] {
+        let chainK = chainKey(forStorageKey: storageKey)
+        return UserDefaults.standard.stringArray(forKey: chainK) ?? []
+    }
+
+    /// Reset the chain for a window. Call this on "New Chat" / clear paths so the
+    /// next conversation starts with a clean priorContext window.
+    private static func resetSessionChain(storageKey: String) {
+        let chainK = chainKey(forStorageKey: storageKey)
+        UserDefaults.standard.removeObject(forKey: chainK)
+    }
+
+    /// Persist a session ID for a window AND append it to the chain in one shot.
+    /// Use everywhere the primary `acpSessionId_*` / floating / main UD key is set.
+    private static func persistSessionId(_ id: String, storageKey: String) {
+        guard !id.isEmpty else { return }
+        UserDefaults.standard.set(id, forKey: storageKey)
+        appendToSessionChain(id, storageKey: storageKey)
+    }
+
+    /// Drop a window's primary session ID AND its chain. Use on "New Chat" /
+    /// sign-out / explicit resets — never on transient failure (rate limit etc).
+    private static func clearSessionId(storageKey: String) {
+        UserDefaults.standard.removeObject(forKey: storageKey)
+        resetSessionChain(storageKey: storageKey)
+    }
     /// Maximum number of messages to restore from local DB on startup
     private static let floatingRestoreLimit = 50
     /// UserDefaults key: when true, the user started a new chat and restore should be skipped
