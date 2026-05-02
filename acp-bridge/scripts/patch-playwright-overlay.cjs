@@ -12,17 +12,23 @@
  * immediate injection for already-loaded pages (the common case at CDP attach).
  *
  * HOW IT WORKS:
- * The patched `create()` callback receives the extension browser, takes
- * `browser.contexts()[0]`, and (before constructing BrowserBackend) sets up
- * the listeners and injects on existing pages.
+ * The patched CLI factory `create()` callback gets the browserContext, then
+ * (when config.extension is true and before constructing BrowserBackend) sets
+ * up page load listeners and injects into already-loaded pages.
+ *
+ * VERSION HISTORY:
+ * - 0.0.71: extension mode had its own separate create() that always called
+ *   browser.contexts()[0]. OLD_BLOCK matched that callback directly.
+ * - 0.0.73: unified CLI factory; browserContext = isolated ? newContext : contexts()[0].
+ *   OLD_BLOCK now targets the two lines just before BrowserBackend construction;
+ *   the injected code guards with `if (config.extension)` so other modes are unaffected.
  *
  * WHEN PLAYWRIGHT UPDATES:
- * @playwright/mcp 0.0.71 collapsed everything into playwright-core's
- * coreBundle.js. If the upstream `if (config.extension) { ... }` block
- * changes shape, the string match below will fail. To fix:
+ * Everything is bundled into playwright-core/lib/coreBundle.js. If the
+ * `browserContext` assignment or `return new BrowserBackend(...)` line changes
+ * shape, the string match below will fail. To fix:
  * 1. Open node_modules/playwright-core/lib/coreBundle.js
- * 2. Find the `if (config.extension) {` block; locate the `create:` callback
- *    that does `browser.contexts()[0]` then `new BrowserBackend(...)`
+ * 2. Find the CLI factory `create:` callback (search for "browserContext = config.browser.isolated")
  * 3. Update OLD_BLOCK below to match the new code
  * 4. Re-run: node scripts/patch-playwright-overlay.cjs
  * 5. Verify with: grep _fazmOverlayScript node_modules/playwright-core/lib/coreBundle.js
@@ -58,23 +64,27 @@ if (code.includes("_fazmOverlayScript")) {
   process.exit(0);
 }
 
-// The extension-mode block in @playwright/mcp 0.0.71 (bundled into
-// playwright-core/lib/coreBundle.js). Indentation matters — this is the
-// exact bundled output. If upstream reformats this, update OLD_BLOCK.
+// The CLI factory create() block in @playwright/mcp 0.0.73 (bundled into
+// playwright-core/lib/coreBundle.js). In 0.0.73 the extension-mode path
+// runs through the shared CLI factory (not a separate extension-only callback
+// as in 0.0.71). The two unique lines below are sufficient to identify the
+// exact spot. If upstream reformats this, update OLD_BLOCK.
+//
+// 0.0.71 shape: separate create() callback hardcoded to browser.contexts()[0]
+// 0.0.73 shape: unified factory; browserContext = isolated ? newContext : contexts()[0]
 const OLD_BLOCK =
-  '        create: async (clientInfo) => {\n' +
-  '          const browser = await createBrowser(config, clientInfo);\n' +
-  '          const browserContext = browser.contexts()[0];\n' +
-  '          return new BrowserBackend(config, browserContext, tools);\n' +
-  '        },';
+  '        const browserContext = config.browser.isolated ? await browser.newContext(config.browser.contextOptions) : browser.contexts()[0];\n' +
+  '        return new BrowserBackend(config, browserContext, tools);\n' +
+  '      },';
 
 const NEW_BLOCK =
-  '        create: async (clientInfo) => {\n' +
-  '          const browser = await createBrowser(config, clientInfo);\n' +
-  '          const browserContext = browser.contexts()[0];\n' +
-  '          // Fazm: inject overlay on every page in extension mode.\n' +
-  '          // addInitScript does NOT work on CDP-connected contexts, so we use\n' +
-  '          // page events + immediate injection for already-loaded pages.\n' +
+  '        const browserContext = config.browser.isolated ? await browser.newContext(config.browser.contextOptions) : browser.contexts()[0];\n' +
+  '        // Fazm: inject overlay on every page in extension mode.\n' +
+  '        // addInitScript does NOT work on CDP-connected contexts (extension mode\n' +
+  '        // uses connectOverCDP), so we hook page load events + inject immediately\n' +
+  '        // into already-loaded pages. Guard with config.extension so this is a\n' +
+  '        // no-op in isolated/persistent/CDP modes.\n' +
+  '        if (config.extension) {\n' +
   '          try {\n' +
   '            const _fazmFs = require("fs");\n' +
   '            const _fazmPath = require("path");\n' +
@@ -91,8 +101,9 @@ const NEW_BLOCK =
   '              browserContext.on("page", (p) => _setupPage(p));\n' +
   '            }\n' +
   '          } catch (e) { /* overlay is optional, never break Playwright */ }\n' +
-  '          return new BrowserBackend(config, browserContext, tools);\n' +
-  '        },';
+  '        }\n' +
+  '        return new BrowserBackend(config, browserContext, tools);\n' +
+  '      },';
 
 if (!code.includes(OLD_BLOCK)) {
   console.error("[patch-overlay] FATAL: extension-mode create() block not found in coreBundle.js.");
