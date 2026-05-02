@@ -40,14 +40,33 @@ enum ChatMessageStore {
     }
 
     static func loadMessages(context: String, sessionId: String? = nil, limit: Int? = nil) async -> [ChatMessage] {
+        // Single-id wrapper kept for callers that don't need a multi-id chain.
+        let sessionIds: [String]? = sessionId.map { [$0] }
+        return await loadMessages(context: context, sessionIds: sessionIds, limit: limit)
+    }
+
+    /// Load messages for a `context`, optionally filtered to a SET of session IDs.
+    /// Used by the recovery path so we can include history from prior sessionIds in
+    /// the same logical conversation chain (a conversation's sessionId rolls over
+    /// when an upstream session expires / hits a rate limit / the bridge restarts;
+    /// without spanning the chain, the recovery preamble would only see post-rollover
+    /// messages and lose the actual conversation context).
+    static func loadMessages(context: String, sessionIds: [String]?, limit: Int? = nil) async -> [ChatMessage] {
         guard let dbQueue = await AppDatabase.shared.getDatabaseQueue() else { return [] }
         do {
             return try await dbQueue.read { db in
+                let sessionFilter: String
+                var args: [DatabaseValueConvertible?] = [context]
+                if let ids = sessionIds, !ids.isEmpty {
+                    let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
+                    sessionFilter = " AND session_id IN (\(placeholders))"
+                    args.append(contentsOf: ids.map { $0 as DatabaseValueConvertible? })
+                } else {
+                    sessionFilter = ""
+                }
                 let sql: String
-                let arguments: StatementArguments
-                let sessionFilter = sessionId != nil ? " AND session_id = ?" : ""
                 if let limit = limit {
-                    // Fetch the N most recent messages for this context+session, then return in chronological order
+                    // Fetch the N most recent messages for this context, then return in chronological order
                     sql = """
                         SELECT * FROM (
                             SELECT messageId, sender, messageText, createdAt
@@ -57,11 +76,7 @@ enum ChatMessageStore {
                             LIMIT ?
                         ) ORDER BY createdAt ASC
                     """
-                    if let sid = sessionId {
-                        arguments = [context, sid, limit]
-                    } else {
-                        arguments = [context, limit]
-                    }
+                    args.append(limit)
                 } else {
                     sql = """
                         SELECT messageId, sender, messageText, createdAt
@@ -69,13 +84,8 @@ enum ChatMessageStore {
                         WHERE taskId = ?\(sessionFilter)
                         ORDER BY createdAt ASC
                     """
-                    if let sid = sessionId {
-                        arguments = [context, sid]
-                    } else {
-                        arguments = [context]
-                    }
                 }
-                let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
+                let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
 
                 return rows.map { row in
                     ChatMessage(
