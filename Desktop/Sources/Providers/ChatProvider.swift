@@ -3286,14 +3286,22 @@ class ChatProvider: ObservableObject {
                             } else {
                                 self.messages.append(notice)
                             }
-                            // Persist the card so it survives reload — taskId mirrors the
-                            // sessionKey routing scheme used elsewhere in the provider.
-                            let persistContext: String = {
-                                if let key = sessionKey { return key }
-                                return "main"
-                            }()
-                            Task {
-                                await ChatMessageStore.saveMessage(notice, context: persistContext, sessionId: newSessionId)
+                            // Persist the card so it survives reload, scoped to the same
+                            // per-window context used elsewhere (`__floating__`, `__<detached-uuid>__`).
+                            // Main session (sessionKey == nil/"main") doesn't persist to
+                            // ChatMessageStore in this codebase — its history lives in
+                            // `self.messages` only — so skip persistence for that case to
+                            // avoid orphan rows that never load back.
+                            if let key = sessionKey, !key.isEmpty {
+                                let persistContext: String
+                                if key == "floating" {
+                                    persistContext = "__floating__"
+                                } else {
+                                    persistContext = "__\(key)__"
+                                }
+                                Task {
+                                    await ChatMessageStore.saveMessage(notice, context: persistContext, sessionId: newSessionId)
+                                }
                             }
                         case .toolHangCanceled(let toolName, _, let durationSeconds, let reason):
                             log("ChatProvider: tool_hang_canceled tool=\(toolName) duration=\(durationSeconds)s — surfacing system card")
@@ -3333,9 +3341,16 @@ class ChatProvider: ObservableObject {
                             } else {
                                 self.messages.append(cancelNotice)
                             }
-                            let persistContext: String = sessionKey ?? "main"
-                            Task {
-                                await ChatMessageStore.saveMessage(cancelNotice, context: persistContext, sessionId: nil)
+                            if let key = sessionKey, !key.isEmpty {
+                                let persistContext: String
+                                if key == "floating" {
+                                    persistContext = "__floating__"
+                                } else {
+                                    persistContext = "__\(key)__"
+                                }
+                                Task {
+                                    await ChatMessageStore.saveMessage(cancelNotice, context: persistContext, sessionId: nil)
+                                }
                             }
                             // Flip loading state off so the spinner stops; the
                             // bridge already aborted the query but the UI was
