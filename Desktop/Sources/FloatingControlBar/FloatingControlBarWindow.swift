@@ -1145,7 +1145,7 @@ class FloatingControlBarManager {
         barWindow.onInterruptAndFollowUp = { [weak chatProvider] message in
             guard let provider = chatProvider else { return }
             Task { @MainActor in
-                await provider.interruptAndSend(message)
+                await provider.interruptAndSend(message, sessionKey: "floating")
             }
         }
 
@@ -1156,7 +1156,7 @@ class FloatingControlBarManager {
         barWindow.onSendNowQueued = { [weak chatProvider] item in
             guard let provider = chatProvider else { return }
             Task { @MainActor in
-                await provider.interruptAndSend(item.text)
+                await provider.interruptAndSend(item.text, sessionKey: "floating")
             }
         }
 
@@ -1783,7 +1783,7 @@ class FloatingControlBarManager {
         window.onInterruptAndFollowUp = { [weak provider] message in
             guard let provider = provider else { return }
             Task { @MainActor in
-                await provider.interruptAndSend(message)
+                await provider.interruptAndSend(message, sessionKey: "floating")
             }
         }
 
@@ -1794,7 +1794,7 @@ class FloatingControlBarManager {
         window.onSendNowQueued = { [weak provider] item in
             guard let provider = provider else { return }
             Task { @MainActor in
-                await provider.interruptAndSend(item.text)
+                await provider.interruptAndSend(item.text, sessionKey: "floating")
             }
         }
 
