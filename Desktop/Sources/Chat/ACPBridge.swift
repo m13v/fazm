@@ -154,6 +154,10 @@ actor ACPBridge {
     /// Session/resume failed upstream — bridge created a fresh session in its place.
     /// `contextRestored` is true when the bridge was able to replay local history.
     case sessionExpired(oldSessionId: String, newSessionId: String, contextRestored: Bool, restoredMessageCount: Int, reason: String)
+    /// Tool-timeout watchdog auto-canceled the in-flight ACP session. Surfaces
+    /// the cancellation as a structured event so the UI can show a system card
+    /// (instead of an opaque silence after the tool's `tool_result_display` error).
+    case toolHangCanceled(toolName: String, toolUseId: String, durationSeconds: Double, reason: String)
     /// New ACP session was created (`isResume == false`) or resumed (`isResume == true`).
     /// Fires BEFORE the first prompt notification, so the client can persist the
     /// sessionId immediately. Without this, errors mid-stream (rate limit, credit
@@ -196,6 +200,7 @@ actor ACPBridge {
     case modelsAvailable(models: [[String: Any]])
     case mcpServersAvailable(servers: [[String: Any]])
     case sessionExpired(oldSessionId: String, newSessionId: String, contextRestored: Bool, restoredMessageCount: Int, reason: String, sessionKey: String?)
+    case toolHangCanceled(toolName: String, toolUseId: String, durationSeconds: Double, reason: String, sessionKey: String?)
     case sessionStarted(sessionId: String, sessionKey: String?, isResume: Bool)
     case codexProbeResult(ok: Bool, agent: String?, authMethods: [String], currentModelId: String?, availableModels: [[String: Any]], authMode: String, error: String?)
     case codexLoginUrl(url: String)
@@ -1106,6 +1111,10 @@ actor ACPBridge {
         log("ACPBridge: session_expired old=\(oldSessionId) new=\(newSessionId) restored=\(contextRestored) count=\(restoredMessageCount)")
         onStatusEvent(.sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason))
 
+      case .toolHangCanceled(let toolName, let toolUseId, let durationSeconds, let reason, _):
+        log("ACPBridge: tool_hang_canceled tool=\(toolName) duration=\(durationSeconds)s reason=\(reason)")
+        onStatusEvent(.toolHangCanceled(toolName: toolName, toolUseId: toolUseId, durationSeconds: durationSeconds, reason: reason))
+
       case .sessionStarted(let sid, let evtKey, let isResume):
         log("ACPBridge: session_started \(isResume ? "(resumed)" : "(new)") sessionId=\(sid) key=\(evtKey ?? "nil")")
         onStatusEvent(.sessionStarted(sessionId: sid, sessionKey: evtKey, isResume: isResume))
@@ -1377,6 +1386,14 @@ actor ACPBridge {
       let reason = dict["reason"] as? String ?? "Previous session expired."
       let sessionKey = dict["sessionKey"] as? String
       return .sessionExpired(oldSessionId: oldSessionId, newSessionId: newSessionId, contextRestored: contextRestored, restoredMessageCount: restoredMessageCount, reason: reason, sessionKey: sessionKey)
+
+    case "tool_hang_canceled":
+      let toolName = dict["toolName"] as? String ?? "(unknown)"
+      let toolUseId = dict["toolUseId"] as? String ?? ""
+      let durationSeconds = dict["durationSeconds"] as? Double ?? 0
+      let reason = dict["reason"] as? String ?? "Tool timed out and the turn was canceled."
+      let sessionKey = dict["sessionKey"] as? String
+      return .toolHangCanceled(toolName: toolName, toolUseId: toolUseId, durationSeconds: durationSeconds, reason: reason, sessionKey: sessionKey)
 
     case "session_started":
       let sessionId = dict["sessionId"] as? String ?? ""
