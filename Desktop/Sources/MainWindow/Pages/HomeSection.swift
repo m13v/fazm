@@ -262,6 +262,7 @@ struct HomeSection: View {
                         }
                     }
 
+                    await AppDatabase.shared.reportQuerySuccess()
                     await MainActor.run {
                         totalMessages = total
                         recentMessages = recent
@@ -269,6 +270,7 @@ struct HomeSection: View {
                     return // success
                 } catch {
                     log("HomeSection: DB read attempt \(attempt) failed: \(error)")
+                    await AppDatabase.shared.reportQueryError(error)
                 }
             }
         }
