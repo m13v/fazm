@@ -578,11 +578,13 @@ class PushToTalkManager: ObservableObject {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     let hasQuery = !query.isEmpty
+    let holdDurationMs = Int((ProcessInfo.processInfo.systemUptime - lastOptionDownTime) * 1000)
 
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode,
       hadTranscript: hasQuery,
-      transcriptLength: query.count
+      transcriptLength: query.count,
+      holdDurationMs: holdDurationMs
     )
 
     let wasPttOpenedChat = pttOpenedChat
@@ -606,8 +608,10 @@ class PushToTalkManager: ObservableObject {
       if wasPttOpenedChat {
         pttOpenedChat = false
       }
-      // Only show silence overlay if PTT was held for at least 3 seconds
-      if holdDuration >= 3.0 {
+      // Show silence overlay for any hold longer than the double-tap window so
+      // users learning the feature get visible feedback (mic picker, audio levels)
+      // instead of a silent no-op.
+      if holdDuration >= 1.0 {
         (sendOverrideState ?? barState)?.showSilenceOverlay()
       }
       return
