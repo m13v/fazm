@@ -645,6 +645,46 @@ class AnalyticsManager {
         PostHogManager.shared.track("chat_agent_error", properties: props)
     }
 
+    /// Fired when an ACP query fails before the success path runs.
+    /// Complementary to `chat_agent_error` — this one is purpose-built for
+    /// answering "why are fresh-install users showing 0 completed queries?"
+    /// by classifying failures into pre_response (warmup-race candidate),
+    /// mid_stream (errored after streaming started), or user_quit (Stop button).
+    func chatAgentQueryFailed(
+        failureStage: String,
+        errorType: String,
+        error: String,
+        durationMs: Int,
+        bridgeMode: String,
+        model: String,
+        bridgeWasStartedAtQueryStart: Bool,
+        hadPartialContent: Bool,
+        toolsRunning: [String]? = nil,
+        toolsUsed: [String]? = nil,
+        sessionKey: String? = nil
+    ) {
+        var props: [String: Any] = [
+            "failure_stage": failureStage,
+            "error_type": errorType,
+            "error": error,
+            "duration_ms": durationMs,
+            "bridge_mode": bridgeMode,
+            "model": model,
+            "bridge_was_started_at_query_start": bridgeWasStartedAtQueryStart,
+            "had_partial_content": hadPartialContent,
+        ]
+        if let toolsRunning = toolsRunning, !toolsRunning.isEmpty {
+            props["tools_running"] = toolsRunning.joined(separator: ",")
+            props["tools_running_count"] = toolsRunning.count
+        }
+        if let toolsUsed = toolsUsed, !toolsUsed.isEmpty {
+            props["tools_used"] = toolsUsed.joined(separator: ",")
+            props["tools_used_count"] = toolsUsed.count
+        }
+        if let sessionKey = sessionKey { props["session_key"] = sessionKey }
+        PostHogManager.shared.track("chat_agent_query_failed", properties: props)
+    }
+
     func chatMessageDropped(messageLength: Int, reason: String) {
         let props: [String: Any] = [
             "message_length": messageLength,
