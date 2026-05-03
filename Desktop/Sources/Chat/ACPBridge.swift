@@ -187,6 +187,10 @@ actor ACPBridge {
     case authTimeout(reason: String)
     case authFailed(reason: String, httpStatus: Int?)
     case creditExhausted(message: String)
+    /// Built-in (bundled API key) mode failed authentication. Bridge is signaling
+    /// that the key may have been rotated or revoked. ChatProvider should refetch
+    /// from `/v1/keys`, restart the bridge, and silently retry — NOT trigger OAuth.
+    case builtinKeyInvalid(message: String)
     case statusChange(status: String?)
     case compactBoundary(trigger: String, preTokens: Int)
     case taskStarted(taskId: String, description: String)
@@ -1316,6 +1320,10 @@ actor ACPBridge {
     case "credit_exhausted":
       let message = dict["message"] as? String ?? "Credit balance exhausted"
       return .creditExhausted(message: message)
+
+    case "builtin_key_invalid":
+      let message = dict["message"] as? String ?? "Built-in API key invalid"
+      return .builtinKeyInvalid(message: message)
 
     case "status_change":
       let status = dict["status"] as? String
