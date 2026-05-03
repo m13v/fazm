@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Show silence overlay (mic picker + audio level) for short PTT taps so users get visible feedback when nothing was captured"
+    "Show silence overlay (mic picker + audio level) for short PTT taps so users get visible feedback when nothing was captured",
+    "Fixed empty conversations tab and silently failing chat saves caused by a poisoned SQLite connection (auto-reopens the database pool after persistent disk I/O errors instead of staying dead until app restart)"
   ],
   "releases": [
     {
