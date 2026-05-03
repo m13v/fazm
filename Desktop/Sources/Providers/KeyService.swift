@@ -61,6 +61,29 @@ final class KeyService {
         await task.value
     }
 
+    /// Force a re-fetch of keys from the backend, ignoring the `hasFetched` cache.
+    /// Use this when the bundled Anthropic key fails authentication mid-session
+    /// (e.g. backend rotated or revoked it). Returns true if the new
+    /// anthropic_api_key differs from the previous value, indicating the
+    /// caller should restart the bridge to pick up the new key.
+    @discardableResult
+    func refetchAnthropicKey() async -> Bool {
+        let oldKey = anthropicAPIKey
+        let oldSuffix = oldKey.map { String($0.suffix(8)) } ?? "nil"
+        log("KeyService: refetchAnthropicKey() — clearing cache (oldKey ending=\(oldSuffix))")
+        // Clear the cache flag and any in-flight task so _doFetch runs fresh.
+        hasFetched = false
+        fetchTask = nil
+        let task = Task { [self] in await _doFetch() }
+        fetchTask = task
+        await task.value
+        let newKey = anthropicAPIKey
+        let changed = (newKey ?? "") != (oldKey ?? "")
+        let newSuffix = newKey.map { String($0.suffix(8)) } ?? "nil"
+        log("KeyService: refetchAnthropicKey() done (newKey ending=\(newSuffix), changed=\(changed))")
+        return changed
+    }
+
     /// Wait for keys to be available (up to `timeout` seconds).
     /// Call this before using `deepgramAPIKey` or `anthropicAPIKey`.
     func ensureKeys(timeout: TimeInterval = 10) async {
