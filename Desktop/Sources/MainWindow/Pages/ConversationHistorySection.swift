@@ -318,6 +318,7 @@ struct ConversationHistorySection: View {
                     }
                 }
 
+                await AppDatabase.shared.reportQuerySuccess()
                 await MainActor.run {
                     // Only reassign if contents differ. Otherwise the array gets a fresh
                     // identity every 10s and ForEach re-diffs the entire list, churning
@@ -331,6 +332,7 @@ struct ConversationHistorySection: View {
                 }
             } catch {
                 logError("ConversationHistorySection: Failed to load conversations", error: error)
+                await AppDatabase.shared.reportQueryError(error)
                 await MainActor.run { isLoading = false }
             }
         }
