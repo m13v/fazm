@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Show silence overlay (mic picker + audio level) for short PTT taps so users get visible feedback when nothing was captured",
-    "Fixed empty conversations tab and silently failing chat saves caused by a poisoned SQLite connection (auto-reopens the database pool after persistent disk I/O errors instead of staying dead until app restart)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.7.3",
+      "date": "2026-05-03",
+      "changes": [
+        "Show silence overlay (mic picker + audio level) for short PTT taps so users get visible feedback when nothing was captured",
+        "Fixed empty conversations tab and silently failing chat saves caused by a poisoned SQLite connection (auto-reopens the database pool after persistent disk I/O errors instead of staying dead until app restart)"
+      ]
+    },
     {
       "version": "2.7.2",
       "date": "2026-05-02",
