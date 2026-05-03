@@ -49,8 +49,25 @@ actor AppDatabase {
     /// Whether the database has been successfully initialized
     var isInitialized: Bool { dbQueue != nil }
 
-    /// Get the database pool for other storage actors
-    func getDatabaseQueue() -> DatabasePool? {
+    /// Get the database pool for other storage actors.
+    ///
+    /// Auto-reinitializes if the pool was closed by `reportQueryError()` after
+    /// hitting the IOERR/CORRUPT threshold. Without this, a transient kernel
+    /// I/O hiccup that trips recovery would silently brick all chat persistence
+    /// until app restart (storage callers would see `nil` forever, since nobody
+    /// re-calls `initialize()` after the recovery close).
+    ///
+    /// Idempotent when the pool is already alive: `initialize()` early-returns
+    /// in that case (line ~283), so the auto-heal path is zero-cost on success.
+    func getDatabaseQueue() async -> DatabasePool? {
+        if dbQueue == nil {
+            do {
+                try await initialize()
+            } catch {
+                logError("RewindDatabase: auto-reinit in getDatabaseQueue failed", error: error)
+                return nil
+            }
+        }
         return dbQueue
     }
 
