@@ -1355,6 +1355,17 @@ class ChatProvider: ObservableObject {
             // Resume is now handled at warmup — clear pendingFloatingResume so query() doesn't try again
             pendingFloatingResume = nil
 
+            // Telemetry: bridge is fully warm and ready to handle queries.
+            // Duration since warmupStartTime = the cold-start window during which
+            // any incoming query would race the warmup (and fail with
+            // failure_stage="pre_response").
+            let warmupDurationMs = Int(Date().timeIntervalSince(warmupStartTime) * 1000)
+            AnalyticsManager.shared.bridgeWarmupReady(
+                bridgeMode: bridgeMode,
+                durationMs: warmupDurationMs,
+                success: true
+            )
+
             // Always auto-probe Codex at startup so GPT models appear in the picker
             // even before the user authenticates. Picking a GPT model then triggers
             // the OAuth flow via ModelToggleButton.onCodexLogin. Probe is fire-and-forget;
@@ -1376,6 +1387,15 @@ class ChatProvider: ObservableObject {
         } catch {
             logError("Failed to start ACP bridge", error: error)
             errorMessage = "AI not available: \(error.localizedDescription)"
+            // Telemetry: warmup failed entirely — user is stuck without an
+            // agent until the next ensureBridgeStarted() retry.
+            let warmupDurationMs = Int(Date().timeIntervalSince(warmupStartTime) * 1000)
+            AnalyticsManager.shared.bridgeWarmupReady(
+                bridgeMode: bridgeMode,
+                durationMs: warmupDurationMs,
+                success: false,
+                error: error.localizedDescription
+            )
             return false
         }
     }
