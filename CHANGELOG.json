@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed confusing \"reconnect Claude account\" error shown on built-in mode after backend key rotation; the app now silently refetches the new key and retries"
+  ],
   "releases": [
     {
       "version": "2.7.3",
