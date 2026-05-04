@@ -693,6 +693,38 @@ class AnalyticsManager {
         PostHogManager.shared.track("chat_message_dropped", properties: props)
     }
 
+    /// Fired at the moment `ensureBridgeStarted()` decides to spin up the ACP
+    /// bridge. Pair with `bridge_warmup_ready` (or its absence) to measure the
+    /// cold-start window — i.e. how long the user is exposed to the warmup-race
+    /// failure mode before the bridge is fully usable.
+    func bridgeWarmupStarted(bridgeMode: String) {
+        let props: [String: Any] = [
+            "bridge_mode": bridgeMode,
+        ]
+        PostHogManager.shared.track("bridge_warmup_started", properties: props)
+    }
+
+    /// Fired when ACP bridge warmup finishes (success or failure).
+    /// `success=false` means the bridge.start() / warmupSession() path threw —
+    /// users are stuck without a working agent until the next retry.
+    /// Subtract this event's timestamp from `bridge_warmup_started` to get
+    /// the cold-start latency distribution; correlate failures here with
+    /// `chat_agent_query_failed (failure_stage="pre_response")`.
+    func bridgeWarmupReady(
+        bridgeMode: String,
+        durationMs: Int,
+        success: Bool,
+        error: String? = nil
+    ) {
+        var props: [String: Any] = [
+            "bridge_mode": bridgeMode,
+            "duration_ms": durationMs,
+            "success": success,
+        ]
+        if let error = error { props["error"] = error }
+        PostHogManager.shared.track("bridge_warmup_ready", properties: props)
+    }
+
     // MARK: - Conversation Events (Additional)
 
     func conversationReprocessed(conversationId: String, appId: String) {
