@@ -1168,6 +1168,14 @@ class ChatProvider: ObservableObject {
 
         guard !acpBridgeStarted else { return true }
 
+        // Telemetry: bridge_warmup_started/_ready bracket the cold-start window
+        // so we can directly measure the warmup-race risk window. Pair with
+        // chat_agent_query_failed (failure_stage="pre_response",
+        // bridge_was_started_at_query_start=false) to compute exactly how often
+        // a user types and hits send before warmup finishes.
+        let warmupStartTime = Date()
+        AnalyticsManager.shared.bridgeWarmupStarted(bridgeMode: bridgeMode)
+
         // Ensure API keys are fetched before checking availability
         await KeyService.shared.ensureKeys()
 
