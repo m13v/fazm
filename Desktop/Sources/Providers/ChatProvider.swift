@@ -1347,6 +1347,33 @@ class ChatProvider: ObservableObject {
                 userName: chatObserverUserName,
                 databaseSchema: cachedDatabaseSchema
             )
+            // Register warmup-complete handler BEFORE sending the warmup message.
+            // The bridge's `preWarmSession` is async — we cannot block on it here
+            // without serializing UI startup. The handler fires when the bridge
+            // signals `warmup_complete`, giving us the true cold-start duration
+            // (subprocess spawn + `session/new` for every pre-warmed key).
+            let capturedBridgeMode = bridgeMode
+            let warmupStartTimeForHandler = warmupStartTime
+            await acpBridge.setWarmupCompleteHandler { durationMs, sessionKeys, ok, error in
+                Task { @MainActor in
+                    // Prefer the bridge-measured duration (post-message-receive to
+                    // post-prewarm-resolved). Fall back to wall-clock measurement
+                    // from Swift if the bridge didn't supply it. The wall-clock
+                    // value INCLUDES Swift→bridge IPC + subprocess spawn so it's
+                    // the more user-relevant number — log both.
+                    let swiftMeasuredMs = Int(Date().timeIntervalSince(warmupStartTimeForHandler) * 1000)
+                    let bridgeMeasuredMs = Int(durationMs)
+                    AnalyticsManager.shared.bridgeWarmupReady(
+                        bridgeMode: capturedBridgeMode,
+                        durationMs: swiftMeasuredMs,
+                        bridgeDurationMs: bridgeMeasuredMs,
+                        sessionKeys: sessionKeys,
+                        success: ok,
+                        error: error
+                    )
+                    log("ChatProvider: bridge_warmup_ready swiftMs=\(swiftMeasuredMs) bridgeMs=\(bridgeMeasuredMs) ok=\(ok) sessions=\(sessionKeys.joined(separator: ","))")
+                }
+            }
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
                 .init(key: "main", model: "claude-sonnet-4-6", systemPrompt: mainSystemPrompt, resume: savedMainSessionId),
                 .init(key: "floating", model: "claude-sonnet-4-6", systemPrompt: floatingSystemPrompt, resume: savedFloatingSessionId),
@@ -1354,17 +1381,6 @@ class ChatProvider: ObservableObject {
             ])
             // Resume is now handled at warmup — clear pendingFloatingResume so query() doesn't try again
             pendingFloatingResume = nil
-
-            // Telemetry: bridge is fully warm and ready to handle queries.
-            // Duration since warmupStartTime = the cold-start window during which
-            // any incoming query would race the warmup (and fail with
-            // failure_stage="pre_response").
-            let warmupDurationMs = Int(Date().timeIntervalSince(warmupStartTime) * 1000)
-            AnalyticsManager.shared.bridgeWarmupReady(
-                bridgeMode: bridgeMode,
-                durationMs: warmupDurationMs,
-                success: true
-            )
 
             // Always auto-probe Codex at startup so GPT models appear in the picker
             // even before the user authenticates. Picking a GPT model then triggers
