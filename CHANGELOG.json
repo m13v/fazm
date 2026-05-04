@@ -1,11 +1,16 @@
 {
-  "unreleased": [
-    "Fixed confusing \"reconnect Claude account\" error shown on built-in mode after backend key rotation; the app now silently refetches the new key and retries",
-    "Removed the 60-second auto-cancel that was killing slow Opus / extended-thinking responses mid-think",
-    "Fixed empty \"Failed to get a response\" after a chat reconnect; the bridge now retries when the model returns nothing, and re-frames the replayed transcript so the model continues the work instead of treating it as already done",
-    "Fixed Pro subscribers being incorrectly told their built-in credits had run out and getting forced onto their personal Claude account"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.8.0",
+      "date": "2026-05-04",
+      "changes": [
+        "Fixed confusing \"reconnect Claude account\" error shown on built-in mode after backend key rotation; the app now silently refetches the new key and retries",
+        "Removed the 60-second auto-cancel that was killing slow Opus / extended-thinking responses mid-think",
+        "Fixed empty \"Failed to get a response\" after a chat reconnect; the bridge now retries when the model returns nothing, and re-frames the replayed transcript so the model continues the work instead of treating it as already done",
+        "Fixed Pro subscribers being incorrectly told their built-in credits had run out and getting forced onto their personal Claude account"
+      ]
+    },
     {
       "version": "2.7.3",
       "date": "2026-05-03",
