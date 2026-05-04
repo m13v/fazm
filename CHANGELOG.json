@@ -1,6 +1,8 @@
 {
   "unreleased": [
-    "Fixed confusing \"reconnect Claude account\" error shown on built-in mode after backend key rotation; the app now silently refetches the new key and retries"
+    "Fixed confusing \"reconnect Claude account\" error shown on built-in mode after backend key rotation; the app now silently refetches the new key and retries",
+    "Removed the 60-second auto-cancel that was killing slow Opus / extended-thinking responses mid-think",
+    "Fixed empty \"Failed to get a response\" after a chat reconnect; the bridge now retries when the model returns nothing, and re-frames the replayed transcript so the model continues the work instead of treating it as already done"
   ],
   "releases": [
     {
