@@ -639,6 +639,13 @@ class ChatProvider: ObservableObject {
     /// Cumulative cost tracked locally (seeded from Firestore on startup)
     @AppStorage("builtinCumulativeCostUsd") var builtinCumulativeCostUsd: Double = 0.0
 
+    /// Whether the user is over the built-in cost cap. Pro subscribers are
+    /// granted unlimited built-in usage, so the cap doesn't apply to them.
+    var isOverBuiltinCap: Bool {
+        guard builtinCumulativeCostUsd >= Self.builtinCostCapUsd else { return false }
+        return !SubscriptionService.shared.isActive
+    }
+
     /// Last time the built-in API key was refetched after an auth failure.
     /// Caps the silent refetch+retry to once per 30 seconds so a backend that
     /// keeps returning a bad key (or a real account problem) cannot spin in an
@@ -740,7 +747,7 @@ class ChatProvider: ObservableObject {
         // back to built-in via the Settings picker after every cap fire and bill
         // another full query each time (observed: 1,080 personal→builtin flips
         // and 305 over-cap built-in queries on a single user).
-        if newMode == "builtin" && builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
+        if newMode == "builtin" && isOverBuiltinCap {
             log("ChatProvider: Refusing switchBridgeMode(builtin) — cumulative cost $\(String(format: "%.2f", builtinCumulativeCostUsd)) ≥ cap $\(String(format: "%.0f", Self.builtinCostCapUsd))")
             // Reset @AppStorage so the Settings picker UI snaps back to personal.
             bridgeMode = "personal"
@@ -792,7 +799,7 @@ class ChatProvider: ObservableObject {
             // picker and lets the user toggle back to built-in to bill another query.
             if !isClaudeAuthRequired {
                 isClaudeConnected = true
-                if builtinCumulativeCostUsd < Self.builtinCostCapUsd {
+                if !isOverBuiltinCap {
                     log("ChatProvider: Personal bridge started with existing creds, clearing credit exhaustion alert")
                     showCreditExhaustedAlert = false
                 } else {
@@ -1735,7 +1742,7 @@ class ChatProvider: ObservableObject {
         //    personal-without-creds so the next query triggers OAuth re-auth instead
         //    of silently billing more built-in queries.
         AnalyticsManager.shared.claudeDisconnected()
-        if builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
+        if isOverBuiltinCap {
             log("ChatProvider: Claude disconnected but over cost cap — staying on personal (re-auth required on next query)")
             showCreditExhaustedAlert = true
         } else {
@@ -2202,8 +2209,9 @@ class ChatProvider: ObservableObject {
                 self.builtinCumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded builtin cumulative cost from Firestore: $\(String(format: "%.4f", serverCost))")
 
-                // If already over cap and still in builtin mode, switch immediately
-                if self.bridgeMode == "builtin" && serverCost >= Self.builtinCostCapUsd {
+                // If already over cap and still in builtin mode, switch immediately.
+                // Pro subscribers get unlimited built-in usage, so the cap doesn't apply.
+                if self.bridgeMode == "builtin" && self.isOverBuiltinCap {
                     log("ChatProvider: Builtin cost already at $\(String(format: "%.2f", serverCost)) on startup — switching to personal mode")
                     self.showCreditExhaustedAlert = true
                     Task { await self.switchBridgeMode(to: "personal") }
@@ -2881,8 +2889,9 @@ class ChatProvider: ObservableObject {
             log("ChatProvider: Prepared \(priorContextForBridge?.count ?? 0) priorContext entries (\(resumeDesc))")
         }
 
-        // Pre-query guard: check if builtin cost cap is reached
-        if bridgeMode == "builtin" && builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
+        // Pre-query guard: check if builtin cost cap is reached.
+        // Pro subscribers get unlimited built-in usage, so the cap is bypassed for them.
+        if bridgeMode == "builtin" && isOverBuiltinCap {
             log("ChatProvider: Builtin cost cap reached ($\(String(format: "%.2f", builtinCumulativeCostUsd))/$\(String(format: "%.0f", Self.builtinCostCapUsd))) — switching to personal mode")
             showCreditExhaustedAlert = true
             await switchBridgeMode(to: "personal")
@@ -3633,10 +3642,11 @@ class ChatProvider: ObservableObject {
             }
             sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
 
-            // Post-query: accumulate cost and check cap (builtin mode only)
+            // Post-query: accumulate cost and check cap (builtin mode only).
+            // Pro subscribers get unlimited built-in usage, so the cap doesn't fire.
             if isBuiltinMode {
                 builtinCumulativeCostUsd += queryResult.costUsd
-                if builtinCumulativeCostUsd >= Self.builtinCostCapUsd {
+                if isOverBuiltinCap {
                     log("ChatProvider: Builtin cost cap reached after query ($\(String(format: "%.2f", builtinCumulativeCostUsd))) — switching to personal mode")
                     showCreditExhaustedAlert = true
                     AnalyticsManager.shared.creditExhausted(previousMode: bridgeMode)
