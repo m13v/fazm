@@ -2402,7 +2402,14 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         if (
           wasInterrupted &&
           !isNewSession &&
-          _retryDepth < MAX_QUERY_RETRIES
+          // Cap at one cascade per user prompt (May 4 2026): previously this
+          // used `< MAX_QUERY_RETRIES` (=2) which let recovery sessions trigger
+          // additional recoveries, producing 3 sessions in ~13s for one prompt.
+          // The cascade is also what enabled toxic-preamble feedback (each
+          // recovery's partial assistant turn became next recovery's
+          // priorContext). One recovery is enough; if that also fails we
+          // deliver the empty result and let the UI surface the error.
+          _retryDepth < 1
         ) {
           const inputTokens = promptResult.usage?.inputTokens ?? 0;
           // Heuristic: a real prompt has at least ~5 input tokens of overhead
@@ -2512,7 +2519,14 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           fullText.length === 0 &&
           promptResult.stopReason === "end_turn" &&
           (!isNewSession || recoveryCause !== null) &&
-          _retryDepth < MAX_QUERY_RETRIES
+          // Cap at one cascade per user prompt (May 4 2026): previously this
+          // used `< MAX_QUERY_RETRIES` (=2) which let recovery sessions trigger
+          // additional recoveries when their preamble framing produced another
+          // empty turn. Combined with the toxic-trailing-assistant filter
+          // (lines 2125+), one recovery now reliably succeeds; if it doesn't,
+          // delivering an empty result is preferable to spawning a third
+          // session that inherits a polluted priorContext.
+          _retryDepth < 1
         );
         if (isEmptyAssistantTurn) {
           logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms (notifications=${notificationCount}, outputTokens=${outputTokens}) — session ${sessionId} is poisoned. Forcing fresh session with priorContext replay (depth=${_retryDepth}).`);
