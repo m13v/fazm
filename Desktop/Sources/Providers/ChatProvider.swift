@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import GRDB
+import Observation
 import Sentry
 
 extension Notification.Name {
