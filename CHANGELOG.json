@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed cross-scope chat contamination: detached pop-outs no longer inherit the floating bar transcript in their system prompt, and the recovery preamble now strips toxic [Interrupted] markers, so conversations resume cleanly instead of replying with leftover ping/pong text",
+    "Capped chat recovery to one session restart per prompt to prevent cascading recoveries that produced 2-3 fresh sessions per request"
+  ],
   "releases": [
     {
       "version": "2.8.0",
