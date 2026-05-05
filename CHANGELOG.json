@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed pop-out chat continuing the previous task when you sent a fresh short message after a long tool-heavy turn was interrupted; the recovery now drops the unreliable prior assistant turn and tells the model to answer your current message directly instead of resuming the old work",
-    "Fixed Stop button leaving the chat wedged when a tool was hung; clicking Stop now reliably frees the session so your next message sends right away instead of being silently queued behind a hanging tool"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.8.2",
+      "date": "2026-05-05",
+      "changes": [
+        "Fixed pop-out chat continuing the previous task when you sent a fresh short message after a long tool-heavy turn was interrupted; the recovery now drops the unreliable prior assistant turn and tells the model to answer your current message directly instead of resuming the old work",
+        "Fixed Stop button leaving the chat wedged when a tool was hung; clicking Stop now reliably frees the session so your next message sends right away instead of being silently queued behind a hanging tool"
+      ]
+    },
     {
       "version": "2.8.1",
       "date": "2026-05-05",
