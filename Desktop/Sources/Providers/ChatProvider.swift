@@ -352,6 +352,66 @@ enum ChatSender: Equatable {
     case ai
 }
 
+/// Observes a ChatMessage's @Observable properties and re-fires `onChange`
+/// whenever a tracked field mutates. Auto-re-arms after each fire, so one
+/// observer sees the entire stream of token deltas for the lifetime of the
+/// message.
+///
+/// Use this when you need to react to streaming updates from a controller
+/// (Combine sink, window controller) — somewhere outside a SwiftUI view body.
+/// Inside view bodies, just read the property directly: @Observable handles
+/// invalidation automatically and per-property.
+///
+/// Why this exists: with ChatMessage as a reference type, mutating
+/// `messages[i].text += delta` no longer fires `@Published` on the messages
+/// array (the array's element refs are unchanged). That's the whole point —
+/// streaming token writes shouldn't churn the global publisher. But code that
+/// previously relied on per-token `.sink` callbacks (e.g. updating
+/// `state.isAILoading` when content first arrives) needs a granular signal.
+/// MessageObserver provides that signal, scoped to one message.
+@MainActor
+final class MessageObserver {
+    private weak var message: ChatMessage?
+    private let onChange: (ChatMessage) -> Void
+    private var isCancelled = false
+
+    init(message: ChatMessage, onChange: @escaping (ChatMessage) -> Void) {
+        self.message = message
+        self.onChange = onChange
+        // Fire once immediately so the subscriber syncs with the message's
+        // current state, then arm tracking for subsequent mutations.
+        onChange(message)
+        arm()
+    }
+
+    func cancel() {
+        isCancelled = true
+        message = nil
+    }
+
+    private func arm() {
+        guard !isCancelled, let message else { return }
+        withObservationTracking {
+            // Reading these properties registers tracking. Token deltas append
+            // to text/contentBlocks; isStreaming flips at end of stream;
+            // attachments/citations land asynchronously.
+            _ = message.text
+            _ = message.contentBlocks
+            _ = message.isStreaming
+            _ = message.attachments
+            _ = message.citations
+        } onChange: { [weak self] in
+            // Observation onChange may fire on any actor; hop back to main
+            // before touching SwiftUI state. Re-arm after handling.
+            Task { @MainActor [weak self] in
+                guard let self, let msg = self.message, !self.isCancelled else { return }
+                self.onChange(msg)
+                self.arm()
+            }
+        }
+    }
+}
+
 extension ChatMessage {
     /// Convert a backend message to a local ChatMessage
     init(from db: ChatMessageDB) {
