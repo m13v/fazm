@@ -413,8 +413,11 @@ final class MessageObserver {
 }
 
 extension ChatMessage {
-    /// Convert a backend message to a local ChatMessage
-    init(from db: ChatMessageDB) {
+    /// Convert a backend message to a local ChatMessage.
+    ///
+    /// `convenience` is required because ChatMessage is now a reference type
+    /// and Swift forbids designated inits in extensions of classes.
+    convenience init(from db: ChatMessageDB) {
         self.init(
             id: db.id,
             text: db.text,
@@ -4410,7 +4413,7 @@ class ChatProvider: ObservableObject {
 
                 // Inject all cards as a single grouped exchange
                 await MainActor.run {
-                    var chatObserverMsg = ChatMessage(text: "", sender: .ai)
+                    let chatObserverMsg = ChatMessage(text: "", sender: .ai)
                     chatObserverMsg.contentBlocks = blocks
 
                     if let barState = FloatingControlBarManager.shared.barState {
