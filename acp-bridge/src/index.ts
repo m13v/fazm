@@ -1923,24 +1923,46 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
 
           // Resume existing session if ID provided, otherwise create a new one
           let sessionId: string;
+          // Resolve the cwd this session was originally created with (handles
+          // bridge-restart case where warmCwd no longer matches the cwd at
+          // session/new time). Falls back to warmCwd if we have no record.
+          let warmResumeCwd = warmCwd;
+          if (cfg.resume) {
+            const recordedCwd = lookupCwdForSessionId(cfg.resume);
+            if (recordedCwd && recordedCwd !== warmCwd) {
+              logErr(`[CWD-RECOVERY] pre-warm ${cfg.resume.slice(0, 8)}: using recorded cwd ${recordedCwd} (warmCwd=${warmCwd}, key=${cfg.key})`);
+              warmResumeCwd = recordedCwd;
+            }
+          }
           // Phantom-session pre-check: an ID can be persisted upstream (in UserDefaults)
           // even though the SDK never wrote a turn to disk for it. Resuming such an ID
           // is guaranteed to throw "Resource not found"; skip the round-trip and go
           // straight to session/new without alarming the user.
-          const resumeJsonlPath = cfg.resume ? findSessionJsonlPath(cfg.resume, warmCwd) : null;
+          const resumeJsonlPath = cfg.resume ? findSessionJsonlPath(cfg.resume, warmResumeCwd) : null;
           const isPhantomResume = !!cfg.resume && !resumeJsonlPath;
           if (isPhantomResume) {
-            logErr(`Pre-warm: phantom session id ${cfg.resume} (no JSONL on disk for cwd=${warmCwd}); skipping resume, going to session/new (key=${cfg.key})`);
+            logErr(`Pre-warm: phantom session id ${cfg.resume} (no JSONL on disk for cwd=${warmResumeCwd}); skipping resume, going to session/new (key=${cfg.key})`);
+          }
+          // Backstop: if we found the JSONL but had no recorded cwd, extract
+          // it from the file so the resume call below points the SDK at the
+          // right project dir.
+          if (cfg.resume && resumeJsonlPath && warmResumeCwd === warmCwd) {
+            const extracted = extractCwdFromJsonlFile(resumeJsonlPath);
+            if (extracted && extracted !== warmCwd) {
+              logErr(`[CWD-RECOVERY] pre-warm ${cfg.resume.slice(0, 8)}: extracted cwd ${extracted} from JSONL (warmCwd=${warmCwd}, key=${cfg.key})`);
+              warmResumeCwd = extracted;
+              recordPersistedSession(cfg.key, cfg.resume, extracted, cfg.model);
+            }
           }
           if (cfg.resume && !isPhantomResume) {
             try {
               await acpRequest("session/resume", {
                 sessionId: cfg.resume,
-                cwd: warmCwd,
-                mcpServers: buildMcpServers("act", warmCwd, cfg.key),
+                cwd: warmResumeCwd,
+                mcpServers: buildMcpServers("act", warmResumeCwd, cfg.key),
               });
               sessionId = cfg.resume;
-              logErr(`Pre-warm resumed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, jsonl=${resumeJsonlPath})`);
+              logErr(`Pre-warm resumed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, cwd=${warmResumeCwd}, jsonl=${resumeJsonlPath})`);
               // Set model after resume — without this the session uses the SDK default (possibly Haiku)
               await acpRequest("session/set_model", { sessionId, modelId: cfg.model });
               logErr(`Pre-warm set_model after resume: ${cfg.model}`);
@@ -1972,7 +1994,11 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
             logErr(`Pre-warmed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
           }
 
-          registerSession(cfg.key, { sessionId, cwd: warmCwd, model: cfg.model });
+          // Register with the cwd actually used for resume (fallback warmCwd
+          // for fresh session/new). Important so subsequent handleQuery cwd
+          // checks compare against the original cwd, not a stale warmup HOME.
+          const wasResumed = !!(cfg.resume && !isPhantomResume);
+          registerSession(cfg.key, { sessionId, cwd: wasResumed ? warmResumeCwd : warmCwd, model: cfg.model });
           await acpRequest("session/set_model", { sessionId, modelId: cfg.model });
           // Tell the Swift client about the pre-warmed sessionId NOW, even though
           // no user prompt has run yet. Without this, the very first prompt against
@@ -2132,6 +2158,21 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       interruptedSessions.delete(msg.resume);
       msg.resume = undefined;
     }
+    // The cwd we will pass to session/resume. Starts at requestedCwd, but we
+    // override it below if we have a recorded original cwd for this sessionId
+    // (either from our in-memory/persisted store, or extracted from the JSONL).
+    // This is the fix for the resume-after-bridge-restart bug: the SDK locates
+    // transcripts under `~/.claude/projects/<encoded(cwd)>/<id>.jsonl`, so if
+    // we pass a cwd that doesn't match the one used at session/new, the
+    // resume call throws "Resource not found".
+    let resolvedResumeCwd = requestedCwd;
+    if (msg.resume && !sessionId) {
+      const recordedCwd = lookupCwdForSessionId(msg.resume);
+      if (recordedCwd && recordedCwd !== requestedCwd) {
+        logErr(`[CWD-RECOVERY] resume ${msg.resume.slice(0, 8)}: using recorded cwd ${recordedCwd} (requestedCwd=${requestedCwd}, key=${sessionKey})`);
+        resolvedResumeCwd = recordedCwd;
+      }
+    }
     if (msg.resume && !sessionId) {
       // Phantom-session pre-check: an ID can be persisted upstream (in UserDefaults)
       // even though the SDK never wrote a turn to disk for it. Resuming such an ID is
@@ -2139,12 +2180,28 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // user-facing session_expired notice and a priorContext replay even though no
       // real conversation history was lost. When the JSONL is missing, treat the
       // persisted ID as never-realized and silently start a fresh session.
-      const resumeJsonlPath = findSessionJsonlPath(msg.resume, requestedCwd);
+      // findSessionJsonlPath checks the encoded(resolvedResumeCwd) path first
+      // and then scans sibling project dirs as a fallback.
+      const resumeJsonlPath = findSessionJsonlPath(msg.resume, resolvedResumeCwd);
       if (!resumeJsonlPath) {
-        logErr(`session/resume skipped: phantom id ${msg.resume} has no JSONL on disk (cwd=${requestedCwd}); going straight to session/new without session_expired (key=${sessionKey})`);
+        logErr(`session/resume skipped: phantom id ${msg.resume} has no JSONL on disk (cwd=${resolvedResumeCwd}); going straight to session/new without session_expired (key=${sessionKey})`);
         msg.resume = undefined;
         // Note: NOT setting resumeFailedFromId — this is a silent recovery, the user
         // never had a real session in the first place.
+      } else {
+        // Backstop for sessions that exist on disk but pre-date the persisted
+        // cwd map: extract the original cwd from the JSONL itself (the SDK
+        // writes "cwd":"<path>" into nearly every line). This makes the
+        // resume path lossless even after a bridge upgrade with no record.
+        if (resolvedResumeCwd === requestedCwd) {
+          const extracted = extractCwdFromJsonlFile(resumeJsonlPath);
+          if (extracted && extracted !== requestedCwd) {
+            logErr(`[CWD-RECOVERY] resume ${msg.resume.slice(0, 8)}: extracted cwd ${extracted} from JSONL (requestedCwd=${requestedCwd}, key=${sessionKey})`);
+            resolvedResumeCwd = extracted;
+            // Backfill the persisted store so we don't have to re-extract.
+            recordPersistedSession(sessionKey, msg.resume, extracted, requestedModel);
+          }
+        }
       }
     }
     if (msg.resume && !sessionId) {
@@ -2153,15 +2210,15 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       try {
         await acpRequest("session/resume", {
           sessionId: msg.resume,
-          cwd: requestedCwd,
-          mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
+          cwd: resolvedResumeCwd,
+          mcpServers: buildMcpServers(mode, resolvedResumeCwd, sessionKey),
         });
         sessionId = msg.resume;
-        registerSession(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
+        registerSession(sessionKey, { sessionId, cwd: resolvedResumeCwd, model: requestedModel });
         isNewSession = false;
         // Set model after resume — without this the session uses the SDK default (possibly Haiku)
         await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
-        logErr(`ACP session resumed: ${sessionId} (key=${sessionKey}, model=${requestedModel})`);
+        logErr(`ACP session resumed: ${sessionId} (key=${sessionKey}, model=${requestedModel}, cwd=${resolvedResumeCwd})`);
         // Tell the client that this session is alive and resumable, BEFORE the prompt
         // runs. If the prompt hits a rate limit / credit-exhausted / network error
         // mid-stream, the client has already banked the sessionId in UserDefaults,
