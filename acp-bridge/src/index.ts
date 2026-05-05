@@ -1994,11 +1994,12 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
             logErr(`Pre-warmed session: ${sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
           }
 
-          // Register with the cwd actually used for resume (fallback warmCwd
-          // for fresh session/new). Important so subsequent handleQuery cwd
-          // checks compare against the original cwd, not a stale warmup HOME.
-          const wasResumed = !!(cfg.resume && !isPhantomResume);
-          registerSession(cfg.key, { sessionId, cwd: wasResumed ? warmResumeCwd : warmCwd, model: cfg.model });
+          // Register with warmCwd (what Swift asked for). The persisted
+          // sessionId→cwd map already captured the SDK's actual cwd via
+          // recordPersistedSession during JSONL extraction (above), so a
+          // future resume with this id resolves correctly even if warmCwd
+          // and the SDK's original cwd differ.
+          registerSession(cfg.key, { sessionId, cwd: warmCwd, model: cfg.model });
           await acpRequest("session/set_model", { sessionId, modelId: cfg.model });
           // Tell the Swift client about the pre-warmed sessionId NOW, even though
           // no user prompt has run yet. Without this, the very first prompt against
@@ -2214,11 +2215,20 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           mcpServers: buildMcpServers(mode, resolvedResumeCwd, sessionKey),
         });
         sessionId = msg.resume;
-        registerSession(sessionKey, { sessionId, cwd: resolvedResumeCwd, model: requestedModel });
+        // Track Swift's requestedCwd in the live sessions Map (it drives the
+        // cwd-mismatch invalidation check on subsequent prompts). The SDK's
+        // actual original cwd lives in the persisted store via
+        // recordPersistedSession, which registerSession calls below.
+        registerSession(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
+        // If we used a recovered cwd (resolvedResumeCwd != requestedCwd), make
+        // sure the persisted record reflects the SDK's true cwd, not Swift's.
+        if (resolvedResumeCwd !== requestedCwd) {
+          recordPersistedSession(sessionKey, sessionId, resolvedResumeCwd, requestedModel);
+        }
         isNewSession = false;
         // Set model after resume — without this the session uses the SDK default (possibly Haiku)
         await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
-        logErr(`ACP session resumed: ${sessionId} (key=${sessionKey}, model=${requestedModel}, cwd=${resolvedResumeCwd})`);
+        logErr(`ACP session resumed: ${sessionId} (key=${sessionKey}, model=${requestedModel}, sdkCwd=${resolvedResumeCwd}, swiftCwd=${requestedCwd})`);
         // Tell the client that this session is alive and resumable, BEFORE the prompt
         // runs. If the prompt hits a rate limit / credit-exhausted / network error
         // mid-stream, the client has already banked the sessionId in UserDefaults,
