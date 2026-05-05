@@ -807,10 +807,12 @@ class AppState: ObservableObject {
             // 4. Ensure this app is the authoritative version in Launch Services
             ScreenCaptureService.ensureLaunchServicesRegistration()
 
-            // 5. Reset ALL TCC permissions using tccutil for BOTH bundle IDs
+            // 5. Reset ALL TCC permissions using tccutil for current and legacy bundle IDs
             let bundleIds = [
-                "com.omi.computer-macos",       // Production
-                "com.omi.desktop-dev"           // Development
+                "com.fazm.app",                 // Current production
+                "com.fazm.desktop-dev",         // Current development
+                "com.omi.computer-macos",       // Legacy production (pre-rebrand)
+                "com.omi.desktop-dev"           // Legacy development (pre-rebrand)
             ]
 
             for id in bundleIds {
