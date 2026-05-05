@@ -885,6 +885,7 @@ class DetachedChatWindowController {
             // Clean up per-session tool executor callbacks to prevent stale references
             ChatToolExecutor.unregisterCallbacks(sessionKey: sessionKey)
             self.entries[id]?.chatCancellable?.cancel()
+            self.entries[id]?.messageObserver?.cancel()
             self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
@@ -917,6 +918,8 @@ class DetachedChatWindowController {
             // the follow-up is queued. It gets re-established in the dequeue handler below.
             entries[winId]?.chatCancellable?.cancel()
             entries[winId]?.chatCancellable = nil
+            entries[winId]?.messageObserver?.cancel()
+            entries[winId]?.messageObserver = nil
             // Listen for when this message is dequeued so we can set up the response subscriber
             entries[winId]?.dequeueCancellable?.cancel()
             entries[winId]?.dequeueCancellable = NotificationCenter.default
@@ -1014,6 +1017,8 @@ class DetachedChatWindowController {
             log("[DetachedChat] cancelling response subscription before handlePostQuery session=\(sessionKey)")
             self.entries[winId]?.chatCancellable?.cancel()
             self.entries[winId]?.chatCancellable = nil
+            self.entries[winId]?.messageObserver?.cancel()
+            self.entries[winId]?.messageObserver = nil
 
             // Shared post-query: error handling, credit exhaustion, auth, paywall, etc.
             ChatQueryLifecycle.handlePostQuery(provider: provider, state: state, sessionKey: sessionKey, messageCountBefore: messageCountBefore)
