@@ -31,7 +31,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { tmpdir, homedir } from "os";
-import { unlinkSync, appendFileSync, existsSync, watch, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
+import { unlinkSync, appendFileSync, existsSync, watch, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, renameSync } from "fs";
 import type {
   InboundMessage,
   OutboundMessage,
@@ -1104,6 +1104,9 @@ function registerSession(sessionKey: string, entry: { sessionId: string; cwd: st
   }
   sessions.set(sessionKey, entry);
   sessionIdToKey.set(entry.sessionId, sessionKey);
+  // Persist sessionId → cwd so resume after bridge restart can pass the
+  // original cwd to the Claude Agent SDK (it uses cwd to locate the JSONL).
+  recordPersistedSession(sessionKey, entry.sessionId, entry.cwd, entry.model);
   logErr(`[SESSIONS] registered key=${sessionKey} sid=${entry.sessionId.slice(0, 8)} total=${sessions.size}`);
 }
 
@@ -1117,6 +1120,118 @@ function unregisterSession(sessionKey: string): void {
   sessions.delete(sessionKey);
   logErr(`[SESSIONS] unregistered key=${sessionKey} total=${sessions.size}`);
 }
+
+// --- Persistent sessionId → cwd map ---------------------------------------
+// The Claude Agent SDK stores transcripts under
+// `~/.claude/projects/<encoded(cwd)>/<sessionId>.jsonl`. On session/resume the
+// SDK looks the file up using the cwd we pass. If we pass a different cwd
+// from the one that was used at session/new, the lookup misses and the SDK
+// throws "Resource not found", which we then translate into a session_expired
+// event with priorContext replay. The replay path itself has bugs (leaked
+// `[Interrupted]` turns, stale conversation_history in the system prompt,
+// auto-completed `User:` lines) so the right fix is to never let resume
+// fail in the first place.
+//
+// We persist `{sessionId, sessionKey, cwd, model, updatedAt}` rows to
+// `~/.fazm/acp-sessions.json` so the mapping survives bridge restarts. On
+// every resume we look up the recorded cwd by sessionId and override the
+// requested cwd if it disagrees. As a backstop for sessions created before
+// this code shipped, we also extract `cwd` from the JSONL itself the first
+// time we see one (the SDK writes it into nearly every line).
+type PersistedSession = {
+  sessionId: string;
+  sessionKey: string;
+  cwd: string;
+  model?: string;
+  updatedAt: number;
+};
+const PERSISTED_SESSIONS_PATH = join(homedir(), ".fazm", "acp-sessions.json");
+const PERSISTED_MAX = 200;
+/** All historical sessions we have seen, keyed by sessionId. Survives restart. */
+const persistedSessions = new Map<string, PersistedSession>();
+let persistDebounceTimer: NodeJS.Timeout | null = null;
+
+function loadPersistedSessions(): void {
+  try {
+    if (!existsSync(PERSISTED_SESSIONS_PATH)) return;
+    const raw = readFileSync(PERSISTED_SESSIONS_PATH, "utf-8");
+    const arr = JSON.parse(raw) as PersistedSession[];
+    if (!Array.isArray(arr)) return;
+    for (const r of arr) {
+      if (r && typeof r.sessionId === "string" && typeof r.cwd === "string") {
+        persistedSessions.set(r.sessionId, r);
+      }
+    }
+    logErr(`[SESSIONS] loaded ${persistedSessions.size} persisted records`);
+  } catch (err) {
+    logErr(`[SESSIONS] failed to load persisted sessions: ${err}`);
+  }
+}
+
+function persistSessionsNow(): void {
+  try {
+    const dir = dirname(PERSISTED_SESSIONS_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    // Cap to most-recent PERSISTED_MAX by updatedAt so the file stays small.
+    const arr = Array.from(persistedSessions.values())
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, PERSISTED_MAX);
+    // Drop trimmed entries from the in-memory map too.
+    if (persistedSessions.size > arr.length) {
+      const keep = new Set(arr.map((r) => r.sessionId));
+      for (const id of persistedSessions.keys()) {
+        if (!keep.has(id)) persistedSessions.delete(id);
+      }
+    }
+    const tmp = `${PERSISTED_SESSIONS_PATH}.tmp`;
+    writeFileSync(tmp, JSON.stringify(arr, null, 2), "utf-8");
+    renameSync(tmp, PERSISTED_SESSIONS_PATH);
+  } catch (err) {
+    logErr(`[SESSIONS] failed to persist: ${err}`);
+  }
+}
+
+function schedulePersistSessions(): void {
+  if (persistDebounceTimer) clearTimeout(persistDebounceTimer);
+  persistDebounceTimer = setTimeout(persistSessionsNow, 500);
+}
+
+function recordPersistedSession(sessionKey: string, sessionId: string, cwd: string, model?: string): void {
+  if (!sessionId || !cwd) return;
+  persistedSessions.set(sessionId, { sessionId, sessionKey, cwd, model, updatedAt: Date.now() });
+  schedulePersistSessions();
+}
+
+/** Recorded cwd for a sessionId, checking live in-memory then on-disk. */
+function lookupCwdForSessionId(sessionId: string): string | null {
+  const liveKey = sessionIdToKey.get(sessionId);
+  if (liveKey) {
+    const s = sessions.get(liveKey);
+    if (s?.cwd) return s.cwd;
+  }
+  const p = persistedSessions.get(sessionId);
+  return p?.cwd ?? null;
+}
+
+/** Extract `"cwd":"..."` from the first matching line of a JSONL transcript.
+ *  Used as a backstop for sessions that exist on disk but pre-date this
+ *  persistence code. Reads up to 64 KB to keep the cost bounded. */
+function extractCwdFromJsonlFile(path: string): string | null {
+  try {
+    const fd = readFileSync(path, { encoding: "utf-8", flag: "r" });
+    // Bound the work — we only need the first few lines.
+    const head = fd.length > 65536 ? fd.slice(0, 65536) : fd;
+    const m = head.match(/"cwd"\s*:\s*"((?:[^"\\]|\\.)+)"/);
+    if (m) {
+      try { return JSON.parse(`"${m[1]}"`); } catch { return m[1]; }
+    }
+  } catch { /* unreadable — caller will fall through to default */ }
+  return null;
+}
+
+// Boot-time load. Safe to call before any registerSession.
+loadPersistedSessions();
+
 /**
  * Tracks how many image-bearing turns each session key has had.
  * Claude's API enforces a stricter 2000px/image limit once a session has many images.
