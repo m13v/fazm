@@ -2304,35 +2304,22 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // only need the last handful of turns. Trim from the END (most recent kept).
       const MAX_REPLAY = 20;
       let replay = ctxEntries.slice(-MAX_REPLAY);
-      // Drop trailing assistant turns that are toxic to replay. Three cases:
-      //   1. Empty/whitespace-only — the cancelled-mid-action turn from the
-      //      previous session. Replaying verbatim makes the model think "I
-      //      already did the work" and reply with a no-op end_turn (May 3 2026).
-      //   2. Starts with `[Interrupted]` — same as case 1 but the bridge or
-      //      Swift side stamped a marker. Without trimming, the marker becomes
-      //      part of the preamble's `Assistant: [Interrupted]` row and the
-      //      model treats `[Interrupted]` as a literal pattern to repeat, often
-      //      autocompleting the next "User:" line from earlier transcripts
-      //      (May 4 2026: produced literal output `[Interrupted]\n\nUser:
-      //      Reply with the single word PONG and nothing else.`).
-      //   3. Contains a leaked `User:` / `Assistant:` transcript marker — means
-      //      a prior recovery preamble was persisted into chat_messages as the
-      //      assistant turn and is now feeding back in. Same autocomplete risk.
-      const isToxicTrailingAssistant = (text: string): boolean => {
-        const t = (text ?? "").trim();
-        if (!t) return true;
-        if (/^\[Interrupted\]/i.test(t)) return true;
-        // Transcript-marker leakage: an assistant message that contains a literal
-        // "User:" or "Assistant:" line is almost always a regurgitated preamble,
-        // not a real model response. Use a multiline anchor so this doesn't
-        // false-positive on prose that happens to mention "User:" inline.
-        if (/(^|\n)\s*(User|Assistant):\s/i.test(t)) return true;
-        return false;
-      };
+      // Drop ALL trailing assistant turns. When recovery fires, the prior
+      // assistant turn is by definition unreliable: it was either truncated
+      // ([STUCK-EMPTY-TURN]), interrupted, or stuck. Even when its text looks
+      // plausible (normal prose, no toxic markers), replaying it primes the
+      // recovery model so heavily that a low-information new message like
+      // "Hello" gets a continuation of the prior topic instead of a direct
+      // answer (May 5 2026 incident: pop-out user typed "Hello" after a long
+      // tool-heavy task; model continued the prior task instead of greeting).
+      // The user's current message (appended below) is the source of truth;
+      // the prior user turns provide context, the prior assistant turn does not.
+      // This subsumes the earlier toxic-pattern filter (empty / [Interrupted] /
+      // leaked User:/Assistant: markers) — those were special cases of the
+      // same general problem.
       while (
         replay.length > 0 &&
-        replay[replay.length - 1].role === "assistant" &&
-        isToxicTrailingAssistant(replay[replay.length - 1].text ?? "")
+        replay[replay.length - 1].role === "assistant"
       ) {
         replay = replay.slice(0, -1);
       }
@@ -2350,13 +2337,15 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         const preamble =
           `[SESSION RESTORED FROM LOCAL HISTORY]\n` +
           `Your previous session (${resumeFailedFromId}) was interrupted before ` +
-          `it could finish. The transcript below is the recent conversation, ` +
-          `replayed from the user's local message store. The last assistant ` +
-          `response (if any) was cut off mid-action — DO NOT treat it as ` +
-          `complete. Continue the work in flight: read the user's most recent ` +
-          `message at the bottom and act on it now, calling tools and producing ` +
-          `output as needed. Do not just acknowledge or summarize what you ` +
-          `already wrote.\n\n` +
+          `it could finish. The transcript below is recent conversation context ` +
+          `replayed from the user's local message store. Treat it as background ` +
+          `only — the prior assistant turn (if any) was dropped because it was ` +
+          `incomplete or unreliable.\n\n` +
+          `Respond DIRECTLY to the user's CURRENT MESSAGE at the bottom. Do NOT ` +
+          `assume it is a continuation of the prior task. If it is a fresh ` +
+          `question, an unrelated topic, or a short greeting, answer that — do ` +
+          `not pick up the previous task unless the user explicitly references ` +
+          `it.\n\n` +
           `--- RECENT TRANSCRIPT (${restoredCount} message${restoredCount === 1 ? "" : "s"}, oldest first) ---\n` +
           transcript +
           `\n--- END TRANSCRIPT ---\n\n` +
