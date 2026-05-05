@@ -2524,6 +2524,38 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
 
       const promptPromise = acpRequest("session/prompt", sessionPromptPayload);
 
+      // Abort race: when the user clicks Stop, the interrupt handler calls
+      // ctx.abortController.abort() and sends session/cancel to ACP. But
+      // acpRequest doesn't listen for the abort signal — it just keeps
+      // awaiting the SDK's reply. When a tool is mid-execution and the SDK
+      // ignores session/cancel (Terminal subprocess keeps running, no
+      // stopReason ever returned), the await hangs forever, the result event
+      // never gets emitted to Swift, sendingSessionKeys never clears, and
+      // the user's follow-up message gets enqueued behind a query that will
+      // never complete (May 5 2026 incident: pop-out user clicked Stop on a
+      // 77s Terminal tool, then sent a follow-up — the follow-up sat
+      // enqueued while the Terminal kept emitting heartbeats for another
+      // ~80s).
+      //
+      // Resolution: race the prompt against the abort signal directly so an
+      // explicit user interrupt always unblocks the await. The catch block
+      // below detects abortController.signal.aborted and emits the partial
+      // result, freeing Swift to accept the next prompt. The underlying
+      // tool subprocess may keep running on the user's machine — we can't
+      // kill SDK-spawned subprocesses from here — but the conversation is
+      // no longer wedged.
+      const abortPromise = new Promise<never>((_, reject) => {
+        if (abortController.signal.aborted) {
+          reject(new Error("ABORT: signal already aborted before race"));
+          return;
+        }
+        abortController.signal.addEventListener(
+          "abort",
+          () => reject(new Error("ABORT: user interrupt")),
+          { once: true }
+        );
+      });
+
       let racePromise: Promise<unknown>;
       if (wasInterrupted && !isNewSession) {
         const watchdogPromise = new Promise<never>((_, reject) => {
@@ -2537,9 +2569,9 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
             }
           }, TTFT_WATCHDOG_MS);
         });
-        racePromise = Promise.race([promptPromise, watchdogPromise]);
+        racePromise = Promise.race([promptPromise, watchdogPromise, abortPromise]);
       } else {
-        racePromise = promptPromise;
+        racePromise = Promise.race([promptPromise, abortPromise]);
       }
 
       try {
