@@ -906,8 +906,9 @@ class ChatProvider: ObservableObject {
     /// On subsequent queries the bridge reuses the same session, so the
     /// system prompt is ignored — it is only re-applied if the session is
     /// invalidated (e.g. cwd change) and a new session/new is triggered.
-    /// Conversation history from before app launch IS included (via buildConversationHistory());
-    /// after session/new the ACP SDK tracks ongoing history natively.
+    /// Conversation history is NOT injected into the system prompt (removed May 4 2026
+    /// because the cached prompt was shared across scopes and leaked transcripts).
+    /// On recovery, `priorContextForBridge` (scoped per taskId) replays history.
     private var cachedMainSystemPrompt: String = ""
 
     // MARK: - CLAUDE.md & Skills (Global)
@@ -1336,10 +1337,11 @@ class ChatProvider: ObservableObject {
                 log("Background tool \(name) executed for callId=\(callId)")
                 return result
             }
-            // Restore floating chat messages from SQLite BEFORE building the system prompt.
-            // This ensures buildConversationHistory() has access to prior messages, so if
-            // ACP session resume fails, the fallback new session gets seeded with context.
-            // Without this, messages is empty at warmup time and the user loses all history.
+            // Restore floating chat messages from SQLite before warmup so the UI
+            // shows them immediately. (Previously this also seeded the system prompt
+            // via buildConversationHistory(), but that path was removed May 4 2026
+            // because it leaked transcripts across pop-out scopes — recovery-time
+            // priorContext replay now handles cross-restart context, scoped per taskId.)
             await restoreFloatingChatIfNeeded()
 
             // Pre-warm ACP sessions with their respective system prompts.
@@ -2030,13 +2032,22 @@ class ChatProvider: ObservableObject {
             databaseSchema: cachedDatabaseSchema
         )
 
-        // Inject conversation history so the new ACP session has context from before app launch.
-        // The ACP SDK maintains history natively after this via session/prompt — this only matters
-        // at session creation time.
-        let history = buildConversationHistory()
-        if !history.isEmpty {
-            prompt += "\n\n<conversation_history>\nBelow is recent conversation history. The user can see these messages and expects you to be aware of them. For older conversations, query chat_messages with execute_sql.\n\(history)\n</conversation_history>"
-        }
+        // NOTE (May 4 2026): the previous `<conversation_history>` block injected
+        // here was UNSCOPED — `buildConversationHistory()` reads from `self.messages`
+        // (the floating bar's in-memory list), but `cachedMainSystemPrompt` is built
+        // ONCE at warmup and reused for EVERY session, including detached pop-outs.
+        // Result: pop-outs got the floating bar's recent transcript baked into their
+        // system prompt, causing cross-scope contamination (e.g. a Mixer pop-out
+        // session inheriting earlier "Reply with PONG" test messages and dutifully
+        // responding "PONG" instead of doing the requested work).
+        //
+        // The recovery-time `priorContext` replay in acp-bridge already handles the
+        // "pick up where we left off after the upstream session expired" case
+        // correctly (and is properly scoped via taskId in ChatProvider.swift:2814+).
+        // For brand-new sessions there is no need to seed the system prompt with
+        // history — the user's first prompt is enough context, and if they ask
+        // about prior conversations the model can `execute_sql` against
+        // `chat_messages` (already documented in the system prompt).
 
         // Append global CLAUDE.md instructions if enabled
         if claudeMdEnabled, let claudeMd = claudeMdContent {
@@ -2157,13 +2168,11 @@ class ChatProvider: ObservableObject {
     /// Used to seed new ACP sessions with context from the existing chat UI history.
     /// This is critical when session resume fails after an app restart or update, as it is
     /// the only mechanism that preserves conversational context for the new session.
-    private func buildConversationHistory() -> String {
-        let recent = messages.filter { !$0.text.isEmpty }.suffix(30)
-        return recent.map { msg in
-            let role = msg.sender == .user ? "User" : "Assistant"
-            return "\(role): \(msg.text)"
-        }.joined(separator: "\n")
-    }
+    /// Removed May 4 2026. Was used to inject `<conversation_history>` into the
+    /// cached system prompt at warmup, but the cache is shared by every session
+    /// (including detached pop-outs) so it leaked the floating bar's transcript
+    /// across scopes. Recovery-time priorContext replay (scoped per taskId in
+    /// `priorContextForBridge`) handles the equivalent need correctly.
 
     /// Restore floating chat messages and session from local DB.
     /// Called eagerly during warmup (so conversation history is available for the system prompt)
