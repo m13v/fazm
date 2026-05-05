@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out chat continuing the previous task when you sent a fresh short message after a long tool-heavy turn was interrupted; the recovery now drops the unreliable prior assistant turn and tells the model to answer your current message directly instead of resuming the old work"
+  ],
   "releases": [
     {
       "version": "2.8.1",
