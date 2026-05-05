@@ -2122,16 +2122,35 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // only need the last handful of turns. Trim from the END (most recent kept).
       const MAX_REPLAY = 20;
       let replay = ctxEntries.slice(-MAX_REPLAY);
-      // Drop a trailing assistant turn whose text is empty/whitespace.  This is
-      // the cancelled-mid-action turn from the previous session: replaying it
-      // verbatim makes the model think "I already did the work" and reply with a
-      // no-op end_turn, which then surfaces as "Failed to get a response" in the
-      // UI (May 3 2026 incident: 60s hang detector cancelled a slow Opus think,
-      // recovery replayed an empty assistant bubble, model returned 5 tokens).
+      // Drop trailing assistant turns that are toxic to replay. Three cases:
+      //   1. Empty/whitespace-only — the cancelled-mid-action turn from the
+      //      previous session. Replaying verbatim makes the model think "I
+      //      already did the work" and reply with a no-op end_turn (May 3 2026).
+      //   2. Starts with `[Interrupted]` — same as case 1 but the bridge or
+      //      Swift side stamped a marker. Without trimming, the marker becomes
+      //      part of the preamble's `Assistant: [Interrupted]` row and the
+      //      model treats `[Interrupted]` as a literal pattern to repeat, often
+      //      autocompleting the next "User:" line from earlier transcripts
+      //      (May 4 2026: produced literal output `[Interrupted]\n\nUser:
+      //      Reply with the single word PONG and nothing else.`).
+      //   3. Contains a leaked `User:` / `Assistant:` transcript marker — means
+      //      a prior recovery preamble was persisted into chat_messages as the
+      //      assistant turn and is now feeding back in. Same autocomplete risk.
+      const isToxicTrailingAssistant = (text: string): boolean => {
+        const t = (text ?? "").trim();
+        if (!t) return true;
+        if (/^\[Interrupted\]/i.test(t)) return true;
+        // Transcript-marker leakage: an assistant message that contains a literal
+        // "User:" or "Assistant:" line is almost always a regurgitated preamble,
+        // not a real model response. Use a multiline anchor so this doesn't
+        // false-positive on prose that happens to mention "User:" inline.
+        if (/(^|\n)\s*(User|Assistant):\s/i.test(t)) return true;
+        return false;
+      };
       while (
         replay.length > 0 &&
         replay[replay.length - 1].role === "assistant" &&
-        !(replay[replay.length - 1].text ?? "").trim()
+        isToxicTrailingAssistant(replay[replay.length - 1].text ?? "")
       ) {
         replay = replay.slice(0, -1);
       }
