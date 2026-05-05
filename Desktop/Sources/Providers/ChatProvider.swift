@@ -2091,11 +2091,15 @@ class ChatProvider: ObservableObject {
             prompt += "\n\n<voice_response>\nVoice response is enabled. On EVERY final response, you MUST call the speak_response tool with a short, natural spoken summary of your answer (1-3 sentences). This plays audio to the user through their speakers. Keep the spoken text conversational and concise, it complements your written response, not replaces it. Call speak_response BEFORE writing your final text response.\n\nThe spoken text MUST be in the same language the user wrote in. The TTS layer auto-detects the language and routes to a matching voice (Deepgram Aura voices for English, Spanish, French, German, Italian, Dutch, and Japanese; system voices for other languages like Russian, Chinese, Korean, Portuguese, Arabic, Hindi). Always call speak_response regardless of language.\n</voice_response>"
         }
 
-        // Log prompt context summary
-        let historyInjected = !history.isEmpty
-        let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
-        let historyCount = min(historyMessages.count, 20)
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), history: \(historyInjected ? "injected (\(historyCount) msgs)" : "none"), claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), dev_mode_in_skills: \(devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
+        // Log prompt context summary. `history:` field is now always "none"
+        // because conversation history is no longer baked into the system
+        // prompt (kept in the log for grep continuity with prior versions).
+        let schemaPresent = !cachedDatabaseSchema.isEmpty ? "yes" : "no"
+        let aiProfilePresent = !cachedAIProfile.isEmpty ? "yes" : "no"
+        let claudeMdPresent = (claudeMdEnabled && claudeMdContent != nil) ? "yes" : "no"
+        let projectClaudeMdPresent = (projectClaudeMdEnabled && projectClaudeMdContent != nil) ? "yes" : "no"
+        let devModeInSkills = (devModeEnabled && devModeContext != nil) ? "yes" : "no"
+        log("ChatProvider: prompt built — schema: \(schemaPresent), ai_profile: \(aiProfilePresent), history: none (removed May 4 2026), claude_md: \(claudeMdPresent), project_claude_md: \(projectClaudeMdPresent), skills: \(enabledSkillNames.count), dev_mode_in_skills: \(devModeInSkills), prompt_length: \(prompt.count) chars")
 
         // Log per-section character breakdown
         let baseTemplate = ChatPromptBuilder.buildDesktopChat(
@@ -2104,15 +2108,13 @@ class ChatProvider: ObservableObject {
             .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
             .map { $0.name }.joined(separator: ", ")
         let skillsSectionSize = allSkillsForSize.isEmpty ? 0 : allSkillsForSize.count + 80 // names + wrapper
-        log("ChatProvider: prompt breakdown — " +
-            "base_template:\(baseTemplate.count)c, " +
-            "ai_profile:\(aiProfileSection.count)c, " +
-            "schema:\(cachedDatabaseSchema.count)c, " +
-            "history:\(history.count)c, " +
-            "claude_md:\(claudeMdContent?.count ?? 0)c, " +
-            "project_claude_md:\(projectClaudeMdContent?.count ?? 0)c, " +
-            "skills:\(skillsSectionSize)c, " +
-            "routines:\(cachedRoutinesBriefing.count)c")
+        let baseTemplateSize = baseTemplate.count
+        let aiProfileSize = aiProfileSection.count
+        let schemaSize = cachedDatabaseSchema.count
+        let claudeMdSize = claudeMdContent?.count ?? 0
+        let projectClaudeMdSize = projectClaudeMdContent?.count ?? 0
+        let routinesSize = cachedRoutinesBriefing.count
+        log("ChatProvider: prompt breakdown — base_template:\(baseTemplateSize)c, ai_profile:\(aiProfileSize)c, schema:\(schemaSize)c, history:0c, claude_md:\(claudeMdSize)c, project_claude_md:\(projectClaudeMdSize)c, skills:\(skillsSectionSize)c, routines:\(routinesSize)c")
 
         return prompt
     }
