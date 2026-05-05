@@ -295,8 +295,15 @@ struct ChatAttachment: Identifiable, Equatable {
     }
 }
 
-/// A single chat message
-struct ChatMessage: Identifiable, Equatable {
+/// A single chat message.
+///
+/// Reference type with @Observable so token deltas mutate the instance in place
+/// without firing @Published on the enclosing messages array. Views that read a
+/// specific property (e.g. `message.text`) re-render only when that property
+/// changes — the rest of the UI tree stays put. This is the ACP-conformant
+/// pattern: granular per-message observability, not whole-conversation churn.
+@Observable
+final class ChatMessage: Identifiable, Equatable {
     var id: String  // Mutable to sync with server-generated ID
     var text: String
     let createdAt: Date
@@ -315,14 +322,14 @@ struct ChatMessage: Identifiable, Equatable {
     /// Files attached by the user (images, PDFs, text files)
     var attachments: [ChatAttachment]
 
+    /// Identity-based equality. Two refs to the same instance compare equal;
+    /// distinct instances never do. Combine's `removeDuplicates()` on the
+    /// messages array now drops add/remove churn (same array of refs) without
+    /// suppressing real structural changes. Token deltas don't flow through
+    /// the array publisher anymore — they propagate via @Observable tracking
+    /// on the instance itself.
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
-        lhs.id == rhs.id
-            && lhs.text == rhs.text
-            && lhs.isStreaming == rhs.isStreaming
-            && lhs.rating == rhs.rating
-            && lhs.isSynced == rhs.isSynced
-            && lhs.contentBlocks == rhs.contentBlocks
-            && lhs.attachments == rhs.attachments
+        lhs === rhs
     }
 
     init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], sessionKey: String? = nil, attachments: [ChatAttachment] = []) {
