@@ -1006,6 +1006,11 @@ class FloatingControlBarManager {
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
+    /// Per-message @Observable tracker for the currently streaming message.
+    /// Drives `state.isAILoading` and the streaming-completion handler.
+    /// Token deltas no longer fire `provider.$messages` (ChatMessage is a
+    /// reference type), so this is the only granular signal available.
+    private var messageObserver: MessageObserver?
     private var sharedProviderCancellables: [AnyCancellable] = []
     private(set) var chatProvider: ChatProvider?
     private var workspaceObserver: Any?
@@ -1653,6 +1658,8 @@ class FloatingControlBarManager {
     func cancelChat() {
         chatCancellable?.cancel()
         chatCancellable = nil
+        messageObserver?.cancel()
+        messageObserver = nil
         if let provider = chatProvider, provider.isSending(sessionKey: "floating") {
             provider.stopAgent(sessionKey: "floating")
         }
@@ -1760,6 +1767,8 @@ class FloatingControlBarManager {
         // Cancel stale subscriptions immediately to prevent old data from flashing
         chatCancellable?.cancel()
         chatCancellable = nil
+        messageObserver?.cancel()
+        messageObserver = nil
         window.cancelInputHeightObserver()
 
         // Reset state directly (no animation) to avoid contract-then-expand flicker
@@ -1950,6 +1959,8 @@ class FloatingControlBarManager {
         // Cancel existing streaming subscription — the detached window will create its own
         chatCancellable?.cancel()
         chatCancellable = nil
+        messageObserver?.cancel()
+        messageObserver = nil
 
         // Transfer the ACP session from "floating" to a unique detached key.
         // This lets the detached window continue the same ACP conversation,
@@ -2052,6 +2063,8 @@ class FloatingControlBarManager {
         // Reset streaming state but keep chat history — the session will be resumed
         chatCancellable?.cancel()
         chatCancellable = nil
+        messageObserver?.cancel()
+        messageObserver = nil
         window.cancelInputHeightObserver()
         window.state.currentAIMessage = nil
 
@@ -2160,15 +2173,21 @@ class FloatingControlBarManager {
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
+        messageObserver?.cancel()
+        messageObserver = nil
         barWindow.state.currentAIMessage = nil
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
         log("[FloatingBar] subscribeToResponse: messageCountBefore=\(messageCountBefore) session=floating")
+        // The array publisher only fires on add/remove now (ChatMessage is a
+        // reference type, so element-field mutations don't change the array).
+        // This sink fires once when the AI message lands; per-token granular
+        // updates come from MessageObserver below.
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
-            .sink { [weak barWindow] messages in
+            .sink { [weak self, weak barWindow] messages in
                 // Ignore updates if the conversation was closed (Esc pressed during streaming)
-                guard let barWindow = barWindow, barWindow.state.showingAIConversation else { return }
+                guard let self, let barWindow = barWindow, barWindow.state.showingAIConversation else { return }
                 guard messages.count > messageCountBefore else { return }
                 // Only examine messages added since this subscription was created.
                 // Searching ALL messages would re-set currentAIMessage to a prior AI
@@ -2187,15 +2206,18 @@ class FloatingControlBarManager {
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow.state.currentAIMessage = aiMessage
 
-                if aiMessage.isStreaming {
-                    // Keep "thinking" indicator visible until the first text or
-                    // tool/thinking block arrives. The placeholder lands with
-                    // isStreaming=true but empty content; flipping isAILoading
-                    // off here would leave the user staring at near-blank UI
-                    // during TTFT (sometimes >60s).
-                    let hasContent = !aiMessage.text.isEmpty || !aiMessage.contentBlocks.isEmpty
-                    barWindow.state.isAILoading = !hasContent
-                    if !hasSetUpResponseHeight {
+                // Tear down any previous observer; install a new one keyed to
+                // this message so token deltas drive isAILoading and the
+                // streaming-completion side effects.
+                self.messageObserver?.cancel()
+                self.messageObserver = MessageObserver(message: aiMessage) { [weak barWindow] msg in
+                    guard let barWindow else { return }
+                    let hasContent = !msg.text.isEmpty || !msg.contentBlocks.isEmpty
+                    let newLoading = msg.isStreaming && !hasContent
+                    if barWindow.state.isAILoading != newLoading {
+                        barWindow.state.isAILoading = newLoading
+                    }
+                    if msg.isStreaming, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
                         if !barWindow.state.showingAIResponse {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -2204,8 +2226,6 @@ class FloatingControlBarManager {
                         }
                         barWindow.resizeToResponseHeightPublic(animated: false)
                     }
-                } else {
-                    barWindow.state.isAILoading = false
                 }
             }
 
