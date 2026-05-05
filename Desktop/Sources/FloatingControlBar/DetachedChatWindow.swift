@@ -356,6 +356,10 @@ class DetachedChatWindowController {
         let window: DetachedChatWindow
         var sessionKey: String
         var chatCancellable: AnyCancellable?
+        /// Per-message @Observable tracker. Drives `state.isAILoading` and the
+        /// streaming-completion handler. Token deltas no longer fire
+        /// `provider.$messages`, so this is the only signal for those.
+        var messageObserver: MessageObserver?
         var sharedProviderCancellables: [AnyCancellable] = []
         var dequeueCancellable: AnyCancellable?
     }
@@ -1031,6 +1035,8 @@ class DetachedChatWindowController {
         let initialKey = entries[winId]?.sessionKey
         log("[DetachedChat] subscribeToResponse: messageCountBefore=\(messageCountBefore) session=\(initialKey ?? "?")")
         entries[winId]?.chatCancellable?.cancel()
+        entries[winId]?.messageObserver?.cancel()
+        entries[winId]?.messageObserver = nil
         // Build the chain into a local first; assigning directly into
         // entries[winId]?.chatCancellable holds an exclusive (_modify) access on
         // `entries` while the RHS evaluates. `.sink` subscribes synchronously and
@@ -1039,7 +1045,11 @@ class DetachedChatWindowController {
         // and trips Swift's exclusivity check (crash: swift_beginAccess / SIGABRT).
         let cancellable = provider.$messages
             // Filter BEFORE the main-queue hop so unrelated streaming events
-            // never reach `.sink`. This is the load-bearing change.
+            // never reach `.sink`. With ChatMessage as a reference type the
+            // array publisher only fires on add/remove (element refs unchanged
+            // by token writes), so this sink fires once per new AI message
+            // rather than once per token. Per-token granular updates flow via
+            // MessageObserver below, which uses @Observable tracking.
             .compactMap { [weak self] messages -> ChatMessage? in
                 let currentKey = self?.entries[winId]?.sessionKey ?? initialKey
                 guard messages.count > messageCountBefore else { return nil }
@@ -1051,44 +1061,57 @@ class DetachedChatWindowController {
                 let newMessages = messages[messageCountBefore...]
                 return newMessages.last(where: { $0.sender == .ai && $0.sessionKey == currentKey })
             }
-            // ChatMessage's Equatable compares id + text + isStreaming +
-            // contentBlocks + attachments + rating + isSynced, which is
-            // exactly the streaming-relevant state. Same value → drop.
+            // ChatMessage Equatable is identity-based, so this drops re-emissions
+            // of the same instance (no spurious double-fires when an unrelated
+            // message is appended). Genuinely new message instances pass through.
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak state, weak provider] aiMessage in
-                guard let state else { return }
-                let currentKey = self?.entries[winId]?.sessionKey ?? initialKey
+                guard let state, let self else { return }
+                let currentKey = self.entries[winId]?.sessionKey ?? initialKey
                 log("[DetachedChat] subscribeToResponse: new AI message id=\(aiMessage.id) streaming=\(aiMessage.isStreaming) session=\(currentKey ?? "?")")
                 state.currentAIMessage = aiMessage
-                if aiMessage.isStreaming {
-                    // Keep "thinking" indicator visible until the first text or
-                    // tool/thinking block arrives. The placeholder lands with
-                    // isStreaming=true but empty content; flipping isAILoading
-                    // off here would leave the user staring at near-blank UI
-                    // during TTFT (sometimes >60s).
-                    let hasContent = !aiMessage.text.isEmpty || !aiMessage.contentBlocks.isEmpty
-                    state.isAILoading = !hasContent
-                    if !state.showingAIResponse {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            state.showingAIResponse = true
-                        }
+                // Reveal the response surface on first arrival. Subsequent
+                // mutations to the same message instance flow via MessageObserver.
+                if !state.showingAIResponse {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        state.showingAIResponse = true
                     }
-                } else {
-                    state.isAILoading = false
-                    // Ensure the response is visible even if we never saw isStreaming=true
-                    // (e.g., response completed before the Combine sink fired).
-                    if !state.showingAIResponse {
-                        log("[DetachedChat] setting showingAIResponse=true for non-streaming message id=\(aiMessage.id)")
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            state.showingAIResponse = true
-                        }
-                    }
-                    // Clear stale messages from provider now that streaming is done.
-                    // These were kept alive during pop-out so the in-flight query could
-                    // continue writing to them. The floating bar doesn't need them anymore.
-                    provider?.clearTransferredMessages()
                 }
+                // Tear down any previous observer (covers re-subscription).
+                self.entries[winId]?.messageObserver?.cancel()
+                // Track this message's mutable fields. The closure fires once
+                // immediately to sync `isAILoading` with the current state, then
+                // re-fires whenever the message mutates (token append, tool
+                // block append, isStreaming flip). It's the per-token signal
+                // for the controller; SwiftUI views that read `aiMessage.text`
+                // already get their own per-property invalidations from
+                // @Observable and don't need this.
+                let observer = MessageObserver(message: aiMessage) { [weak state, weak provider] msg in
+                    guard let state else { return }
+                    let hasContent = !msg.text.isEmpty || !msg.contentBlocks.isEmpty
+                    let newLoading = msg.isStreaming && !hasContent
+                    if state.isAILoading != newLoading {
+                        state.isAILoading = newLoading
+                    }
+                    if !msg.isStreaming {
+                        // Ensure the response is visible even if we never saw
+                        // isStreaming=true (e.g., response completed before this
+                        // observer landed).
+                        if !state.showingAIResponse {
+                            log("[DetachedChat] setting showingAIResponse=true for non-streaming message id=\(msg.id)")
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                state.showingAIResponse = true
+                            }
+                        }
+                        // Clear stale messages from provider now that streaming
+                        // is done. These were kept alive during pop-out so the
+                        // in-flight query could continue writing; the floating
+                        // bar doesn't need them anymore.
+                        provider?.clearTransferredMessages()
+                    }
+                }
+                self.entries[winId]?.messageObserver = observer
             }
         entries[winId]?.chatCancellable = cancellable
     }
