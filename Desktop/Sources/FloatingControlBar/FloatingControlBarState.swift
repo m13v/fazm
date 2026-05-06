@@ -114,6 +114,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// in views that render streaming content.
     let streaming = StreamingResponseState()
 
+    /// Forwards streaming.objectWillChange to state.objectWillChange so legacy
+    /// views that take only `@EnvironmentObject var state: FloatingControlBarState`
+    /// still re-render when streaming fields update. Per-view migration to
+    /// `@EnvironmentObject var streaming` is the long-term path; this shim
+    /// preserves correctness during the migration.
+    private var streamingForwardCancellable: AnyCancellable?
+
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
     @Published var isInitialising: Bool = false
@@ -248,27 +255,25 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// System prompt suffix injected during tutorial (cleared on finish)
     var tutorialSystemPromptSuffix: String?
 
-    /// Move any pending chat observer cards into chatHistory (call when archiving the current exchange).
+    /// Forwarder for `streaming.flushPendingChatObserverExchanges()`.
+    /// Kept on the parent so existing `state.flushPendingChatObserverExchanges()`
+    /// call sites continue to compile.
     func flushPendingChatObserverExchanges() {
-        guard !pendingChatObserverExchanges.isEmpty else { return }
-        chatHistory.append(contentsOf: pendingChatObserverExchanges)
-        pendingChatObserverExchanges.removeAll()
+        streaming.flushPendingChatObserverExchanges()
     }
 
-    /// Pre-populate chatHistory from ChatProvider's messages so previous conversation is visible on fresh launch.
+    /// Forwarder for `streaming.loadHistory(from:)`. Kept on the parent so
+    /// existing `state.loadHistory(...)` call sites continue to compile.
     func loadHistory(from messages: [ChatMessage]) {
-        var exchanges: [FloatingChatExchange] = []
-        var i = 0
-        while i < messages.count {
-            let msg = messages[i]
-            if msg.sender == .user, i + 1 < messages.count, messages[i + 1].sender == .ai {
-                exchanges.append(FloatingChatExchange(question: msg.text, aiMessage: messages[i + 1]))
-                i += 2
-            } else {
-                i += 1
-            }
-        }
-        chatHistory = exchanges
+        streaming.loadHistory(from: messages)
     }
 
+    override init() {
+        super.init()
+        // Forward streaming changes so views that only inject the parent state
+        // still re-render. Views that take `@EnvironmentObject var streaming`
+        // get granular tracking and skip this round-trip.
+        streamingForwardCancellable = streaming.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+    }
 }
