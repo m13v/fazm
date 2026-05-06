@@ -182,6 +182,10 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
 /// SwiftUI view for the detached chat window. Reuses AIResponseView with the shared state.
 struct DetachedChatView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @EnvironmentObject var streaming: StreamingResponseState
+    @EnvironmentObject var input: InputState
+    @EnvironmentObject var voice: VoiceState
+    @EnvironmentObject var workspace: WorkspaceSettingsState
 
     var onSendFollowUp: (String, [ChatAttachment]) -> Void
     var onNewChat: () -> Void
@@ -199,64 +203,64 @@ struct DetachedChatView: View {
     var body: some View {
         AIResponseView(
             isLoading: Binding(
-                get: { state.streaming.isAILoading },
-                set: { state.streaming.isAILoading = $0 }
+                get: { streaming.isAILoading },
+                set: { streaming.isAILoading = $0 }
             ),
-            currentMessage: state.streaming.currentAIMessage,
-            userInput: state.streaming.displayedQuery,
-            chatHistory: state.streaming.chatHistory,
+            currentMessage: streaming.currentAIMessage,
+            userInput: streaming.displayedQuery,
+            chatHistory: streaming.chatHistory,
             isVoiceFollowUp: Binding(
-                get: { state.voice.isVoiceFollowUp },
-                set: { state.voice.isVoiceFollowUp = $0 }
+                get: { voice.isVoiceFollowUp },
+                set: { voice.isVoiceFollowUp = $0 }
             ),
             voiceFollowUpTranscript: Binding(
-                get: { state.voice.voiceFollowUpTranscript },
-                set: { state.voice.voiceFollowUpTranscript = $0 }
+                get: { voice.voiceFollowUpTranscript },
+                set: { voice.voiceFollowUpTranscript = $0 }
             ),
             suggestedReplies: Binding(
-                get: { state.streaming.suggestedReplies },
-                set: { state.streaming.suggestedReplies = $0 }
+                get: { streaming.suggestedReplies },
+                set: { streaming.suggestedReplies = $0 }
             ),
             suggestedReplyQuestion: Binding(
-                get: { state.streaming.suggestedReplyQuestion },
-                set: { state.streaming.suggestedReplyQuestion = $0 }
+                get: { streaming.suggestedReplyQuestion },
+                set: { streaming.suggestedReplyQuestion = $0 }
             ),
             localModel: Binding(
-                get: { state.workspace.selectedModel },
-                set: { state.workspace.selectedModel = $0 }
+                get: { workspace.selectedModel },
+                set: { workspace.selectedModel = $0 }
             ),
             onClose: nil,
             onNewChat: onNewChat,
             onSendFollowUp: { message, attachments in
-                state.streaming.suggestedReplies = []
-                state.streaming.suggestedReplyQuestion = ""
-                let currentQuery = state.streaming.displayedQuery
+                streaming.suggestedReplies = []
+                streaming.suggestedReplyQuestion = ""
+                let currentQuery = streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    let aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
+                    let aiMessage = streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
-                    log("[DetachedChat] onSendFollowUp: archiving exchange question='\(currentQuery.prefix(40))' aiMessage.id=\(aiMessage.id) historyCount=\(state.streaming.chatHistory.count)")
-                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    log("[DetachedChat] onSendFollowUp: archiving exchange question='\(currentQuery.prefix(40))' aiMessage.id=\(aiMessage.id) historyCount=\(streaming.chatHistory.count)")
+                    streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.streaming.displayedQuery = message
+                streaming.displayedQuery = message
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    state.streaming.isAILoading = true
-                    state.streaming.currentAIMessage = nil
+                    streaming.isAILoading = true
+                    streaming.currentAIMessage = nil
                 }
                 onSendFollowUp(message, attachments)
             },
             onEnqueueMessage: { message in
-                guard state.input.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
+                guard input.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
                 state.enqueue(message)
                 onEnqueueMessage(message)
             },
             onSendNow: { item in
                 state.dequeue(item.id)
-                let currentQuery = state.streaming.displayedQuery
+                let currentQuery = streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    var aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
+                    var aiMessage = streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
@@ -266,12 +270,12 @@ struct DetachedChatView: View {
                         }
                         return block
                     }
-                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.streaming.displayedQuery = item.text
-                state.streaming.isAILoading = true
-                state.streaming.currentAIMessage = nil
+                streaming.displayedQuery = item.text
+                streaming.isAILoading = true
+                streaming.currentAIMessage = nil
                 onSendNowQueued(item)
             },
             onDeleteQueued: { item in
@@ -283,7 +287,7 @@ struct DetachedChatView: View {
                 onClearQueue()
             },
             onReorderQueue: { source, dest in
-                state.input.messageQueue.move(fromOffsets: source, toOffset: dest)
+                input.messageQueue.move(fromOffsets: source, toOffset: dest)
                 onReorderQueue(source, dest)
             },
             onStopAgent: onStopAgent,
