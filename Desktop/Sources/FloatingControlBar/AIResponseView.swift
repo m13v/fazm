@@ -223,11 +223,11 @@ struct AIResponseView: View {
                 suggestedRepliesView
             }
 
-            if !state.messageQueue.isEmpty {
+            if !state.input.messageQueue.isEmpty {
                 MessageQueueView(
                     queue: Binding(
-                        get: { state.messageQueue },
-                        set: { state.messageQueue = $0 }
+                        get: { state.input.messageQueue },
+                        set: { state.input.messageQueue = $0 }
                     ),
                     onSendNow: { item in onSendNow?(item) },
                     onDelete: { item in onDeleteQueued?(item) },
@@ -235,7 +235,7 @@ struct AIResponseView: View {
                     onReorder: { source, dest in onReorderQueue?(source, dest) }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: state.messageQueue.count)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: state.input.messageQueue.count)
             }
 
             // Chat observer thinking indicator — only when no cards have arrived yet
@@ -895,20 +895,20 @@ struct AIResponseView: View {
     // MARK: - Follow-Up Input
 
     private var followUpHasInput: Bool {
-        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.pendingAttachments.isEmpty
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.input.pendingAttachments.isEmpty
     }
 
     private var followUpInputView: some View {
         VStack(spacing: 0) {
             // Attachment thumbnails strip
-            if !state.pendingAttachments.isEmpty {
-                ChatAttachmentStrip(attachments: $state.pendingAttachments)
+            if !state.input.pendingAttachments.isEmpty {
+                ChatAttachmentStrip(attachments: $state.input.pendingAttachments)
             }
 
             HStack(alignment: .center, spacing: 6) {
                 ChatAttachmentButton {
                     ChatAttachmentHelper.openFilePicker { urls in
-                        ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
+                        ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
                     }
                 }
 
@@ -927,10 +927,10 @@ struct AIResponseView: View {
                         onSubmit: { sendFollowUp() },
                         focusOnAppear: false,
                         onPasteFiles: { urls in
-                            ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
+                            ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
                         },
                         onPasteImageData: { data in
-                            ChatAttachmentHelper.addPastedImage(data, to: &state.pendingAttachments)
+                            ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
                         },
                         minHeight: 34,
                         maxHeight: 120,
@@ -940,14 +940,14 @@ struct AIResponseView: View {
                             }
                         }
                     )
-                    .onChange(of: state.pendingFollowUpText) {
-                        if !state.pendingFollowUpText.isEmpty {
+                    .onChange(of: state.input.pendingFollowUpText) {
+                        if !state.input.pendingFollowUpText.isEmpty {
                             if followUpText.isEmpty {
-                                followUpText = state.pendingFollowUpText
+                                followUpText = state.input.pendingFollowUpText
                             } else {
-                                followUpText += " " + state.pendingFollowUpText
+                                followUpText += " " + state.input.pendingFollowUpText
                             }
-                            state.pendingFollowUpText = ""
+                            state.input.pendingFollowUpText = ""
                         }
                     }
                     .onChange(of: state.isVoiceListening) {
@@ -955,12 +955,12 @@ struct AIResponseView: View {
                             preVoiceFollowUpText = followUpText
                         }
                     }
-                    .onChange(of: state.aiInputText) {
-                        if state.isVoiceListening && !state.aiInputText.isEmpty && state.aiInputText != followUpText {
+                    .onChange(of: state.input.aiInputText) {
+                        if state.isVoiceListening && !state.input.aiInputText.isEmpty && state.input.aiInputText != followUpText {
                             if preVoiceFollowUpText.isEmpty {
-                                followUpText = state.aiInputText
+                                followUpText = state.input.aiInputText
                             } else {
-                                followUpText = preVoiceFollowUpText + " " + state.aiInputText
+                                followUpText = preVoiceFollowUpText + " " + state.input.aiInputText
                             }
                         }
                     }
@@ -1017,10 +1017,10 @@ struct AIResponseView: View {
 
     private func sendFollowUp() {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let attachmentsToSend = state.pendingAttachments
+        let attachmentsToSend = state.input.pendingAttachments
         guard !trimmed.isEmpty || !attachmentsToSend.isEmpty else { return }
         followUpText = ""
-        state.pendingAttachments = []
+        state.input.pendingAttachments = []
 
         if isLoading || isThisSessionStreaming {
             // THIS window is busy (pre-first-token wait OR actively streaming) — queue the message (text only).
