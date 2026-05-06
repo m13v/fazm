@@ -26,7 +26,7 @@ enum ChatQueryLifecycle {
         sessionKey: String,
         messageCountBefore: Int? = nil
     ) {
-        state.isAILoading = false
+        state.streaming.isAILoading = false
 
         // Sync the latest AI message directly from provider.messages to close the
         // race window where sendMessage has returned but the Combine $messages sink
@@ -43,26 +43,26 @@ enum ChatQueryLifecycle {
         if let latestAI = searchRange.last(where: { $0.sender == .ai && $0.sessionKey == sessionKey }),
            !latestAI.text.isEmpty || !latestAI.contentBlocks.isEmpty {
             log("ChatQueryLifecycle: handlePostQuery synced AI message id=\(latestAI.id) session=\(sessionKey) fromSlice=\(messageCountBefore != nil)")
-            state.currentAIMessage = latestAI
+            state.streaming.currentAIMessage = latestAI
         } else {
             log("ChatQueryLifecycle: handlePostQuery found no new AI in \(searchRange.count) message(s) for session=\(sessionKey)")
         }
 
         // Don't update state if the conversation was closed while the query was in flight.
-        guard state.showingAIConversation else { return }
+        guard state.streaming.showingAIConversation else { return }
 
         if provider.isClaudeAuthRequired {
             state.showConnectClaudeButton = true
-            state.currentAIMessage = ChatMessage(text: "Please connect your Claude account to continue.", sender: .ai)
+            state.streaming.currentAIMessage = ChatMessage(text: "Please connect your Claude account to continue.", sender: .ai)
         } else if provider.showCreditExhaustedAlert {
             provider.showCreditExhaustedAlert = false
             if provider.isClaudeConnected {
                 // User already has valid Claude credentials; just inform them the switch happened
                 log("ChatQueryLifecycle: credits exhausted but Claude already connected, skipping connect prompt")
-                state.currentAIMessage = ChatMessage(text: "Switched to your Claude account. You can keep chatting.", sender: .ai)
+                state.streaming.currentAIMessage = ChatMessage(text: "Switched to your Claude account. You can keep chatting.", sender: .ai)
             } else {
                 state.showConnectClaudeButton = true
-                state.currentAIMessage = ChatMessage(text: "Your free built-in credits have run out. Connect your Claude account to continue.", sender: .ai)
+                state.streaming.currentAIMessage = ChatMessage(text: "Your free built-in credits have run out. Connect your Claude account to continue.", sender: .ai)
             }
         } else if let errorText = provider.errorMessage {
             let isRateLimit = errorText.contains("usage limit") || errorText.contains("rate limit")
@@ -73,20 +73,20 @@ enum ChatQueryLifecycle {
                 state.showUpgradeClaudeButton = true
             }
 
-            let hasContent = !state.aiResponseText.isEmpty || !(state.currentAIMessage?.contentBlocks.isEmpty ?? true)
+            let hasContent = !state.streaming.aiResponseText.isEmpty || !(state.streaming.currentAIMessage?.contentBlocks.isEmpty ?? true)
             let suffix = "\n\n⚠️ \(errorText)"
-            if state.currentAIMessage != nil && hasContent {
+            if state.streaming.currentAIMessage != nil && hasContent {
                 // ChatProvider's catch block also appends this suffix to the underlying
                 // message in `messages[]` and persists it. Skip the in-state append
                 // here if the warning is already present (the sync at line ~46 may
                 // have already pulled in the warning-included text from messages[]).
-                if !(state.currentAIMessage?.text.hasSuffix(suffix) ?? false) {
-                    log("ChatQueryLifecycle: appending error to partial response (\(state.aiResponseText.count) chars): \(errorText.prefix(80))")
-                    state.currentAIMessage?.text += suffix
+                if !(state.streaming.currentAIMessage?.text.hasSuffix(suffix) ?? false) {
+                    log("ChatQueryLifecycle: appending error to partial response (\(state.streaming.aiResponseText.count) chars): \(errorText.prefix(80))")
+                    state.streaming.currentAIMessage?.text += suffix
                 }
             } else {
                 log("ChatQueryLifecycle: creating error-only AI message: \(errorText.prefix(80))")
-                state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
+                state.streaming.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
             }
         } else if provider.showPaywall {
             // Paywall blocked the message before it was sent. Restore the
@@ -97,16 +97,16 @@ enum ChatQueryLifecycle {
             // prior AI response (when messageCountBefore is older than the
             // next exchange), making it look like the new question got the
             // old answer. Clear it so the only feedback is the paywall popup.
-            let unsentMessage = state.displayedQuery
-            state.currentAIMessage = nil
+            let unsentMessage = state.streaming.displayedQuery
+            state.streaming.currentAIMessage = nil
 
-            if state.chatHistory.isEmpty {
+            if state.streaming.chatHistory.isEmpty {
                 // First message in the session — collapse the chat view back
                 // to the floating bar input and restore the message text there.
                 state.aiInputText = unsentMessage
-                state.displayedQuery = ""
+                state.streaming.displayedQuery = ""
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    state.showingAIResponse = false
+                    state.streaming.showingAIResponse = false
                 }
             } else {
                 // Mid-conversation — un-archive the previous exchange (it was
@@ -114,27 +114,27 @@ enum ChatQueryLifecycle {
                 // so the visible question/answer pair matches again, and drop
                 // the unsent message back into the follow-up input via
                 // pendingFollowUpText (AIResponseView's onChange picks it up).
-                if let previous = state.chatHistory.popLast() {
-                    state.displayedQuery = previous.question
-                    state.currentAIMessage = previous.aiMessage
+                if let previous = state.streaming.chatHistory.popLast() {
+                    state.streaming.displayedQuery = previous.question
+                    state.streaming.currentAIMessage = previous.aiMessage
                 } else {
-                    state.displayedQuery = ""
+                    state.streaming.displayedQuery = ""
                 }
                 state.pendingFollowUpText = unsentMessage
             }
             return
         } else if provider.needsBrowserExtensionSetup || provider.pendingRetryMessage != nil {
             log("ChatQueryLifecycle: Suppressing error message — browser setup retry pending")
-        } else if state.currentAIMessage == nil ||
-                  (state.aiResponseText.isEmpty && (state.currentAIMessage?.contentBlocks.isEmpty ?? true)) {
-            state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+        } else if state.streaming.currentAIMessage == nil ||
+                  (state.streaming.aiResponseText.isEmpty && (state.streaming.currentAIMessage?.contentBlocks.isEmpty ?? true)) {
+            state.streaming.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
         }
 
         // Ensure the response view is visible (handles the case where
         // the streaming sink never fired because no data arrived before the error)
-        if !state.showingAIResponse {
+        if !state.streaming.showingAIResponse {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                state.showingAIResponse = true
+                state.streaming.showingAIResponse = true
             }
         }
     }
@@ -191,8 +191,8 @@ enum ChatQueryLifecycle {
                 .dropFirst()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak state] _ in
-                    state?.suggestedReplies = []
-                    state?.suggestedReplyQuestion = ""
+                    state?.streaming.suggestedReplies = []
+                    state?.streaming.suggestedReplyQuestion = ""
                 }
         )
 
@@ -224,9 +224,9 @@ enum ChatQueryLifecycle {
                     guard let state else { return }
                     let currentKey = sessionKeyProvider?() ?? sessionKey
                     if let currentKey {
-                        state.isCompacting = isCompacting && compactingKey == currentKey
+                        state.streaming.isCompacting = isCompacting && compactingKey == currentKey
                     } else {
-                        state.isCompacting = isCompacting
+                        state.streaming.isCompacting = isCompacting
                     }
                 }
         )
@@ -254,13 +254,13 @@ enum ChatQueryLifecycle {
         sendFollowUp: ((String) -> Void)?,
         sessionKey: String? = nil
     ) {
-        state.suggestedReplies = []
-        state.suggestedReplyQuestion = ""
+        state.streaming.suggestedReplies = []
+        state.streaming.suggestedReplyQuestion = ""
 
         let quickReplyHandler: (String, [String]) -> Void = { [weak state] question, options in
             Task { @MainActor in
-                state?.suggestedReplyQuestion = question
-                state?.suggestedReplies = options
+                state?.streaming.suggestedReplyQuestion = question
+                state?.streaming.suggestedReplies = options
             }
         }
 
