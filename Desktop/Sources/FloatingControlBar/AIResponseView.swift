@@ -178,7 +178,7 @@ struct AIResponseView: View {
                         shouldFollowContent = true
                         scrollToBottom(proxy: proxy)
                     }
-                    .onChange(of: state.pendingChatObserverExchanges.count) {
+                    .onChange(of: state.streaming.pendingChatObserverExchanges.count) {
                         shouldFollowContent = true
                         scrollToBottom(proxy: proxy)
                     }
@@ -239,7 +239,7 @@ struct AIResponseView: View {
             }
 
             // Chat observer thinking indicator — only when no cards have arrived yet
-            if state.isChatObserverRunning && !hasAnyChatObserverCards {
+            if state.streaming.isChatObserverRunning && !hasAnyChatObserverCards {
                 chatObserverThinkingIndicator
             }
 
@@ -324,7 +324,7 @@ struct AIResponseView: View {
 
     private var headerView: some View {
         HStack(spacing: 12) {
-            if state.isCompacting {
+            if state.streaming.isCompacting {
                 ProgressView()
                     .scaleEffect(0.6)
                     .frame(width: 16, height: 16)
@@ -591,7 +591,7 @@ struct AIResponseView: View {
                             actedAction: card.actedAction
                         )
                     },
-                    isChatObserverRunning: state.isChatObserverRunning,
+                    isChatObserverRunning: state.streaming.isChatObserverRunning,
                     onAction: { id, action in
                         handleChatObserverCardAction(activityId: id, action: action)
                     }
@@ -609,21 +609,21 @@ struct AIResponseView: View {
         onChatObserverCardAction?(activityId, action)
         // Persist the action in the content block so it survives view recreation
         // Use the view's own state (via @EnvironmentObject) so pop-outs update their own state, not the global bar
-        for i in state.chatHistory.indices {
-            for j in state.chatHistory[i].aiMessage.contentBlocks.indices {
-                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = state.chatHistory[i].aiMessage.contentBlocks[j],
+        for i in state.streaming.chatHistory.indices {
+            for j in state.streaming.chatHistory[i].aiMessage.contentBlocks.indices {
+                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = state.streaming.chatHistory[i].aiMessage.contentBlocks[j],
                    aId == activityId {
-                    state.chatHistory[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                    state.streaming.chatHistory[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
                     return
                 }
             }
         }
         // Also check pending chat observer exchanges
-        for i in state.pendingChatObserverExchanges.indices {
-            for j in state.pendingChatObserverExchanges[i].aiMessage.contentBlocks.indices {
-                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = state.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j],
+        for i in state.streaming.pendingChatObserverExchanges.indices {
+            for j in state.streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks.indices {
+                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = state.streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j],
                    aId == activityId {
-                    state.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                    state.streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
                     return
                 }
             }
@@ -653,7 +653,7 @@ struct AIResponseView: View {
     /// Uses the view's own @EnvironmentObject state so pop-outs only show their own pending cards.
     @ViewBuilder
     private var consolidatedPendingChatObserverCards: some View {
-        let cards = extractChatObserverCards(from: state.pendingChatObserverExchanges)
+        let cards = extractChatObserverCards(from: state.streaming.pendingChatObserverExchanges)
         if !cards.isEmpty {
             ObserverCardStackView(
                 cards: cards,
@@ -855,7 +855,7 @@ struct AIResponseView: View {
         }) ?? false
         if currentHas { return true }
 
-        let pendingHas = state.pendingChatObserverExchanges.contains(where: { exchange in
+        let pendingHas = state.streaming.pendingChatObserverExchanges.contains(where: { exchange in
             exchange.aiMessage.contentBlocks.contains(where: {
                 if case .observerCard = $0 { return true }
                 return false
@@ -977,7 +977,7 @@ struct AIResponseView: View {
                         // Eagerly clear local UI so the spinner and "Not Responding"
                         // banner vanish instantly, even if the bridge takes a while
                         // (or forever) to actually abort. The onChange(of: isLoading)
-                        // handler also clears these when state.isAILoading flips
+                        // handler also clears these when state.streaming.isAILoading flips
                         // false, but doing it here makes Stop feel instant.
                         loadingHideTask?.cancel()
                         loadingHideTask = nil
