@@ -52,7 +52,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
         )
 
         // Put the first prompt in the actual macOS title bar
-        let firstPrompt = state.chatHistory.first?.question ?? state.displayedQuery
+        let firstPrompt = state.streaming.chatHistory.first?.question ?? state.streaming.displayedQuery
         self.title = firstPrompt.isEmpty ? "Fazm Chat" : firstPrompt
         self.minSize = NSSize(width: 360, height: 300)
         self.isReleasedWhenClosed = false
@@ -92,7 +92,9 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
             onCodexLogin: { [weak self] in self?.onCodexLogin?() },
             onChatObserverCardAction: { [weak self] id, action in self?.onChatObserverCardAction?(id, action) },
             onChangeWorkspace: onChangeWorkspace != nil ? { [weak self] in self?.onChangeWorkspace?() } : nil
-        ).environmentObject(state)
+        )
+        .environmentObject(state)
+        .environmentObject(state.streaming)
 
         let hosting = NSHostingView(rootView: AnyView(
             chatView
@@ -195,12 +197,12 @@ struct DetachedChatView: View {
     var body: some View {
         AIResponseView(
             isLoading: Binding(
-                get: { state.isAILoading },
-                set: { state.isAILoading = $0 }
+                get: { state.streaming.isAILoading },
+                set: { state.streaming.isAILoading = $0 }
             ),
-            currentMessage: state.currentAIMessage,
-            userInput: state.displayedQuery,
-            chatHistory: state.chatHistory,
+            currentMessage: state.streaming.currentAIMessage,
+            userInput: state.streaming.displayedQuery,
+            chatHistory: state.streaming.chatHistory,
             isVoiceFollowUp: Binding(
                 get: { state.isVoiceFollowUp },
                 set: { state.isVoiceFollowUp = $0 }
@@ -210,12 +212,12 @@ struct DetachedChatView: View {
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
             suggestedReplies: Binding(
-                get: { state.suggestedReplies },
-                set: { state.suggestedReplies = $0 }
+                get: { state.streaming.suggestedReplies },
+                set: { state.streaming.suggestedReplies = $0 }
             ),
             suggestedReplyQuestion: Binding(
-                get: { state.suggestedReplyQuestion },
-                set: { state.suggestedReplyQuestion = $0 }
+                get: { state.streaming.suggestedReplyQuestion },
+                set: { state.streaming.suggestedReplyQuestion = $0 }
             ),
             localModel: Binding(
                 get: { state.selectedModel },
@@ -224,22 +226,22 @@ struct DetachedChatView: View {
             onClose: nil,
             onNewChat: onNewChat,
             onSendFollowUp: { message, attachments in
-                state.suggestedReplies = []
-                state.suggestedReplyQuestion = ""
-                let currentQuery = state.displayedQuery
+                state.streaming.suggestedReplies = []
+                state.streaming.suggestedReplyQuestion = ""
+                let currentQuery = state.streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    let aiMessage = state.currentAIMessage ?? ChatMessage(
+                    let aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
-                    log("[DetachedChat] onSendFollowUp: archiving exchange question='\(currentQuery.prefix(40))' aiMessage.id=\(aiMessage.id) historyCount=\(state.chatHistory.count)")
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    log("[DetachedChat] onSendFollowUp: archiving exchange question='\(currentQuery.prefix(40))' aiMessage.id=\(aiMessage.id) historyCount=\(state.streaming.chatHistory.count)")
+                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.displayedQuery = message
+                state.streaming.displayedQuery = message
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    state.isAILoading = true
-                    state.currentAIMessage = nil
+                    state.streaming.isAILoading = true
+                    state.streaming.currentAIMessage = nil
                 }
                 onSendFollowUp(message, attachments)
             },
@@ -250,9 +252,9 @@ struct DetachedChatView: View {
             },
             onSendNow: { item in
                 state.dequeue(item.id)
-                let currentQuery = state.displayedQuery
+                let currentQuery = state.streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    var aiMessage = state.currentAIMessage ?? ChatMessage(
+                    var aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
@@ -262,12 +264,12 @@ struct DetachedChatView: View {
                         }
                         return block
                     }
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.displayedQuery = item.text
-                state.isAILoading = true
-                state.currentAIMessage = nil
+                state.streaming.displayedQuery = item.text
+                state.streaming.isAILoading = true
+                state.streaming.currentAIMessage = nil
                 onSendNowQueued(item)
             },
             onDeleteQueued: { item in
@@ -356,7 +358,7 @@ class DetachedChatWindowController {
         let window: DetachedChatWindow
         var sessionKey: String
         var chatCancellable: AnyCancellable?
-        /// Per-message @Observable tracker. Drives `state.isAILoading` and the
+        /// Per-message @Observable tracker. Drives `state.streaming.isAILoading` and the
         /// streaming-completion handler. Token deltas no longer fire
         /// `provider.$messages`, so this is the only signal for those.
         var messageObserver: MessageObserver?
@@ -386,7 +388,7 @@ class DetachedChatWindowController {
     /// when a queued message is auto-chained by ChatProvider after the previous
     /// response completes. Without this, sending a follow-up while a response is
     /// streaming (which routes through `onEnqueueMessage`, never through `sendQuery`)
-    /// leaves `state.displayedQuery` stuck on the previous question and the new
+    /// leaves `state.streaming.displayedQuery` stuck on the previous question and the new
     /// answer ends up paired with the wrong question.
     private var globalDequeueObserver: NSObjectProtocol?
 
@@ -467,12 +469,12 @@ class DetachedChatWindowController {
     ) {
         // Create a fresh state for the detached window, copying conversation data
         let detachedState = FloatingControlBarState()
-        detachedState.chatHistory = chatHistory
-        detachedState.displayedQuery = displayedQuery
-        detachedState.currentAIMessage = currentAIMessage
-        detachedState.isAILoading = isAILoading
-        detachedState.showingAIConversation = true
-        detachedState.showingAIResponse = true
+        detachedState.streaming.chatHistory = chatHistory
+        detachedState.streaming.displayedQuery = displayedQuery
+        detachedState.streaming.currentAIMessage = currentAIMessage
+        detachedState.streaming.isAILoading = isAILoading
+        detachedState.streaming.showingAIConversation = true
+        detachedState.streaming.showingAIResponse = true
 
         // Workspace: prefer inherited (from currently focused pop-out) over shared provider,
         // so Cmd+Shift+N from a per-window-workspace pop-out keeps that same workspace.
@@ -517,7 +519,7 @@ class DetachedChatWindowController {
                     .receive(on: DispatchQueue.main)
                     .sink { [weak detachedState, weak chatProvider] _ in
                         guard let state = detachedState, let provider = chatProvider else { return }
-                        guard state.isAILoading else { return } // already handled by subscription
+                        guard state.streaming.isAILoading else { return } // already handled by subscription
                         ChatQueryLifecycle.handlePostQuery(provider: provider, state: state, sessionKey: sessionKey, messageCountBefore: messageCountBefore)
                     }
             )
@@ -658,9 +660,9 @@ class DetachedChatWindowController {
 
                 let detachedState = FloatingControlBarState()
                 detachedState.loadHistory(from: savedMessages)
-                detachedState.showingAIConversation = true
-                detachedState.showingAIResponse = true
-                detachedState.isAILoading = false
+                detachedState.streaming.showingAIConversation = true
+                detachedState.streaming.showingAIResponse = true
+                detachedState.streaming.isAILoading = false
 
                 // Restore per-window model selection and workspace
                 detachedState.selectedModel = snapshot.selectedModel
@@ -729,13 +731,13 @@ class DetachedChatWindowController {
 
         win.onNewChat = { [weak self, weak win, weak detachedState, weak chatProvider] in
             guard let self, let win, let state = detachedState, let provider = chatProvider else { return }
-            state.chatHistory = []
-            state.displayedQuery = ""
-            state.currentAIMessage = nil
-            state.isAILoading = false
+            state.streaming.chatHistory = []
+            state.streaming.displayedQuery = ""
+            state.streaming.currentAIMessage = nil
+            state.streaming.isAILoading = false
             state.aiInputText = ""
-            state.suggestedReplies = []
-            state.suggestedReplyQuestion = ""
+            state.streaming.suggestedReplies = []
+            state.streaming.suggestedReplyQuestion = ""
             state.clearQueue()
             let id = ObjectIdentifier(win)
             let oldKey = self.entries[id]?.sessionKey
@@ -801,9 +803,9 @@ class DetachedChatWindowController {
             // inactivity timeout. Bridge cleanup still runs async; any partial
             // response that arrives later is handled by the existing $messages
             // subscriber and merely overwrites our eager clear.
-            win.state.isAILoading = false
-            if win.state.currentAIMessage?.isStreaming == true {
-                win.state.currentAIMessage?.isStreaming = false
+            win.state.streaming.isAILoading = false
+            if win.state.streaming.currentAIMessage?.isStreaming == true {
+                win.state.streaming.currentAIMessage?.isStreaming = false
             }
             let key = self?.entries[ObjectIdentifier(win)]?.sessionKey
             if let key {
@@ -852,13 +854,13 @@ class DetachedChatWindowController {
             }
 
             let id = ObjectIdentifier(win)
-            state.chatHistory = []
-            state.displayedQuery = ""
-            state.currentAIMessage = nil
-            state.isAILoading = false
+            state.streaming.chatHistory = []
+            state.streaming.displayedQuery = ""
+            state.streaming.currentAIMessage = nil
+            state.streaming.isAILoading = false
             state.aiInputText = ""
-            state.suggestedReplies = []
-            state.suggestedReplyQuestion = ""
+            state.streaming.suggestedReplies = []
+            state.streaming.suggestedReplyQuestion = ""
             state.clearQueue()
             let oldKey = self.entries[id]?.sessionKey
             let newKey = "detached-\(UUID().uuidString)"
@@ -932,8 +934,8 @@ class DetachedChatWindowController {
                     let dequeuedSessionKey = notification.userInfo?["sessionKey"] as? String
                     guard dequeuedSessionKey == self.entries[id]?.sessionKey else { return }
                     // Archive the current exchange before the new query replaces it
-                    let currentQuery = state.displayedQuery
-                    var aiMessage = state.currentAIMessage
+                    let currentQuery = state.streaming.displayedQuery
+                    var aiMessage = state.streaming.currentAIMessage
                     if aiMessage == nil,
                        let currentKey = self.entries[id]?.sessionKey,
                        let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == currentKey }),
@@ -955,14 +957,14 @@ class DetachedChatWindowController {
                             }
                             return block
                         }
-                        state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
+                        state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
                     }
                     state.flushPendingChatObserverExchanges()
                     if let text = dequeuedText {
-                        state.displayedQuery = text
+                        state.streaming.displayedQuery = text
                     }
-                    state.isAILoading = true
-                    state.currentAIMessage = nil
+                    state.streaming.isAILoading = true
+                    state.streaming.currentAIMessage = nil
                     state.showUpgradeClaudeButton = false
                     // Set up the response subscriber now that our message is being sent
                     let countBefore = provider.messages.count
@@ -980,7 +982,7 @@ class DetachedChatWindowController {
     /// Start sending a query immediately (provider is not busy).
     private func startQuery(message: String, attachments: [ChatAttachment] = [], for win: DetachedChatWindow, winId: ObjectIdentifier, sessionKey: String, state: FloatingControlBarState, provider: ChatProvider) {
         let messageCountBefore = provider.messages.count
-        log("[DetachedChat] startQuery: messageCountBefore=\(messageCountBefore) session=\(sessionKey) chatHistory=\(state.chatHistory.count)")
+        log("[DetachedChat] startQuery: messageCountBefore=\(messageCountBefore) session=\(sessionKey) chatHistory=\(state.streaming.chatHistory.count)")
 
         // Shared pre-query setup: suggested replies, callbacks, analytics, referral
         ChatQueryLifecycle.prepareForQuery(
@@ -1075,12 +1077,12 @@ class DetachedChatWindowController {
                 guard let state, let self else { return }
                 let currentKey = self.entries[winId]?.sessionKey ?? initialKey
                 log("[DetachedChat] subscribeToResponse: new AI message id=\(aiMessage.id) streaming=\(aiMessage.isStreaming) session=\(currentKey ?? "?")")
-                state.currentAIMessage = aiMessage
+                state.streaming.currentAIMessage = aiMessage
                 // Reveal the response surface on first arrival. Subsequent
                 // mutations to the same message instance flow via MessageObserver.
-                if !state.showingAIResponse {
+                if !state.streaming.showingAIResponse {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        state.showingAIResponse = true
+                        state.streaming.showingAIResponse = true
                     }
                 }
                 // Tear down any previous observer (covers re-subscription).
@@ -1096,17 +1098,17 @@ class DetachedChatWindowController {
                     guard let state else { return }
                     let hasContent = !msg.text.isEmpty || !msg.contentBlocks.isEmpty
                     let newLoading = msg.isStreaming && !hasContent
-                    if state.isAILoading != newLoading {
-                        state.isAILoading = newLoading
+                    if state.streaming.isAILoading != newLoading {
+                        state.streaming.isAILoading = newLoading
                     }
                     if !msg.isStreaming {
                         // Ensure the response is visible even if we never saw
                         // isStreaming=true (e.g., response completed before this
                         // observer landed).
-                        if !state.showingAIResponse {
+                        if !state.streaming.showingAIResponse {
                             log("[DetachedChat] setting showingAIResponse=true for non-streaming message id=\(msg.id)")
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                state.showingAIResponse = true
+                                state.streaming.showingAIResponse = true
                             }
                         }
                         // Clear stale messages from provider now that streaming
@@ -1137,7 +1139,7 @@ class DetachedChatWindowController {
         guard let provider = FloatingControlBarManager.shared.chatProvider else { return }
         let state = entry.window.state
 
-        log("[DetachedChat] global dequeue: session=\(dequeuedSessionKey) text='\(dequeuedText.prefix(40))' historyCount=\(state.chatHistory.count) queue=\(state.messageQueue.count)")
+        log("[DetachedChat] global dequeue: session=\(dequeuedSessionKey) text='\(dequeuedText.prefix(40))' historyCount=\(state.streaming.chatHistory.count) queue=\(state.messageQueue.count)")
 
         // Drop the matching item from the per-window queue UI.
         if let idx = state.messageQueue.firstIndex(where: { $0.text == dequeuedText }) {
@@ -1147,8 +1149,8 @@ class DetachedChatWindowController {
         // Archive the previous exchange. If the per-window dequeue listener (busy
         // path of sendQuery) already ran first, displayedQuery will already match
         // and we skip the archive — same guard as that listener.
-        let currentQuery = state.displayedQuery
-        var aiMessage = state.currentAIMessage
+        let currentQuery = state.streaming.displayedQuery
+        var aiMessage = state.streaming.currentAIMessage
         if aiMessage == nil,
            let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == dequeuedSessionKey }),
            !latestAI.text.isEmpty {
@@ -1165,12 +1167,12 @@ class DetachedChatWindowController {
                 }
                 return block
             }
-            state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
+            state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
         }
         state.flushPendingChatObserverExchanges()
-        state.displayedQuery = dequeuedText
-        state.isAILoading = true
-        state.currentAIMessage = nil
+        state.streaming.displayedQuery = dequeuedText
+        state.streaming.isAILoading = true
+        state.streaming.currentAIMessage = nil
         state.showUpgradeClaudeButton = false
 
         // Re-anchor streaming for the chained query. Capture countBefore now,
