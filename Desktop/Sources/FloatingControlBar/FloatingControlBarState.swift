@@ -39,24 +39,24 @@ class AudioLevelState: ObservableObject {
     @Published var transcript: String = ""
 }
 
-/// Observable object holding the state for the floating control bar.
+/// Streaming AI response state. Split from `FloatingControlBarState` so views
+/// that don't render streaming content (input box, voice meter, settings panes)
+/// don't re-render on every streaming state change.
+///
+/// Pair this with `ChatMessage` being `@Observable`: token deltas mutate the
+/// message instance directly, causing only views that read `message.text` to
+/// re-render. State transitions tracked here (currentAIMessage assignment,
+/// isAILoading flips, chatHistory append) are rare and only invalidate views
+/// that explicitly observe `StreamingResponseState`.
 @MainActor
-class FloatingControlBarState: NSObject, ObservableObject {
-    @Published var isRecording: Bool = false
-    @Published var duration: Int = 0
-    @Published var isInitialising: Bool = false
-    @Published var isDragging: Bool = false
-
-    // AI conversation state
+final class StreamingResponseState: ObservableObject {
     @Published var showingAIConversation: Bool = false
     @Published var showingAIResponse: Bool = false
     @Published var isAILoading: Bool = true
     @Published var isCompacting: Bool = false
     @Published var isChatObserverRunning: Bool = false
-    @Published var aiInputText: String = ""
     @Published var currentAIMessage: ChatMessage? = nil
     @Published var displayedQuery: String = ""
-    @Published var inputViewHeight: CGFloat = 146
     @Published var chatHistory: [FloatingChatExchange] = []
     /// Chat observer cards queued while a query is streaming — rendered below the current response.
     @Published var pendingChatObserverExchanges: [FloatingChatExchange] = []
@@ -74,6 +74,54 @@ class FloatingControlBarState: NSObject, ObservableObject {
             }
         }
     }
+
+    /// Move any pending chat observer cards into chatHistory (call when archiving the current exchange).
+    func flushPendingChatObserverExchanges() {
+        guard !pendingChatObserverExchanges.isEmpty else { return }
+        chatHistory.append(contentsOf: pendingChatObserverExchanges)
+        pendingChatObserverExchanges.removeAll()
+    }
+
+    /// Pre-populate chatHistory from ChatProvider's messages so previous conversation is visible on fresh launch.
+    func loadHistory(from messages: [ChatMessage]) {
+        var exchanges: [FloatingChatExchange] = []
+        var i = 0
+        while i < messages.count {
+            let msg = messages[i]
+            if msg.sender == .user, i + 1 < messages.count, messages[i + 1].sender == .ai {
+                exchanges.append(FloatingChatExchange(question: msg.text, aiMessage: messages[i + 1]))
+                i += 2
+            } else {
+                i += 1
+            }
+        }
+        chatHistory = exchanges
+    }
+}
+
+/// Observable object holding the state for the floating control bar.
+///
+/// Streaming-related fields live on `streaming` (a child `StreamingResponseState`)
+/// rather than directly on this class, so high-frequency streaming updates only
+/// invalidate views that explicitly observe `StreamingResponseState` — not the
+/// entire UI tree of every view that takes `FloatingControlBarState` as an
+/// `@EnvironmentObject`.
+@MainActor
+class FloatingControlBarState: NSObject, ObservableObject {
+    /// Streaming AI response state — currentAIMessage, chatHistory, isAILoading, etc.
+    /// Inject into views via `.environmentObject(state.streaming)` and observe
+    /// directly with `@EnvironmentObject var streaming: StreamingResponseState`
+    /// in views that render streaming content.
+    let streaming = StreamingResponseState()
+
+    @Published var isRecording: Bool = false
+    @Published var duration: Int = 0
+    @Published var isInitialising: Bool = false
+    @Published var isDragging: Bool = false
+
+    // AI conversation input state (kept here for now; will move to InputState in Phase 2).
+    @Published var aiInputText: String = ""
+    @Published var inputViewHeight: CGFloat = 146
 
     // Push-to-talk state
     @Published var isVoiceListening: Bool = false
