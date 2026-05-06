@@ -246,7 +246,7 @@ struct DetachedChatView: View {
                 onSendFollowUp(message, attachments)
             },
             onEnqueueMessage: { message in
-                guard state.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
+                guard state.input.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
                 state.enqueue(message)
                 onEnqueueMessage(message)
             },
@@ -281,7 +281,7 @@ struct DetachedChatView: View {
                 onClearQueue()
             },
             onReorderQueue: { source, dest in
-                state.messageQueue.move(fromOffsets: source, toOffset: dest)
+                state.input.messageQueue.move(fromOffsets: source, toOffset: dest)
                 onReorderQueue(source, dest)
             },
             onStopAgent: onStopAgent,
@@ -291,13 +291,13 @@ struct DetachedChatView: View {
             onChangeWorkspace: onChangeWorkspace
         )
         .overlay {
-            if state.isDragOverChat {
+            if state.input.isDragOverChat {
                 ChatDragOverlay()
                     .padding(4)
                     .allowsHitTesting(false)
             }
         }
-        .onDrop(of: [.fileURL, .image], isTargeted: $state.isDragOverChat) { providers in
+        .onDrop(of: [.fileURL, .image], isTargeted: $state.input.isDragOverChat) { providers in
             for provider in providers {
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                     provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
@@ -315,7 +315,7 @@ struct DetachedChatView: View {
                         }
                         guard let url = resolvedURL else { return }
                         DispatchQueue.main.async {
-                            ChatAttachmentHelper.addFiles(from: [url], to: &state.pendingAttachments)
+                            ChatAttachmentHelper.addFiles(from: [url], to: &state.input.pendingAttachments)
                         }
                     }
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
@@ -331,7 +331,7 @@ struct DetachedChatView: View {
                         }
                         guard let data = imageData else { return }
                         DispatchQueue.main.async {
-                            ChatAttachmentHelper.addPastedImage(data, to: &state.pendingAttachments)
+                            ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
                         }
                     }
                 }
@@ -735,7 +735,7 @@ class DetachedChatWindowController {
             state.streaming.displayedQuery = ""
             state.streaming.currentAIMessage = nil
             state.streaming.isAILoading = false
-            state.aiInputText = ""
+            state.input.aiInputText = ""
             state.streaming.suggestedReplies = []
             state.streaming.suggestedReplyQuestion = ""
             state.clearQueue()
@@ -858,7 +858,7 @@ class DetachedChatWindowController {
             state.streaming.displayedQuery = ""
             state.streaming.currentAIMessage = nil
             state.streaming.isAILoading = false
-            state.aiInputText = ""
+            state.input.aiInputText = ""
             state.streaming.suggestedReplies = []
             state.streaming.suggestedReplyQuestion = ""
             state.clearQueue()
@@ -1139,11 +1139,11 @@ class DetachedChatWindowController {
         guard let provider = FloatingControlBarManager.shared.chatProvider else { return }
         let state = entry.window.state
 
-        log("[DetachedChat] global dequeue: session=\(dequeuedSessionKey) text='\(dequeuedText.prefix(40))' historyCount=\(state.streaming.chatHistory.count) queue=\(state.messageQueue.count)")
+        log("[DetachedChat] global dequeue: session=\(dequeuedSessionKey) text='\(dequeuedText.prefix(40))' historyCount=\(state.streaming.chatHistory.count) queue=\(state.input.messageQueue.count)")
 
         // Drop the matching item from the per-window queue UI.
-        if let idx = state.messageQueue.firstIndex(where: { $0.text == dequeuedText }) {
-            state.messageQueue.remove(at: idx)
+        if let idx = state.input.messageQueue.firstIndex(where: { $0.text == dequeuedText }) {
+            state.input.messageQueue.remove(at: idx)
         }
 
         // Archive the previous exchange. If the per-window dequeue listener (busy
