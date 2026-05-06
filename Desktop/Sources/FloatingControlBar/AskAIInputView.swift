@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 /// "Ask a question..." input panel for the floating control bar.
 struct AskAIInputView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @EnvironmentObject var streaming: StreamingResponseState
+    @EnvironmentObject var input: InputState
+    @EnvironmentObject var voice: VoiceState
     @Binding var userInput: String
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 34
@@ -39,19 +42,19 @@ struct AskAIInputView: View {
             .padding(.trailing, 16)
 
             // Attachment thumbnails strip
-            if !state.input.pendingAttachments.isEmpty {
-                ChatAttachmentStrip(attachments: Binding(get: { state.input.pendingAttachments }, set: { state.input.pendingAttachments = $0 }))
+            if !input.pendingAttachments.isEmpty {
+                ChatAttachmentStrip(attachments: Binding(get: { input.pendingAttachments }, set: { input.pendingAttachments = $0 }))
             }
 
             HStack(spacing: 6) {
                 ChatAttachmentButton {
                     ChatAttachmentHelper.openFilePicker { urls in
-                        ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
+                        ChatAttachmentHelper.addFiles(from: urls, to: &input.pendingAttachments)
                     }
                 }
 
                 ZStack(alignment: .topLeading) {
-                    if localInput.isEmpty && !state.voice.isVoiceListening {
+                    if localInput.isEmpty && !voice.isVoiceListening {
                         Text("Ask a question...")
                             .scaledFont(size: 13)
                             .foregroundColor(.secondary)
@@ -67,10 +70,10 @@ struct AskAIInputView: View {
                         },
                         focusOnAppear: true,
                         onPasteFiles: { urls in
-                            ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
+                            ChatAttachmentHelper.addFiles(from: urls, to: &input.pendingAttachments)
                         },
                         onPasteImageData: { data in
-                            ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
+                            ChatAttachmentHelper.addPastedImage(data, to: &input.pendingAttachments)
                         },
                         minHeight: minHeight,
                         maxHeight: maxHeight,
@@ -115,32 +118,32 @@ struct AskAIInputView: View {
 
     private func sendCurrentMessage() {
         let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !state.input.pendingAttachments.isEmpty else { return }
-        guard !state.streaming.isAILoading else { return }
+        guard !trimmed.isEmpty || !input.pendingAttachments.isEmpty else { return }
+        guard !streaming.isAILoading else { return }
         state.showSendButtonHint = false
-        let attachmentsToSend = state.input.pendingAttachments
-        state.input.pendingAttachments = []
+        let attachmentsToSend = input.pendingAttachments
+        input.pendingAttachments = []
         onSend?(trimmed, attachmentsToSend)
     }
 
     private var hasInput: Bool {
-        !localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.input.pendingAttachments.isEmpty
+        !localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !input.pendingAttachments.isEmpty
     }
 
     private var canSend: Bool {
-        hasInput && !state.streaming.isAILoading
+        hasInput && !streaming.isAILoading
     }
 
     // MARK: - Subviews
 
     private var micButton: some View {
-        PushToTalkButton(isListening: state.voice.isVoiceListening, iconSize: 18, frameSize: 28)
+        PushToTalkButton(isListening: voice.isVoiceListening, iconSize: 18, frameSize: 28)
     }
 
     private var sendButton: some View {
         VStack(spacing: 2) {
             Button(action: {
-                guard hasInput, !state.streaming.isAILoading else { return }
+                guard hasInput, !streaming.isAILoading else { return }
                 sendCurrentMessage()
             }) {
                 ZStack {
@@ -160,7 +163,7 @@ struct AskAIInputView: View {
                     .scaleEffect(state.showSendButtonHint && hasInput && sendPulse ? 1.15 : 1.0)
                     .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: sendPulse)
             }
-            .disabled(!hasInput || state.streaming.isAILoading)
+            .disabled(!hasInput || streaming.isAILoading)
             .buttonStyle(.plain)
 
             if state.showSendButtonHint && hasInput {
