@@ -369,7 +369,7 @@ class SessionRecordingManager {
         activityCancellables.removeAll()
 
         // 1. PTT / voice listening → resume immediately
-        barState.$isVoiceListening
+        barState.voice.$isVoiceListening
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] listening in
