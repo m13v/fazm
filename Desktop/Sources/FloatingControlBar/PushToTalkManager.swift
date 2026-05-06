@@ -342,7 +342,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     // Track whether PTT actually opened the chat (vs it was already open)
-    chatWasOpenBeforePTT = effectiveBarState?.showingAIConversation == true
+    chatWasOpenBeforePTT = effectiveBarState?.streaming.showingAIConversation == true
     pttOpenedChat = true
     if uiOverrideState == nil {
       // Keyboard PTT — manage floating bar window
@@ -380,7 +380,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     // Track whether PTT actually opened the chat (vs it was already open)
-    chatWasOpenBeforePTT = effectiveBarState?.showingAIConversation == true
+    chatWasOpenBeforePTT = effectiveBarState?.streaming.showingAIConversation == true
     pttOpenedChat = true
     if uiOverrideState == nil {
       // Keyboard PTT — manage floating bar window
@@ -621,7 +621,7 @@ class PushToTalkManager: ObservableObject {
       // PTT already opened the chat and synced live transcript — just finalize the text
       log("PushToTalkManager: finalizing PTT transcript in open chat (\(query.count) chars): \(query)")
       let targetState = sendOverrideState ?? barState
-      let isShowingResponse = targetState?.showingAIResponse == true
+      let isShowingResponse = targetState?.streaming.showingAIResponse == true
       if !isShowingResponse {
         targetState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
       }
@@ -856,7 +856,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     // Skip resize when PTT is from UI button (detached window) or opened the chat
-    guard uiOverrideState == nil && !skipResize && !pttOpenedChat && !targetState.showingAIConversation else { return }
+    guard uiOverrideState == nil && !skipResize && !pttOpenedChat && !targetState.streaming.showingAIConversation else { return }
     if targetState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !targetState.isVoiceListening && wasListening {
