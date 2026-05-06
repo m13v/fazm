@@ -28,7 +28,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Persist the current window size as the user's preferred chat height.
     func saveUserSize() {
-        guard state.showingAIResponse else { return }
+        guard state.streaming.showingAIResponse else { return }
         UserDefaults.standard.set(
             NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
         )
@@ -207,7 +207,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     override func keyDown(with event: NSEvent) {
         // Esc closes the AI conversation only — never hides the entire bar
         if event.keyCode == 53 { // Escape
-            if state.showingAIConversation {
+            if state.streaming.showingAIConversation {
                 closeAIConversation()
             }
             return
@@ -242,7 +242,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onCodexLogin: { [weak self] in self?.onCodexLogin?() },
             onChatObserverCardAction: { [weak self] activityId, action in self?.onChatObserverCardAction?(activityId, action) },
             onChangeWorkspace: { [weak self] in self?.onChangeWorkspace?() }
-        ).environmentObject(state)
+        )
+        .environmentObject(state)
+        .environmentObject(state.streaming)
 
         hostingView = NSHostingView(rootView: AnyView(
             swiftUIView
@@ -291,10 +293,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     // MARK: - AI Actions
 
     private func handleAskAI() {
-        if state.showingAIConversation && !state.showingAIResponse {
+        if state.streaming.showingAIConversation && !state.streaming.showingAIResponse {
             // Already showing input, close it
             closeAIConversation()
-        } else if state.showingAIConversation && state.showingAIResponse {
+        } else if state.streaming.showingAIConversation && state.streaming.showingAIResponse {
             // Showing response — focus the follow-up input instead of closing
             makeKeyAndOrderFront(nil)
             focusInputField()
@@ -348,10 +350,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
 
         // Snapshot the conversation before clearing so user can resume it later
-        if let msg = state.currentAIMessage, !msg.text.isEmpty {
-            var fullHistory = state.chatHistory
-            if !state.displayedQuery.isEmpty {
-                fullHistory.append(FloatingChatExchange(question: state.displayedQuery, aiMessage: msg))
+        if let msg = state.streaming.currentAIMessage, !msg.text.isEmpty {
+            var fullHistory = state.streaming.chatHistory
+            if !state.streaming.displayedQuery.isEmpty {
+                fullHistory.append(FloatingChatExchange(question: state.streaming.displayedQuery, aiMessage: msg))
             }
             if !fullHistory.isEmpty {
                 let lastExchange = fullHistory.last!
@@ -364,17 +366,17 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
 
         // Preserve unsent input text so it survives a dismiss-without-sending
-        if !state.aiInputText.isEmpty && state.currentAIMessage == nil {
+        if !state.aiInputText.isEmpty && state.streaming.currentAIMessage == nil {
             state.draftInputText = state.aiInputText
         }
 
         // Phase 1: Fade out SwiftUI content immediately
         withAnimation(.easeOut(duration: 0.2)) {
-            state.showingAIConversation = false
-            state.showingAIResponse = false
+            state.streaming.showingAIConversation = false
+            state.streaming.showingAIResponse = false
             state.aiInputText = ""
-            state.currentAIMessage = nil
-            state.chatHistory = []
+            state.streaming.currentAIMessage = nil
+            state.streaming.chatHistory = []
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
         }
@@ -422,7 +424,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             // Safety net: only snap if no new AI session was opened while the animation ran.
             // Without this guard, a rapid PTT query that fires within 0.35s gets collapsed
             // back to the pill position by this stale completion block.
-            guard !self.state.showingAIConversation else { return }
+            guard !self.state.streaming.showingAIConversation else { return }
             if self.frame != targetFrame {
                 self.setFrame(targetFrame, display: true, animate: false)
             }
@@ -443,7 +445,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private func installGlobalClickOutsideMonitor() {
         removeGlobalClickOutsideMonitor()
         globalClickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, self.isVisible, self.state.showingAIConversation, !self.suppressClickOutsideDismiss, !self.state.isCollapsed, !self.state.isVoiceListening else { return }
+            guard let self, self.isVisible, self.state.streaming.showingAIConversation, !self.suppressClickOutsideDismiss, !self.state.isCollapsed, !self.state.isVoiceListening else { return }
             // Don't dismiss while ACP is listening for agent output (covers tool calls
             // between streamed text — see windowDidResignKey for full reasoning).
             if FloatingControlBarManager.shared.isChatActive { return }
@@ -461,7 +463,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     /// Shared dismiss animation used by both windowDidResignKey (in-app) and global click monitor (cross-app).
     /// Collapses to half height and semi-transparent instead of fully closing.
     private func dismissConversationAnimated() {
-        guard state.showingAIResponse, state.currentAIMessage != nil else {
+        guard state.streaming.showingAIResponse, state.streaming.currentAIMessage != nil else {
             // No response to show — fully close
             closeAIConversation()
             return
@@ -510,7 +512,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func hideBar() {
         self.orderOut(nil)
-        AnalyticsManager.shared.floatingBarToggled(visible: false, source: state.showingAIConversation ? "escape_ai" : "bar_button")
+        AnalyticsManager.shared.floatingBarToggled(visible: false, source: state.streaming.showingAIConversation ? "escape_ai" : "bar_button")
         onHide?()
     }
 
@@ -530,7 +532,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // Check if we have existing conversation to restore — if so, skip the input-only
         // view and go straight to the response/chat view with history visible.
         let hasLastConversation = state.lastConversation != nil
-        let hasHistory = !state.chatHistory.isEmpty
+        let hasHistory = !state.streaming.chatHistory.isEmpty
         let shouldShowResponse = hasLastConversation || hasHistory
 
         // Resize window BEFORE changing state so SwiftUI content doesn't render
@@ -554,13 +556,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // If restoring a conversation, prepare the state.
         if shouldShowResponse {
             if let last = state.lastConversation {
-                state.chatHistory = last.history
-                state.displayedQuery = last.lastQuestion
-                state.currentAIMessage = last.lastMessage
+                state.streaming.chatHistory = last.history
+                state.streaming.displayedQuery = last.lastQuestion
+                state.streaming.currentAIMessage = last.lastMessage
                 state.clearLastConversation()
             } else {
-                state.displayedQuery = ""
-                state.currentAIMessage = nil
+                state.streaming.displayedQuery = ""
+                state.streaming.currentAIMessage = nil
             }
         }
 
@@ -576,12 +578,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self = self else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                self.state.showingAIConversation = true
-                self.state.showingAIResponse = shouldShowResponse
-                self.state.isAILoading = false
+                self.state.streaming.showingAIConversation = true
+                self.state.streaming.showingAIResponse = shouldShowResponse
+                self.state.streaming.isAILoading = false
                 self.state.aiInputText = restoredDraft
                 if !shouldShowResponse {
-                    self.state.currentAIMessage = nil
+                    self.state.streaming.currentAIMessage = nil
                 }
                 // Match the explicit resize height so the observer doesn't immediately override it
                 self.state.inputViewHeight = 146
@@ -610,15 +612,15 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             TutorialChatGuide.shared.finish(barState: state)
         }
 
-        state.showingAIConversation = true
-        state.chatHistory = []
-        state.displayedQuery = ""
-        state.currentAIMessage = nil
-        state.isAILoading = false
-        state.showingAIResponse = false
+        state.streaming.showingAIConversation = true
+        state.streaming.chatHistory = []
+        state.streaming.displayedQuery = ""
+        state.streaming.currentAIMessage = nil
+        state.streaming.isAILoading = false
+        state.streaming.showingAIResponse = false
         state.aiInputText = ""
-        state.suggestedReplies = []
-        state.suggestedReplyQuestion = ""
+        state.streaming.suggestedReplies = []
+        state.streaming.suggestedReplyQuestion = ""
         state.clearQueue()
 
         // Clear persisted messages and reset ACP session so restart doesn't reload old chat
@@ -644,8 +646,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] height in
                 guard let self = self,
-                      self.state.showingAIConversation,
-                      !self.state.showingAIResponse
+                      self.state.streaming.showingAIConversation,
+                      !self.state.streaming.showingAIResponse
                 else { return }
                 self.resizeToFixedHeight(height)
             }
@@ -657,30 +659,30 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func updateAIResponse(type: String, text: String) {
-        guard state.showingAIConversation else { return }
+        guard state.streaming.showingAIConversation else { return }
 
         switch type {
         case "data":
-            if state.isAILoading {
+            if state.streaming.isAILoading {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    state.isAILoading = false
-                    state.showingAIResponse = true
+                    state.streaming.isAILoading = false
+                    state.streaming.showingAIResponse = true
                 }
                 resizeToResponseHeight(animated: true)
             }
-            state.aiResponseText += text
+            state.streaming.aiResponseText += text
         case "done":
             withAnimation(.easeOut(duration: 0.2)) {
-                state.isAILoading = false
+                state.streaming.isAILoading = false
             }
             if !text.isEmpty {
-                state.aiResponseText = text
+                state.streaming.aiResponseText = text
             }
         case "error":
             withAnimation(.easeOut(duration: 0.2)) {
-                state.isAILoading = false
+                state.streaming.isAILoading = false
             }
-            state.aiResponseText = text.isEmpty ? "An unknown error occurred." : text
+            state.streaming.aiResponseText = text.isEmpty ? "An unknown error occurred." : text
         default:
             break
         }
@@ -777,7 +779,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from bottom so the pill expands upward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
+        guard !state.streaming.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -928,7 +930,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        guard state.showingAIConversation else { return }
+        guard state.streaming.showingAIConversation else { return }
 
         // Don't dismiss when already collapsed or during push-to-talk
         guard !state.isCollapsed, !state.isVoiceListening else { return }
@@ -985,7 +987,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        if !isResizingProgrammatically && state.showingAIResponse {
+        if !isResizingProgrammatically && state.streaming.showingAIResponse {
             UserDefaults.standard.set(
                 NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
             )
@@ -1007,7 +1009,7 @@ class FloatingControlBarManager {
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     /// Per-message @Observable tracker for the currently streaming message.
-    /// Drives `state.isAILoading` and the streaming-completion handler.
+    /// Drives `state.streaming.isAILoading` and the streaming-completion handler.
     /// Token deltas no longer fire `provider.$messages` (ChatMessage is a
     /// reference type), so this is the only granular signal available.
     private var messageObserver: MessageObserver?
@@ -1226,10 +1228,10 @@ class FloatingControlBarManager {
 
             // Reset session
             let state = self.window?.state
-            state?.chatHistory = []
-            state?.displayedQuery = ""
-            state?.currentAIMessage = nil
-            state?.isAILoading = false
+            state?.streaming.chatHistory = []
+            state?.streaming.displayedQuery = ""
+            state?.streaming.currentAIMessage = nil
+            state?.streaming.isAILoading = false
             state?.aiInputText = ""
             state?.clearQueue()
             self.window?.onResetSession?()
@@ -1253,8 +1255,8 @@ class FloatingControlBarManager {
                 // The Combine $messages sink uses receive(on: .main) which delivers
                 // asynchronously, so currentAIMessage may not yet reflect the latest
                 // provider state. Fall back to reading directly from provider.messages.
-                let currentQuery = state.displayedQuery
-                var aiMessage = state.currentAIMessage
+                let currentQuery = state.streaming.displayedQuery
+                var aiMessage = state.streaming.currentAIMessage
                 if aiMessage == nil, let provider = chatProvider,
                    let latestAI = provider.messages.last(where: { $0.sender == .ai && $0.sessionKey == "floating" }),
                    !latestAI.text.isEmpty {
@@ -1274,12 +1276,12 @@ class FloatingControlBarManager {
                         }
                         return block
                     }
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
+                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: resolved))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.displayedQuery = text
-                state.isAILoading = true
-                state.currentAIMessage = nil
+                state.streaming.displayedQuery = text
+                state.streaming.isAILoading = true
+                state.streaming.currentAIMessage = nil
                 state.showUpgradeClaudeButton = false
             }
         }
@@ -1360,9 +1362,9 @@ class FloatingControlBarManager {
 
                     // Show the bar and send the query
                     if !window.isVisible { self.show() }
-                    window.state.displayedQuery = prompt.instruction
+                    window.state.streaming.displayedQuery = prompt.instruction
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        window.state.showingAIResponse = true
+                        window.state.streaming.showingAIResponse = true
                     }
                     window.showAIConversation()
 
@@ -1370,7 +1372,7 @@ class FloatingControlBarManager {
 
                     // Wait for the AI to finish responding (poll isAILoading)
                     var waited = 0
-                    while barState.isAILoading, waited < 300 {
+                    while barState.streaming.isAILoading, waited < 300 {
                         try? await Task.sleep(for: .seconds(1))
                         waited += 1
                     }
@@ -1402,9 +1404,9 @@ class FloatingControlBarManager {
 
                 // Show the bar and set up the UI as if the user typed the query
                 if !window.isVisible { self.show() }
-                window.state.displayedQuery = text
+                window.state.streaming.displayedQuery = text
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    window.state.showingAIResponse = true
+                    window.state.streaming.showingAIResponse = true
                 }
                 window.showAIConversation()
 
@@ -1580,18 +1582,18 @@ class FloatingControlBarManager {
             "voiceEnabled": voiceEnabled,
             "workspace": workspace,
             "isVisible": window?.isVisible ?? false,
-            "showingAIConversation": state?.showingAIConversation ?? false,
-            "showingAIResponse": state?.showingAIResponse ?? false,
-            "isAILoading": state?.isAILoading ?? false,
+            "showingAIConversation": state?.streaming.showingAIConversation ?? false,
+            "showingAIResponse": state?.streaming.showingAIResponse ?? false,
+            "isAILoading": state?.streaming.isAILoading ?? false,
             "isVoiceListening": state?.isVoiceListening ?? false,
-            "chatHistoryCount": state?.chatHistory.count ?? 0,
-            "displayedQuery": state?.displayedQuery ?? "",
+            "chatHistoryCount": state?.streaming.chatHistory.count ?? 0,
+            "displayedQuery": state?.streaming.displayedQuery ?? "",
             "queueCount": state?.messageQueue.count ?? 0,
             "isTutorialActive": state?.isTutorialChatActive ?? false,
             "availableModels": ShortcutSettings.shared.availableModels.map { ["id": $0.id, "label": $0.label, "shortLabel": $0.shortLabel] }
         ]
 
-        if let currentMessage = state?.currentAIMessage {
+        if let currentMessage = state?.streaming.currentAIMessage {
             dict["currentMessagePreview"] = String(currentMessage.text.prefix(200))
             dict["isStreaming"] = currentMessage.isStreaming
         }
@@ -1624,7 +1626,7 @@ class FloatingControlBarManager {
         BrowserProfileMigrationManager.shared.showIfNeeded()
 
         // Auto-focus input if AI conversation is open
-        if let window = window, window.state.showingAIConversation && !window.state.showingAIResponse {
+        if let window = window, window.state.streaming.showingAIConversation && !window.state.streaming.showingAIResponse {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 window.focusInputField()
             }
@@ -1710,7 +1712,7 @@ class FloatingControlBarManager {
         }
 
         // If a conversation is already showing, just focus the follow-up input
-        if window.state.showingAIConversation && window.state.showingAIResponse {
+        if window.state.streaming.showingAIConversation && window.state.streaming.showingAIResponse {
             if !window.isVisible { show() }
             window.makeKeyAndOrderFront(nil)
             window.focusInputField()
@@ -1738,7 +1740,7 @@ class FloatingControlBarManager {
         if let provider = self.chatProvider {
             Task { @MainActor in
                 await provider.restoreFloatingChatIfNeeded()
-                if window.state.lastConversation == nil && window.state.chatHistory.isEmpty
+                if window.state.lastConversation == nil && window.state.streaming.chatHistory.isEmpty
                     && !provider.floatingChatWasCleared {
                     let floatingMessages = provider.messages.filter { ($0.sessionKey ?? "floating") == "floating" }
                     if !floatingMessages.isEmpty {
@@ -1772,10 +1774,10 @@ class FloatingControlBarManager {
         window.cancelInputHeightObserver()
 
         // Reset state directly (no animation) to avoid contract-then-expand flicker
-        window.state.showingAIConversation = false
-        window.state.showingAIResponse = false
+        window.state.streaming.showingAIConversation = false
+        window.state.streaming.showingAIResponse = false
         window.state.aiInputText = ""
-        window.state.currentAIMessage = nil
+        window.state.streaming.currentAIMessage = nil
         window.state.isVoiceFollowUp = false
         window.state.voiceFollowUpTranscript = ""
 
@@ -1851,7 +1853,7 @@ class FloatingControlBarManager {
         // Must complete before showAIConversation() so the history check works.
         Task { @MainActor in
             await provider.restoreFloatingChatIfNeeded()
-            if window.state.chatHistory.isEmpty && !provider.floatingChatWasCleared {
+            if window.state.streaming.chatHistory.isEmpty && !provider.floatingChatWasCleared {
                 let floatingMessages = provider.messages.filter { ($0.sessionKey ?? "floating") == "floating" }
                 if !floatingMessages.isEmpty {
                     window.state.loadHistory(from: floatingMessages)
@@ -1875,7 +1877,7 @@ class FloatingControlBarManager {
 
     /// Insert a PTT transcription into the follow-up input field (user can edit before sending).
     func sendFollowUpQuery(_ query: String) {
-        guard let window = window, window.state.showingAIResponse else {
+        guard let window = window, window.state.streaming.showingAIResponse else {
             // No active conversation — fall back to new conversation
             openAIInputWithQuery(query)
             return
@@ -1939,7 +1941,7 @@ class FloatingControlBarManager {
 
         log("FloatingControlBarManager: Popping out conversation to detached window")
         AnalyticsManager.shared.floatingBarChatPoppedOut(
-            historyCount: state.chatHistory.count
+            historyCount: state.streaming.chatHistory.count
         )
 
         // Remove monitors before hiding the floating bar conversation
@@ -1948,10 +1950,10 @@ class FloatingControlBarManager {
         state.isCollapsed = false
 
         // Snapshot conversation data before resetting
-        let chatHistory = state.chatHistory
-        let displayedQuery = state.displayedQuery
-        let currentAIMessage = state.currentAIMessage
-        let isAILoading = state.isAILoading
+        let chatHistory = state.streaming.chatHistory
+        let displayedQuery = state.streaming.displayedQuery
+        let currentAIMessage = state.streaming.currentAIMessage
+        let isAILoading = state.streaming.isAILoading
         // If a query is in-flight, subtract 1 so the detached window's subscriber
         // picks up streaming updates to the existing AI message (already in messages).
         let messageCountBefore = provider.messages.count - (isAILoading ? 1 : 0)
@@ -1980,9 +1982,9 @@ class FloatingControlBarManager {
         )
 
         // Clear floating bar state so closeAIConversation doesn't snapshot stale data
-        state.chatHistory = []
-        state.displayedQuery = ""
-        state.currentAIMessage = nil
+        state.streaming.chatHistory = []
+        state.streaming.displayedQuery = ""
+        state.streaming.currentAIMessage = nil
         state.aiInputText = ""  // Clear stale input so it isn't saved as a draft
         state.clearLastConversation()
         state.clearQueue()
@@ -2050,13 +2052,13 @@ class FloatingControlBarManager {
 
         // Archive the interrupted exchange to chat history before clearing,
         // so the user's original query and any partial AI response remain visible.
-        let currentQuery = window.state.displayedQuery
+        let currentQuery = window.state.streaming.displayedQuery
         if !currentQuery.isEmpty {
-            let aiMessage = window.state.currentAIMessage ?? ChatMessage(
+            let aiMessage = window.state.streaming.currentAIMessage ?? ChatMessage(
                 id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                 isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
             )
-            window.state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+            window.state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
         }
         window.state.flushPendingChatObserverExchanges()
 
@@ -2066,7 +2068,7 @@ class FloatingControlBarManager {
         messageObserver?.cancel()
         messageObserver = nil
         window.cancelInputHeightObserver()
-        window.state.currentAIMessage = nil
+        window.state.streaming.currentAIMessage = nil
 
         NSApp.activate(ignoringOtherApps: true)
         if !window.isVisible { show() }
@@ -2090,7 +2092,7 @@ class FloatingControlBarManager {
         // The queue drains automatically after the current response finishes.
         if provider.isSending {
             provider.enqueueMessage(message, sessionKey: "floating")
-            barWindow.state.isAILoading = false
+            barWindow.state.streaming.isAILoading = false
             log("FloatingControlBarManager: Query enqueued (agent busy): \(message.prefix(80))")
             return
         }
@@ -2111,7 +2113,7 @@ class FloatingControlBarManager {
         // Also filter by sessionKey == "floating" so any messages re-keyed to a
         // detached session (see `transferSession`) are never pulled into the
         // floating bar's exchange list.
-        if barWindow.state.chatHistory.isEmpty && barWindow.state.currentAIMessage == nil
+        if barWindow.state.streaming.chatHistory.isEmpty && barWindow.state.streaming.currentAIMessage == nil
             && !provider.floatingChatWasCleared {
             let restored = provider.messages.filter { ($0.sessionKey ?? "floating") == "floating" }
             if !restored.isEmpty {
@@ -2119,7 +2121,7 @@ class FloatingControlBarManager {
                 var i = 0
                 while i < restored.count - 1 {
                     if restored[i].sender == .user, restored[i + 1].sender == .ai {
-                        barWindow.state.chatHistory.append(
+                        barWindow.state.streaming.chatHistory.append(
                             FloatingChatExchange(question: restored[i].text, aiMessage: restored[i + 1])
                         )
                         i += 2
@@ -2127,7 +2129,7 @@ class FloatingControlBarManager {
                         i += 1
                     }
                 }
-                log("FloatingControlBarManager: Populated \(barWindow.state.chatHistory.count) exchanges from restored messages")
+                log("FloatingControlBarManager: Populated \(barWindow.state.streaming.chatHistory.count) exchanges from restored messages")
             }
         } else if provider.floatingChatWasCleared {
             log("FloatingControlBarManager: Skipping populate-from-messages (floating chat was cleared, e.g. pop-out)")
@@ -2155,7 +2157,7 @@ class FloatingControlBarManager {
 
         // Record message count before sending so we can detect the new AI response
         let messageCountBefore = provider.messages.count
-        log("[FloatingBar] sendAIQuery: messageCountBefore=\(messageCountBefore) chatHistory=\(barWindow.state.chatHistory.count)")
+        log("[FloatingBar] sendAIQuery: messageCountBefore=\(messageCountBefore) chatHistory=\(barWindow.state.streaming.chatHistory.count)")
 
         // Shared pre-query setup: suggested replies, callbacks, analytics, referral
         ChatQueryLifecycle.prepareForQuery(
@@ -2175,8 +2177,8 @@ class FloatingControlBarManager {
         chatCancellable?.cancel()
         messageObserver?.cancel()
         messageObserver = nil
-        barWindow.state.currentAIMessage = nil
-        barWindow.state.isAILoading = true
+        barWindow.state.streaming.currentAIMessage = nil
+        barWindow.state.streaming.isAILoading = true
         var hasSetUpResponseHeight = false
         log("[FloatingBar] subscribeToResponse: messageCountBefore=\(messageCountBefore) session=floating")
         // The array publisher only fires on add/remove now (ChatMessage is a
@@ -2187,7 +2189,7 @@ class FloatingControlBarManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak barWindow] messages in
                 // Ignore updates if the conversation was closed (Esc pressed during streaming)
-                guard let self, let barWindow = barWindow, barWindow.state.showingAIConversation else { return }
+                guard let self, let barWindow = barWindow, barWindow.state.streaming.showingAIConversation else { return }
                 guard messages.count > messageCountBefore else { return }
                 // Only examine messages added since this subscription was created.
                 // Searching ALL messages would re-set currentAIMessage to a prior AI
@@ -2204,7 +2206,7 @@ class FloatingControlBarManager {
 
                 log("[FloatingBar] subscribeToResponse: AI id=\(aiMessage.id) streaming=\(aiMessage.isStreaming)")
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
-                barWindow.state.currentAIMessage = aiMessage
+                barWindow.state.streaming.currentAIMessage = aiMessage
 
                 // Tear down any previous observer; install a new one keyed to
                 // this message so token deltas drive isAILoading and the
@@ -2214,14 +2216,14 @@ class FloatingControlBarManager {
                     guard let barWindow else { return }
                     let hasContent = !msg.text.isEmpty || !msg.contentBlocks.isEmpty
                     let newLoading = msg.isStreaming && !hasContent
-                    if barWindow.state.isAILoading != newLoading {
-                        barWindow.state.isAILoading = newLoading
+                    if barWindow.state.streaming.isAILoading != newLoading {
+                        barWindow.state.streaming.isAILoading = newLoading
                     }
                     if msg.isStreaming, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
-                        if !barWindow.state.showingAIResponse {
+                        if !barWindow.state.streaming.showingAIResponse {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                barWindow.state.showingAIResponse = true
+                                barWindow.state.streaming.showingAIResponse = true
                             }
                         }
                         barWindow.resizeToResponseHeightPublic(animated: false)
@@ -2237,7 +2239,7 @@ class FloatingControlBarManager {
         ChatQueryLifecycle.handlePostQuery(provider: provider, state: barWindow.state, sessionKey: "floating", messageCountBefore: messageCountBefore)
 
         // Floating bar specific: resize window to fit the response/error
-        if barWindow.state.showingAIResponse {
+        if barWindow.state.streaming.showingAIResponse {
             barWindow.resizeToResponseHeightPublic(animated: true)
         }
     }
