@@ -103,7 +103,7 @@ enum ChatQueryLifecycle {
             if state.streaming.chatHistory.isEmpty {
                 // First message in the session — collapse the chat view back
                 // to the floating bar input and restore the message text there.
-                state.aiInputText = unsentMessage
+                state.input.aiInputText = unsentMessage
                 state.streaming.displayedQuery = ""
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.streaming.showingAIResponse = false
@@ -120,7 +120,7 @@ enum ChatQueryLifecycle {
                 } else {
                     state.streaming.displayedQuery = ""
                 }
-                state.pendingFollowUpText = unsentMessage
+                state.input.pendingFollowUpText = unsentMessage
             }
             return
         } else if provider.needsBrowserExtensionSetup || provider.pendingRetryMessage != nil {
