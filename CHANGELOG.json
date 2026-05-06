@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Massively reduced CPU usage during chat streaming, especially with multiple pop-out windows open: token deltas now flow through per-message granular observation instead of republishing the entire conversation array, so a single response no longer pegs a CPU core. Internally this restructures the floating-bar state into focused stores (streaming, input, voice, workspace, tutorial) so an updating message only re-renders the views actually showing that message"
+  ],
   "releases": [
     {
       "version": "2.8.2",
