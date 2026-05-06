@@ -86,7 +86,7 @@ struct AIResponseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if state.isTutorialChatActive {
+            if state.tutorial.isTutorialChatActive {
                 tutorialBanner
             }
 
@@ -304,7 +304,7 @@ struct AIResponseView: View {
 
     /// The effective workspace for this view: per-window state if set, otherwise global default.
     private var aiChatWorkingDirectory: String {
-        state.workspaceDirectory.isEmpty ? globalWorkspaceDirectory : state.workspaceDirectory
+        state.workspace.workspaceDirectory.isEmpty ? globalWorkspaceDirectory : state.workspace.workspaceDirectory
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, anchor: String = "bottom") {
@@ -519,7 +519,7 @@ struct AIResponseView: View {
         HStack(spacing: 6) {
             Image(systemName: "graduationcap.fill")
                 .scaledFont(size: 11)
-            Text("Getting Started — Step \(min(state.tutorialChatStep + 1, state.tutorialPrompts.count)) of \(state.tutorialPrompts.count)")
+            Text("Getting Started — Step \(min(state.tutorial.tutorialChatStep + 1, state.tutorial.tutorialPrompts.count)) of \(state.tutorial.tutorialPrompts.count)")
                 .scaledFont(size: 11, weight: .medium)
             Spacer()
             Button("Skip") {
