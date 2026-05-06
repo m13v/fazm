@@ -138,7 +138,7 @@ class PostOnboardingTutorialManager {
     }
 
     private func observeVoiceState(barState: FloatingControlBarState) {
-        barState.$isVoiceListening
+        barState.voice.$isVoiceListening
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isListening in
                 guard let self else { return }
@@ -166,7 +166,7 @@ class PostOnboardingTutorialManager {
                         // If so, go back to selectMic step instead of completing.
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self, weak barState] in
                             guard let self, let barState else { return }
-                            if barState.isSilenceOverlayVisible {
+                            if barState.voice.isSilenceOverlayVisible {
                                 // No speech detected — reset to mic selection
                                 AnalyticsManager.shared.tutorialSilenceReset()
                                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -289,17 +289,17 @@ class TutorialChatGuide {
     /// Start the tutorial chat guide after the overlay tutorial's first successful voice interaction.
     func start(barState: FloatingControlBarState) {
         AnalyticsManager.shared.tutorialChatGuideStarted()
-        barState.isTutorialChatActive = true
-        barState.tutorialChatStep = 0
+        barState.tutorial.isTutorialChatActive = true
+        barState.tutorial.tutorialChatStep = 0
         // The first voice query is already in flight when start() is called,
         // so mark as waiting so the response observer can detect [[TUTORIAL_STEP_DONE]].
-        barState.tutorialWaitingForResponse = true
+        barState.tutorial.tutorialWaitingForResponse = true
 
         // Load personalized prompts from onboarding data, then set up the tutorial
         Task {
             let prompts = await Self.buildPersonalizedPrompts()
-            barState.tutorialPrompts = prompts
-            barState.tutorialSystemPromptSuffix = Self.buildTutorialSuffix(step: 0, prompts: prompts)
+            barState.tutorial.tutorialPrompts = prompts
+            barState.tutorial.tutorialSystemPromptSuffix = Self.buildTutorialSuffix(step: 0, prompts: prompts)
 
             // Observe AI responses for the step-done marker
             self.observeResponses(barState: barState)
@@ -438,10 +438,10 @@ class TutorialChatGuide {
 
     /// Inject the next tutorial guidance message into the chat.
     func injectNextGuidance(barState: FloatingControlBarState) {
-        guard barState.isTutorialChatActive else { return }
+        guard barState.tutorial.isTutorialChatActive else { return }
 
-        let step = barState.tutorialChatStep
-        let prompts = barState.tutorialPrompts
+        let step = barState.tutorial.tutorialChatStep
+        let prompts = barState.tutorial.tutorialPrompts
 
         AnalyticsManager.shared.tutorialChatGuidanceInjected(step: step)
 
@@ -462,7 +462,7 @@ class TutorialChatGuide {
         }
 
         // Update the system prompt suffix for the new step
-        barState.tutorialSystemPromptSuffix = Self.buildTutorialSuffix(step: step, prompts: prompts)
+        barState.tutorial.tutorialSystemPromptSuffix = Self.buildTutorialSuffix(step: step, prompts: prompts)
 
         let prompt = prompts[step]
 
@@ -485,7 +485,7 @@ class TutorialChatGuide {
 
         let guideMessage = ChatMessage(text: guideText, sender: .ai)
         injectTutorialMessage(guideMessage, barState: barState)
-        barState.tutorialWaitingForResponse = false
+        barState.tutorial.tutorialWaitingForResponse = false
     }
 
     /// Observe AI responses for the [[TUTORIAL_STEP_DONE]] marker to advance steps.
@@ -498,7 +498,7 @@ class TutorialChatGuide {
             .compactMap { $0 }
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak barState] message in
-                guard let self, let barState, barState.isTutorialChatActive else { return }
+                guard let self, let barState, barState.tutorial.isTutorialChatActive else { return }
                 let marker = "[[TUTORIAL_STEP_DONE]]"
 
                 // Always strip the marker so it never shows to the user
@@ -511,7 +511,7 @@ class TutorialChatGuide {
                 }
 
                 // Only advance steps once streaming is complete
-                guard !message.isStreaming, barState.tutorialWaitingForResponse,
+                guard !message.isStreaming, barState.tutorial.tutorialWaitingForResponse,
                       self.stepDoneMarkerSeen else { return }
                 self.stepDoneMarkerSeen = false
 
@@ -525,31 +525,31 @@ class TutorialChatGuide {
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak barState] query in
-                guard let self, let barState, barState.isTutorialChatActive, !query.isEmpty else { return }
+                guard let self, let barState, barState.tutorial.isTutorialChatActive, !query.isEmpty else { return }
                 // If the user sends a follow-up before the marker was seen, auto-advance —
                 // but only if the AI already responded to the current step (not still streaming).
                 // The user engaging after seeing a response means the step's goal was met enough.
-                if barState.tutorialWaitingForResponse, !self.stepDoneMarkerSeen,
+                if barState.tutorial.tutorialWaitingForResponse, !self.stepDoneMarkerSeen,
                    let currentMsg = barState.streaming.currentAIMessage,
                    !currentMsg.text.isEmpty, !currentMsg.isStreaming {
                     log("TutorialChatGuide: Auto-advancing step (user sent follow-up without marker)")
                     self.advanceStep(barState: barState)
                 }
-                barState.tutorialWaitingForResponse = true
+                barState.tutorial.tutorialWaitingForResponse = true
             }
             .store(in: &cancellables)
     }
 
     /// Advance to the next tutorial step.
     private func advanceStep(barState: FloatingControlBarState) {
-        barState.tutorialWaitingForResponse = false
-        let completedStep = barState.tutorialChatStep
-        let prompts = barState.tutorialPrompts
+        barState.tutorial.tutorialWaitingForResponse = false
+        let completedStep = barState.tutorial.tutorialChatStep
+        let prompts = barState.tutorial.tutorialPrompts
         let desc = completedStep < prompts.count ? prompts[completedStep].description : "unknown"
         AnalyticsManager.shared.tutorialChatStepCompleted(step: completedStep, description: desc)
-        barState.tutorialChatStep += 1
+        barState.tutorial.tutorialChatStep += 1
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self, weak barState] in
-            guard let self, let barState, barState.isTutorialChatActive else { return }
+            guard let self, let barState, barState.tutorial.isTutorialChatActive else { return }
             self.injectNextGuidance(barState: barState)
         }
     }
@@ -579,10 +579,10 @@ class TutorialChatGuide {
     /// End the tutorial chat guide and reset the floating session to free context.
     func finish(barState: FloatingControlBarState) {
         AnalyticsManager.shared.tutorialCompleted()
-        barState.isTutorialChatActive = false
-        barState.tutorialWaitingForResponse = false
-        barState.tutorialSystemPromptSuffix = nil
-        barState.tutorialPrompts = []
+        barState.tutorial.isTutorialChatActive = false
+        barState.tutorial.tutorialWaitingForResponse = false
+        barState.tutorial.tutorialSystemPromptSuffix = nil
+        barState.tutorial.tutorialPrompts = []
         cancellables.removeAll()
 
         // Mark tutorial as completed so it won't re-show on next launch
