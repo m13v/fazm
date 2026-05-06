@@ -297,7 +297,7 @@ struct DetachedChatView: View {
                     .allowsHitTesting(false)
             }
         }
-        .onDrop(of: [.fileURL, .image], isTargeted: $state.input.isDragOverChat) { providers in
+        .onDrop(of: [.fileURL, .image], isTargeted: Binding(get: { state.input.isDragOverChat }, set: { state.input.isDragOverChat = $0 })) { providers in
             for provider in providers {
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                     provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
