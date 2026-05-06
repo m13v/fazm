@@ -845,11 +845,11 @@ class PushToTalkManager: ObservableObject {
 
   private func updateBarState(skipResize: Bool = false) {
     guard let targetState = effectiveBarState else { return }
-    let wasListening = targetState.isVoiceListening
-    targetState.isVoiceListening =
+    let wasListening = targetState.voice.isVoiceListening
+    targetState.voice.isVoiceListening =
       (state == .listening || state == .lockedListening || state == .finalizing)
-    targetState.isVoiceLocked = (state == .lockedListening)
-    targetState.isVoiceFinalizing = (state == .finalizing)
+    targetState.voice.isVoiceLocked = (state == .lockedListening)
+    targetState.voice.isVoiceFinalizing = (state == .finalizing)
     if state == .idle {
       targetState.audioLevel.transcript = ""
       targetState.audioLevel.level = 0.0
@@ -857,9 +857,9 @@ class PushToTalkManager: ObservableObject {
 
     // Skip resize when PTT is from UI button (detached window) or opened the chat
     guard uiOverrideState == nil && !skipResize && !pttOpenedChat && !targetState.streaming.showingAIConversation else { return }
-    if targetState.isVoiceListening && !wasListening {
+    if targetState.voice.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
-    } else if !targetState.isVoiceListening && wasListening {
+    } else if !targetState.voice.isVoiceListening && wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: false)
     }
   }
