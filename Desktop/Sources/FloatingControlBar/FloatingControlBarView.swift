@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @EnvironmentObject var streaming: StreamingResponseState
+    @EnvironmentObject var input: InputState
+    @EnvironmentObject var voice: VoiceState
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     weak var window: NSWindow?
     var onPlayPause: () -> Void
@@ -33,22 +36,22 @@ struct FloatingControlBarView: View {
     var body: some View {
         VStack(spacing: 0) {
             // AI conversation view - conditionally visible (expands upward above the bar)
-            if state.streaming.showingAIConversation {
+            if streaming.showingAIConversation {
                 Group {
-                    if state.streaming.showingAIResponse {
+                    if streaming.showingAIResponse {
                         aiResponseView
                     } else {
                         aiInputView
                     }
                 }
                 .overlay {
-                    if state.input.isDragOverChat {
+                    if input.isDragOverChat {
                         ChatDragOverlay()
                             .padding(4)
                             .allowsHitTesting(false)
                     }
                 }
-                .onDrop(of: [.fileURL, .image], isTargeted: Binding(get: { state.input.isDragOverChat }, set: { state.input.isDragOverChat = $0 })) { providers in
+                .onDrop(of: [.fileURL, .image], isTargeted: Binding(get: { input.isDragOverChat }, set: { input.isDragOverChat = $0 })) { providers in
                     NSLog("FloatingBar: onDrop received %d providers", providers.count)
                     for provider in providers {
                         NSLog("FloatingBar: provider types: %@", provider.registeredTypeIdentifiers)
@@ -70,7 +73,7 @@ struct FloatingControlBarView: View {
                                 guard let url = resolvedURL else { return }
                                 NSLog("FloatingBar: drop fileURL: %@", url.lastPathComponent)
                                 DispatchQueue.main.async {
-                                    ChatAttachmentHelper.addFiles(from: [url], to: &state.input.pendingAttachments)
+                                    ChatAttachmentHelper.addFiles(from: [url], to: &input.pendingAttachments)
                                 }
                             }
                         } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
@@ -88,7 +91,7 @@ struct FloatingControlBarView: View {
                                 guard let data = imageData else { return }
                                 NSLog("FloatingBar: drop image data: %d bytes", data.count)
                                 DispatchQueue.main.async {
-                                    ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
+                                    ChatAttachmentHelper.addPastedImage(data, to: &input.pendingAttachments)
                                 }
                             }
                         }
@@ -117,7 +120,7 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
                 }
                 .overlay(alignment: .topTrailing) {
-                    if state.streaming.showingAIResponse {
+                    if streaming.showingAIResponse {
                         ZStack {
                             ResizeHandleView(targetWindow: window)
                                 .frame(width: 20, height: 20)
@@ -144,7 +147,7 @@ struct FloatingControlBarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottomTrailing) {
-            if isHovering && !state.voice.isVoiceListening {
+            if isHovering && !voice.isVoiceListening {
                 Button {
                     openFloatingBarSettings()
                 } label: {
@@ -174,7 +177,7 @@ struct FloatingControlBarView: View {
                 (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
             }
         }
-        .floatingBackground(cornerRadius: isHovering || state.streaming.showingAIConversation || state.voice.isVoiceListening ? 20 : 5)
+        .floatingBackground(cornerRadius: isHovering || streaming.showingAIConversation || voice.isVoiceListening ? 20 : 5)
     }
 
     private func openFloatingBarSettings() {
@@ -189,13 +192,13 @@ struct FloatingControlBarView: View {
 
     private var controlBarView: some View {
         Group {
-            if state.voice.isVoiceListening && !state.voice.isVoiceFollowUp {
+            if voice.isVoiceListening && !voice.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .frame(height: 50)
                     .transition(.opacity)
-            } else if isHovering || state.streaming.showingAIConversation {
+            } else if isHovering || streaming.showingAIConversation {
                 HStack(spacing: 0) {
                     if updaterViewModel.updateAvailable {
                         updateButton
@@ -324,7 +327,7 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 8) {
-            if state.voice.isVoiceFinalizing {
+            if voice.isVoiceFinalizing {
                 // Transcribing loading indicator
                 ProgressView()
                     .controlSize(.small)
@@ -343,7 +346,7 @@ struct FloatingControlBarView: View {
                 )
             }
 
-            if state.voice.isVoiceLocked && !state.voice.isVoiceFinalizing {
+            if voice.isVoiceLocked && !voice.isVoiceFinalizing {
                 Text("LOCKED")
                     .scaledFont(size: 10, weight: .bold)
                     .foregroundColor(.orange)
@@ -355,8 +358,8 @@ struct FloatingControlBarView: View {
 
             ObservedTranscriptView(
                 audioLevel: state.audioLevel,
-                isVoiceFinalizing: state.voice.isVoiceFinalizing,
-                isVoiceLocked: state.voice.isVoiceLocked,
+                isVoiceFinalizing: voice.isVoiceFinalizing,
+                isVoiceLocked: voice.isVoiceLocked,
                 pttKeySymbol: shortcutSettings.pttKey.symbol
             )
         }
@@ -366,16 +369,16 @@ struct FloatingControlBarView: View {
         VStack(spacing: 0) {
             AskAIInputView(
                 userInput: Binding(
-                    get: { state.input.aiInputText },
-                    set: { state.input.aiInputText = $0 }
+                    get: { input.aiInputText },
+                    set: { input.aiInputText = $0 }
                 ),
                 onSend: { message, attachments in
-                    state.input.aiInputText = ""
-                    state.streaming.displayedQuery = message
+                    input.aiInputText = ""
+                    streaming.displayedQuery = message
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        state.streaming.showingAIResponse = true
-                        state.streaming.isAILoading = true
-                        state.streaming.currentAIMessage = nil
+                        streaming.showingAIResponse = true
+                        streaming.isAILoading = true
+                        streaming.currentAIMessage = nil
                     }
                     onSendQuery(message, attachments)
                     // Focus the follow-up input after the view transition settles
@@ -384,15 +387,15 @@ struct FloatingControlBarView: View {
                     }
                 },
                 onCancel: onCloseAI,
-                onHeightChange: { [weak state] height in
-                    guard let state = state else { return }
+                onHeightChange: { [weak input] height in
+                    guard let input = input else { return }
                     // 106 = controlBarView(50) + Group top padding(8) + AskAIInputView top bar(24) + input vertical padding(24)
                     let totalHeight = height + 106
-                    state.input.inputViewHeight = totalHeight
+                    input.inputViewHeight = totalHeight
                 }
             )
 
-            if !state.streaming.chatHistory.isEmpty || state.streaming.showingAIResponse {
+            if !streaming.chatHistory.isEmpty || streaming.showingAIResponse {
                 Button(action: onNewChat) {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
@@ -417,57 +420,57 @@ struct FloatingControlBarView: View {
     private var aiResponseView: some View {
         AIResponseView(
             isLoading: Binding(
-                get: { state.streaming.isAILoading },
-                set: { state.streaming.isAILoading = $0 }
+                get: { streaming.isAILoading },
+                set: { streaming.isAILoading = $0 }
             ),
-            currentMessage: state.streaming.currentAIMessage,
-            userInput: state.streaming.displayedQuery,
-            chatHistory: state.streaming.chatHistory,
+            currentMessage: streaming.currentAIMessage,
+            userInput: streaming.displayedQuery,
+            chatHistory: streaming.chatHistory,
             isVoiceFollowUp: Binding(
-                get: { state.voice.isVoiceFollowUp },
-                set: { state.voice.isVoiceFollowUp = $0 }
+                get: { voice.isVoiceFollowUp },
+                set: { voice.isVoiceFollowUp = $0 }
             ),
             voiceFollowUpTranscript: Binding(
-                get: { state.voice.voiceFollowUpTranscript },
-                set: { state.voice.voiceFollowUpTranscript = $0 }
+                get: { voice.voiceFollowUpTranscript },
+                set: { voice.voiceFollowUpTranscript = $0 }
             ),
             suggestedReplies: Binding(
-                get: { state.streaming.suggestedReplies },
-                set: { state.streaming.suggestedReplies = $0 }
+                get: { streaming.suggestedReplies },
+                set: { streaming.suggestedReplies = $0 }
             ),
             suggestedReplyQuestion: Binding(
-                get: { state.streaming.suggestedReplyQuestion },
-                set: { state.streaming.suggestedReplyQuestion = $0 }
+                get: { streaming.suggestedReplyQuestion },
+                set: { streaming.suggestedReplyQuestion = $0 }
             ),
             onClose: onCloseAI,
             onNewChat: onNewChat,
             onSendFollowUp: { message, attachments in
-                state.streaming.suggestedReplies = []
-                state.streaming.suggestedReplyQuestion = ""
+                streaming.suggestedReplies = []
+                streaming.suggestedReplyQuestion = ""
                 // Archive current exchange to chat history
-                let currentQuery = state.streaming.displayedQuery
+                let currentQuery = streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    let aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
+                    let aiMessage = streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
-                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
 
-                state.streaming.displayedQuery = message
+                streaming.displayedQuery = message
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    state.streaming.isAILoading = true
-                    state.streaming.currentAIMessage = nil
+                    streaming.isAILoading = true
+                    streaming.currentAIMessage = nil
                 }
                 onSendQuery(message, attachments)
             },
             onEnqueueMessage: { message in
-                guard state.input.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
+                guard input.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
                 state.enqueue(message)
                 onEnqueueMessage?(message)
                 AnalyticsManager.shared.floatingBarMessageQueued(
-                    queueSize: state.input.messageQueue.count,
+                    queueSize: input.messageQueue.count,
                     messageLength: message.count
                 )
             },
@@ -475,9 +478,9 @@ struct FloatingControlBarView: View {
                 // Remove from queue
                 state.dequeue(item.id)
                 // Archive partial exchange and interrupt
-                let currentQuery = state.streaming.displayedQuery
+                let currentQuery = streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    var aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
+                    var aiMessage = streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
@@ -487,12 +490,12 @@ struct FloatingControlBarView: View {
                         }
                         return block
                     }
-                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.streaming.displayedQuery = item.text
-                state.streaming.isAILoading = true
-                state.streaming.currentAIMessage = nil
+                streaming.displayedQuery = item.text
+                streaming.isAILoading = true
+                streaming.currentAIMessage = nil
                 onSendNowQueued?(item)
             },
             onDeleteQueued: { item in
@@ -504,7 +507,7 @@ struct FloatingControlBarView: View {
                 onClearQueue?()
             },
             onReorderQueue: { source, dest in
-                state.input.messageQueue.move(fromOffsets: source, toOffset: dest)
+                input.messageQueue.move(fromOffsets: source, toOffset: dest)
                 onReorderQueue?(source, dest)
             },
             onStopAgent: onStopAgent,
