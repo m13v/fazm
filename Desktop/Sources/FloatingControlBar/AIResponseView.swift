@@ -614,21 +614,21 @@ struct AIResponseView: View {
         onChatObserverCardAction?(activityId, action)
         // Persist the action in the content block so it survives view recreation
         // Use the view's own state (via @EnvironmentObject) so pop-outs update their own state, not the global bar
-        for i in state.streaming.chatHistory.indices {
-            for j in state.streaming.chatHistory[i].aiMessage.contentBlocks.indices {
-                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = state.streaming.chatHistory[i].aiMessage.contentBlocks[j],
+        for i in streaming.chatHistory.indices {
+            for j in streaming.chatHistory[i].aiMessage.contentBlocks.indices {
+                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = streaming.chatHistory[i].aiMessage.contentBlocks[j],
                    aId == activityId {
-                    state.streaming.chatHistory[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                    streaming.chatHistory[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
                     return
                 }
             }
         }
         // Also check pending chat observer exchanges
-        for i in state.streaming.pendingChatObserverExchanges.indices {
-            for j in state.streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks.indices {
-                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = state.streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j],
+        for i in streaming.pendingChatObserverExchanges.indices {
+            for j in streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks.indices {
+                if case .observerCard(let id, let aId, let type, let content, let buttons, _) = streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j],
                    aId == activityId {
-                    state.streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
+                    streaming.pendingChatObserverExchanges[i].aiMessage.contentBlocks[j] = .observerCard(id: id, activityId: aId, type: type, content: content, buttons: buttons, actedAction: action)
                     return
                 }
             }
@@ -658,7 +658,7 @@ struct AIResponseView: View {
     /// Uses the view's own @EnvironmentObject state so pop-outs only show their own pending cards.
     @ViewBuilder
     private var consolidatedPendingChatObserverCards: some View {
-        let cards = extractChatObserverCards(from: state.streaming.pendingChatObserverExchanges)
+        let cards = extractChatObserverCards(from: streaming.pendingChatObserverExchanges)
         if !cards.isEmpty {
             ObserverCardStackView(
                 cards: cards,
@@ -860,7 +860,7 @@ struct AIResponseView: View {
         }) ?? false
         if currentHas { return true }
 
-        let pendingHas = state.streaming.pendingChatObserverExchanges.contains(where: { exchange in
+        let pendingHas = streaming.pendingChatObserverExchanges.contains(where: { exchange in
             exchange.aiMessage.contentBlocks.contains(where: {
                 if case .observerCard = $0 { return true }
                 return false
@@ -900,20 +900,20 @@ struct AIResponseView: View {
     // MARK: - Follow-Up Input
 
     private var followUpHasInput: Bool {
-        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.input.pendingAttachments.isEmpty
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !input.pendingAttachments.isEmpty
     }
 
     private var followUpInputView: some View {
         VStack(spacing: 0) {
             // Attachment thumbnails strip
-            if !state.input.pendingAttachments.isEmpty {
-                ChatAttachmentStrip(attachments: Binding(get: { state.input.pendingAttachments }, set: { state.input.pendingAttachments = $0 }))
+            if !input.pendingAttachments.isEmpty {
+                ChatAttachmentStrip(attachments: Binding(get: { input.pendingAttachments }, set: { input.pendingAttachments = $0 }))
             }
 
             HStack(alignment: .center, spacing: 6) {
                 ChatAttachmentButton {
                     ChatAttachmentHelper.openFilePicker { urls in
-                        ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
+                        ChatAttachmentHelper.addFiles(from: urls, to: &input.pendingAttachments)
                     }
                 }
 
@@ -932,10 +932,10 @@ struct AIResponseView: View {
                         onSubmit: { sendFollowUp() },
                         focusOnAppear: false,
                         onPasteFiles: { urls in
-                            ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
+                            ChatAttachmentHelper.addFiles(from: urls, to: &input.pendingAttachments)
                         },
                         onPasteImageData: { data in
-                            ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
+                            ChatAttachmentHelper.addPastedImage(data, to: &input.pendingAttachments)
                         },
                         minHeight: 34,
                         maxHeight: 120,
@@ -945,27 +945,27 @@ struct AIResponseView: View {
                             }
                         }
                     )
-                    .onChange(of: state.input.pendingFollowUpText) {
-                        if !state.input.pendingFollowUpText.isEmpty {
+                    .onChange(of: input.pendingFollowUpText) {
+                        if !input.pendingFollowUpText.isEmpty {
                             if followUpText.isEmpty {
-                                followUpText = state.input.pendingFollowUpText
+                                followUpText = input.pendingFollowUpText
                             } else {
-                                followUpText += " " + state.input.pendingFollowUpText
+                                followUpText += " " + input.pendingFollowUpText
                             }
-                            state.input.pendingFollowUpText = ""
+                            input.pendingFollowUpText = ""
                         }
                     }
-                    .onChange(of: state.voice.isVoiceListening) {
-                        if state.voice.isVoiceListening {
+                    .onChange(of: voice.isVoiceListening) {
+                        if voice.isVoiceListening {
                             preVoiceFollowUpText = followUpText
                         }
                     }
-                    .onChange(of: state.input.aiInputText) {
-                        if state.voice.isVoiceListening && !state.input.aiInputText.isEmpty && state.input.aiInputText != followUpText {
+                    .onChange(of: input.aiInputText) {
+                        if voice.isVoiceListening && !input.aiInputText.isEmpty && input.aiInputText != followUpText {
                             if preVoiceFollowUpText.isEmpty {
-                                followUpText = state.input.aiInputText
+                                followUpText = input.aiInputText
                             } else {
-                                followUpText = preVoiceFollowUpText + " " + state.input.aiInputText
+                                followUpText = preVoiceFollowUpText + " " + input.aiInputText
                             }
                         }
                     }
@@ -974,7 +974,7 @@ struct AIResponseView: View {
                 .background(FazmColors.overlayForeground.opacity(0.1))
                 .cornerRadius(8)
 
-                PushToTalkButton(isListening: state.voice.isVoiceListening, iconSize: 16, frameSize: 24)
+                PushToTalkButton(isListening: voice.isVoiceListening, iconSize: 16, frameSize: 24)
 
                 if (isLoading || currentMessage?.isStreaming == true) && !followUpHasInput {
                     Button(action: {
@@ -982,7 +982,7 @@ struct AIResponseView: View {
                         // Eagerly clear local UI so the spinner and "Not Responding"
                         // banner vanish instantly, even if the bridge takes a while
                         // (or forever) to actually abort. The onChange(of: isLoading)
-                        // handler also clears these when state.streaming.isAILoading flips
+                        // handler also clears these when streaming.isAILoading flips
                         // false, but doing it here makes Stop feel instant.
                         loadingHideTask?.cancel()
                         loadingHideTask = nil
@@ -1022,10 +1022,10 @@ struct AIResponseView: View {
 
     private func sendFollowUp() {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let attachmentsToSend = state.input.pendingAttachments
+        let attachmentsToSend = input.pendingAttachments
         guard !trimmed.isEmpty || !attachmentsToSend.isEmpty else { return }
         followUpText = ""
-        state.input.pendingAttachments = []
+        input.pendingAttachments = []
 
         if isLoading || isThisSessionStreaming {
             // THIS window is busy (pre-first-token wait OR actively streaming) — queue the message (text only).
