@@ -143,6 +143,49 @@ final class InputState: ObservableObject {
     }
 }
 
+/// Push-to-talk and voice state — listening flags, recording timer, silence overlay.
+/// Split from `FloatingControlBarState` so PTT updates (which fire several times
+/// per second while the user holds the key) don't re-render unrelated subtrees.
+@MainActor
+final class VoiceState: ObservableObject {
+    @Published var isVoiceListening: Bool = false
+    @Published var isVoiceLocked: Bool = false
+    @Published var isVoiceFinalizing: Bool = false
+    @Published var isVoiceFollowUp: Bool = false
+    @Published var voiceFollowUpTranscript: String = ""
+    @Published var isRecording: Bool = false
+    @Published var duration: Int = 0
+    @Published var isInitialising: Bool = false
+    @Published var isSilenceOverlayVisible: Bool = false
+}
+
+/// Per-window workspace + model selection. Pop-out windows track their own
+/// model and working directory independently, plus discovered project metadata
+/// (CLAUDE.md, skills) for the workspace.
+@MainActor
+final class WorkspaceSettingsState: ObservableObject {
+    @Published var selectedModel: String = ShortcutSettings.shared.selectedModel
+    @Published var workspaceDirectory: String = ""
+    @Published var projectClaudeMdContent: String?
+    @Published var projectClaudeMdPath: String?
+    @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
+}
+
+/// Tutorial chat guide state. Active during onboarding's "guided prompt" phase;
+/// pure settings/UI flags otherwise.
+@MainActor
+final class TutorialState: ObservableObject {
+    @Published var isTutorialChatActive: Bool = false
+    @Published var tutorialChatStep: Int = 0  // 0 = first prompt done (from overlay), 1-3 = guided prompts
+    @Published var tutorialWaitingForResponse: Bool = false
+
+    /// Dynamic tutorial prompts (personalized from onboarding data).
+    var tutorialPrompts: [(instruction: String, description: String)] = []
+
+    /// System prompt suffix injected during tutorial (cleared on finish).
+    var tutorialSystemPromptSuffix: String?
+}
+
 /// Observable object holding the state for the floating control bar.
 ///
 /// Streaming-related fields live on `streaming` (a child `StreamingResponseState`)
@@ -161,38 +204,33 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// User input state — typed text, attachments, queued messages, drag overlay.
     let input = InputState()
 
+    /// Voice / push-to-talk state.
+    let voice = VoiceState()
+
+    /// Per-window workspace + model + project CLAUDE.md/skills.
+    let workspace = WorkspaceSettingsState()
+
+    /// Tutorial guide state.
+    let tutorial = TutorialState()
+
     /// Forwards child store changes to state.objectWillChange so legacy views
     /// that take only `@EnvironmentObject var state: FloatingControlBarState`
     /// still re-render when child fields update. Per-view migration to direct
     /// child injection is the long-term CPU win; this shim preserves correctness.
     private var childForwardCancellables: [AnyCancellable] = []
 
-    @Published var isRecording: Bool = false
-    @Published var duration: Int = 0
-    @Published var isInitialising: Bool = false
     @Published var isDragging: Bool = false
-
-    // Push-to-talk state
-    @Published var isVoiceListening: Bool = false
-    @Published var isVoiceLocked: Bool = false
-    @Published var isVoiceFinalizing: Bool = false
-
 
     // Audio level for PTT visualization — uses a separate observable
     // to avoid re-rendering the entire conversation view on every level change.
     let audioLevel = AudioLevelState()
 
-    // Voice follow-up state (PTT while AI conversation is active)
-    @Published var isVoiceFollowUp: Bool = false
-    @Published var voiceFollowUpTranscript: String = ""
-
-    // Silence detection overlay
-    @Published var isSilenceOverlayVisible: Bool = false
+    // Silence detection overlay (visibility flag lives on `voice`).
     private var silenceOverlayDismissWork: DispatchWorkItem?
 
     func showSilenceOverlay() {
         silenceOverlayDismissWork?.cancel()
-        isSilenceOverlayVisible = true
+        voice.isSilenceOverlayVisible = true
 
         if let barFrame = FloatingControlBarManager.shared.barWindowFrame {
             SilenceOverlayWindow.shared.show(below: barFrame)
@@ -210,7 +248,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     func dismissSilenceOverlay() {
         silenceOverlayDismissWork?.cancel()
         silenceOverlayDismissWork = nil
-        isSilenceOverlayVisible = false
+        voice.isSilenceOverlayVisible = false
         SilenceOverlayWindow.shared.dismiss()
     }
 
@@ -220,19 +258,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     var hasLastConversation: Bool { lastConversation != nil }
 
     func clearLastConversation() { lastConversation = nil }
-
-    // Per-window model selection (defaults to the current global model).
-    // Each pop-out window tracks its own model independently.
-    @Published var selectedModel: String = ShortcutSettings.shared.selectedModel
-
-    // Per-window workspace directory (empty = home directory / no project)
-    // Each pop-out window tracks its own workspace independently.
-    @Published var workspaceDirectory: String = ""
-
-    // Per-window project CLAUDE.md (discovered from workspaceDirectory)
-    @Published var projectClaudeMdContent: String?
-    @Published var projectClaudeMdPath: String?
-    @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
 
     // Collapsed mode (half-height, semi-transparent, shown when clicking away)
     @Published var isCollapsed: Bool = false
@@ -244,17 +269,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var showConnectClaudeButton: Bool = false
     // Show "Upgrade" button when user hits personal Claude rate limit
     @Published var showUpgradeClaudeButton: Bool = false
-
-    // Tutorial chat guide state
-    @Published var isTutorialChatActive: Bool = false
-    @Published var tutorialChatStep: Int = 0  // 0 = first prompt done (from overlay), 1-3 = guided prompts
-    @Published var tutorialWaitingForResponse: Bool = false
-
-    /// Dynamic tutorial prompts (personalized from onboarding data)
-    var tutorialPrompts: [(instruction: String, description: String)] = []
-
-    /// System prompt suffix injected during tutorial (cleared on finish)
-    var tutorialSystemPromptSuffix: String?
 
     /// Forwarder for `streaming.flushPendingChatObserverExchanges()`.
     /// Kept on the parent so existing `state.flushPendingChatObserverExchanges()`
@@ -292,6 +306,15 @@ class FloatingControlBarState: NSObject, ObservableObject {
         )
         childForwardCancellables.append(
             input.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        )
+        childForwardCancellables.append(
+            voice.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        )
+        childForwardCancellables.append(
+            workspace.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        )
+        childForwardCancellables.append(
+            tutorial.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         )
     }
 }
