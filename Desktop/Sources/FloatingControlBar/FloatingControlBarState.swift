@@ -158,21 +158,19 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// in views that render streaming content.
     let streaming = StreamingResponseState()
 
-    /// Forwards streaming.objectWillChange to state.objectWillChange so legacy
-    /// views that take only `@EnvironmentObject var state: FloatingControlBarState`
-    /// still re-render when streaming fields update. Per-view migration to
-    /// `@EnvironmentObject var streaming` is the long-term path; this shim
-    /// preserves correctness during the migration.
-    private var streamingForwardCancellable: AnyCancellable?
+    /// User input state — typed text, attachments, queued messages, drag overlay.
+    let input = InputState()
+
+    /// Forwards child store changes to state.objectWillChange so legacy views
+    /// that take only `@EnvironmentObject var state: FloatingControlBarState`
+    /// still re-render when child fields update. Per-view migration to direct
+    /// child injection is the long-term CPU win; this shim preserves correctness.
+    private var childForwardCancellables: [AnyCancellable] = []
 
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
     @Published var isInitialising: Bool = false
     @Published var isDragging: Bool = false
-
-    // AI conversation input state (kept here for now; will move to InputState in Phase 2).
-    @Published var aiInputText: String = ""
-    @Published var inputViewHeight: CGFloat = 146
 
     // Push-to-talk state
     @Published var isVoiceListening: Bool = false
@@ -187,47 +185,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false
     @Published var voiceFollowUpTranscript: String = ""
-
-    /// Pre-filled text for the follow-up input (set by PTT, consumed by AIResponseView)
-    @Published var pendingFollowUpText: String = ""
-
-    // Attachment state (shared between input views and chat area)
-    @Published var pendingAttachments: [ChatAttachment] = []
-    @Published var isDragOverChat: Bool = false
-
-    /// Task queue: messages waiting to be sent after current query completes (max 10)
-    @Published var messageQueue: [QueuedMessage] = []
-
-    /// Maximum number of queued messages
-    static let maxQueueSize = 10
-
-    /// Append a message to the queue. Returns false if queue is full.
-    @discardableResult
-    func enqueue(_ text: String) -> Bool {
-        guard messageQueue.count < Self.maxQueueSize else { return false }
-        messageQueue.append(QueuedMessage(text: text))
-        return true
-    }
-
-    /// Remove a queued message by ID
-    func dequeue(_ id: UUID) {
-        messageQueue.removeAll { $0.id == id }
-    }
-
-    /// Remove and return the first queued message
-    @discardableResult
-    func dequeueFirst() -> QueuedMessage? {
-        guard !messageQueue.isEmpty else { return nil }
-        return messageQueue.removeFirst()
-    }
-
-    /// Clear all queued messages
-    func clearQueue() {
-        messageQueue.removeAll()
-    }
-
-    /// Draft input text preserved when the conversation is dismissed without sending
-    var draftInputText: String = ""
 
     // Silence detection overlay
     @Published var isSilenceOverlayVisible: Bool = false
@@ -312,12 +269,25 @@ class FloatingControlBarState: NSObject, ObservableObject {
         streaming.loadHistory(from: messages)
     }
 
+    /// Forwarders for the queue helpers, since callsites currently invoke them on
+    /// the parent state. Long-term these can move to direct `state.input.X` calls.
+    @discardableResult
+    func enqueue(_ text: String) -> Bool { input.enqueue(text) }
+    func dequeue(_ id: UUID) { input.dequeue(id) }
+    @discardableResult
+    func dequeueFirst() -> QueuedMessage? { input.dequeueFirst() }
+    func clearQueue() { input.clearQueue() }
+
     override init() {
         super.init()
-        // Forward streaming changes so views that only inject the parent state
-        // still re-render. Views that take `@EnvironmentObject var streaming`
-        // get granular tracking and skip this round-trip.
-        streamingForwardCancellable = streaming.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+        // Forward child store changes so views that only inject the parent state
+        // still re-render. Views that take child stores directly via
+        // `@EnvironmentObject` get granular tracking and skip this round-trip.
+        childForwardCancellables.append(
+            streaming.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        )
+        childForwardCancellables.append(
+            input.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        )
     }
 }
