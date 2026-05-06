@@ -367,7 +367,7 @@ enum ChatSender: Equatable {
 /// array (the array's element refs are unchanged). That's the whole point —
 /// streaming token writes shouldn't churn the global publisher. But code that
 /// previously relied on per-token `.sink` callbacks (e.g. updating
-/// `state.isAILoading` when content first arrives) needs a granular signal.
+/// `state.streaming.isAILoading` when content first arrives) needs a granular signal.
 /// MessageObserver provides that signal, scoped to one message.
 @MainActor
 final class MessageObserver {
@@ -1314,7 +1314,7 @@ class ChatProvider: ObservableObject {
             }
             await acpBridge.setChatObserverStatusHandler { running in
                 Task { @MainActor in
-                    FloatingControlBarManager.shared.barState?.isChatObserverRunning = running
+                    FloatingControlBarManager.shared.barState?.streaming.isChatObserverRunning = running
                 }
             }
             // Set up dynamic model list handler — ACP SDK reports available models after session/new
@@ -4418,15 +4418,15 @@ class ChatProvider: ObservableObject {
 
                     if let barState = FloatingControlBarManager.shared.barState {
                         let exchange = FloatingChatExchange(question: "", aiMessage: chatObserverMsg)
-                        if barState.currentAIMessage != nil || barState.isAILoading {
-                            barState.pendingChatObserverExchanges.append(exchange)
+                        if barState.streaming.currentAIMessage != nil || barState.streaming.isAILoading {
+                            barState.streaming.pendingChatObserverExchanges.append(exchange)
                         } else {
-                            barState.chatHistory.append(exchange)
+                            barState.streaming.chatHistory.append(exchange)
                         }
-                        if !barState.showingAIConversation {
-                            barState.showingAIConversation = true
-                            barState.showingAIResponse = true
-                            barState.isAILoading = false
+                        if !barState.streaming.showingAIConversation {
+                            barState.streaming.showingAIConversation = true
+                            barState.streaming.showingAIResponse = true
+                            barState.streaming.isAILoading = false
                         }
                     } else if !self.messages.isEmpty {
                         self.messages.append(chatObserverMsg)
