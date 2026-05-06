@@ -116,7 +116,7 @@ struct AskAIInputView: View {
     private func sendCurrentMessage() {
         let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !state.pendingAttachments.isEmpty else { return }
-        guard !state.isAILoading else { return }
+        guard !state.streaming.isAILoading else { return }
         state.showSendButtonHint = false
         let attachmentsToSend = state.pendingAttachments
         state.pendingAttachments = []
@@ -128,7 +128,7 @@ struct AskAIInputView: View {
     }
 
     private var canSend: Bool {
-        hasInput && !state.isAILoading
+        hasInput && !state.streaming.isAILoading
     }
 
     // MARK: - Subviews
@@ -140,7 +140,7 @@ struct AskAIInputView: View {
     private var sendButton: some View {
         VStack(spacing: 2) {
             Button(action: {
-                guard hasInput, !state.isAILoading else { return }
+                guard hasInput, !state.streaming.isAILoading else { return }
                 sendCurrentMessage()
             }) {
                 ZStack {
@@ -160,7 +160,7 @@ struct AskAIInputView: View {
                     .scaleEffect(state.showSendButtonHint && hasInput && sendPulse ? 1.15 : 1.0)
                     .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: sendPulse)
             }
-            .disabled(!hasInput || state.isAILoading)
+            .disabled(!hasInput || state.streaming.isAILoading)
             .buttonStyle(.plain)
 
             if state.showSendButtonHint && hasInput {
