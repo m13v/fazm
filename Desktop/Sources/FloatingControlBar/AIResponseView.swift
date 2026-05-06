@@ -950,13 +950,13 @@ struct AIResponseView: View {
                             state.input.pendingFollowUpText = ""
                         }
                     }
-                    .onChange(of: state.isVoiceListening) {
-                        if state.isVoiceListening {
+                    .onChange(of: state.voice.isVoiceListening) {
+                        if state.voice.isVoiceListening {
                             preVoiceFollowUpText = followUpText
                         }
                     }
                     .onChange(of: state.input.aiInputText) {
-                        if state.isVoiceListening && !state.input.aiInputText.isEmpty && state.input.aiInputText != followUpText {
+                        if state.voice.isVoiceListening && !state.input.aiInputText.isEmpty && state.input.aiInputText != followUpText {
                             if preVoiceFollowUpText.isEmpty {
                                 followUpText = state.input.aiInputText
                             } else {
@@ -969,7 +969,7 @@ struct AIResponseView: View {
                 .background(FazmColors.overlayForeground.opacity(0.1))
                 .cornerRadius(8)
 
-                PushToTalkButton(isListening: state.isVoiceListening, iconSize: 16, frameSize: 24)
+                PushToTalkButton(isListening: state.voice.isVoiceListening, iconSize: 16, frameSize: 24)
 
                 if (isLoading || currentMessage?.isStreaming == true) && !followUpHasInput {
                     Button(action: {
