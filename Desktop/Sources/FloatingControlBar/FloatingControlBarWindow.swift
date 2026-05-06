@@ -245,6 +245,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         )
         .environmentObject(state)
         .environmentObject(state.streaming)
+        .environmentObject(state.input)
 
         hostingView = NSHostingView(rootView: AnyView(
             swiftUIView
@@ -366,15 +367,15 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
 
         // Preserve unsent input text so it survives a dismiss-without-sending
-        if !state.aiInputText.isEmpty && state.streaming.currentAIMessage == nil {
-            state.draftInputText = state.aiInputText
+        if !state.input.aiInputText.isEmpty && state.streaming.currentAIMessage == nil {
+            state.input.draftInputText = state.input.aiInputText
         }
 
         // Phase 1: Fade out SwiftUI content immediately
         withAnimation(.easeOut(duration: 0.2)) {
             state.streaming.showingAIConversation = false
             state.streaming.showingAIResponse = false
-            state.aiInputText = ""
+            state.input.aiInputText = ""
             state.streaming.currentAIMessage = nil
             state.streaming.chatHistory = []
             state.isVoiceFollowUp = false
@@ -550,8 +551,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // to response height (done below after restoring state).
 
         // Restore any draft input that was preserved from a previous dismiss
-        let restoredDraft = state.draftInputText
-        state.draftInputText = ""
+        let restoredDraft = state.input.draftInputText
+        state.input.draftInputText = ""
 
         // If restoring a conversation, prepare the state.
         if shouldShowResponse {
@@ -581,12 +582,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self.state.streaming.showingAIConversation = true
                 self.state.streaming.showingAIResponse = shouldShowResponse
                 self.state.streaming.isAILoading = false
-                self.state.aiInputText = restoredDraft
+                self.state.input.aiInputText = restoredDraft
                 if !shouldShowResponse {
                     self.state.streaming.currentAIMessage = nil
                 }
                 // Match the explicit resize height so the observer doesn't immediately override it
-                self.state.inputViewHeight = 146
+                self.state.input.inputViewHeight = 146
             }
         }
         setupInputHeightObserver()
@@ -618,7 +619,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         state.streaming.currentAIMessage = nil
         state.streaming.isAILoading = false
         state.streaming.showingAIResponse = false
-        state.aiInputText = ""
+        state.input.aiInputText = ""
         state.streaming.suggestedReplies = []
         state.streaming.suggestedReplyQuestion = ""
         state.clearQueue()
@@ -631,7 +632,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let inputWidth = max(FloatingControlBarWindow.expandedWidth, savedWidth)
         let inputSize = NSSize(width: inputWidth, height: 146)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true)
-        state.inputViewHeight = 146
+        state.input.inputViewHeight = 146
         setupInputHeightObserver()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
@@ -641,7 +642,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func setupInputHeightObserver() {
         inputHeightCancellable?.cancel()
-        inputHeightCancellable = state.$inputViewHeight
+        inputHeightCancellable = state.input.$inputViewHeight
             .removeDuplicates()
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] height in
@@ -1232,7 +1233,7 @@ class FloatingControlBarManager {
             state?.streaming.displayedQuery = ""
             state?.streaming.currentAIMessage = nil
             state?.streaming.isAILoading = false
-            state?.aiInputText = ""
+            state?.input.aiInputText = ""
             state?.clearQueue()
             self.window?.onResetSession?()
         }
@@ -1248,8 +1249,8 @@ class FloatingControlBarManager {
             guard dequeuedSessionKey.isEmpty || dequeuedSessionKey == "floating" else { return }
             MainActor.assumeIsolated {
                 // Remove the first matching queued message from UI
-                if let idx = state.messageQueue.firstIndex(where: { $0.text == text }) {
-                    state.messageQueue.remove(at: idx)
+                if let idx = state.input.messageQueue.firstIndex(where: { $0.text == text }) {
+                    state.input.messageQueue.remove(at: idx)
                 }
                 // Archive current exchange and set up for the new query.
                 // The Combine $messages sink uses receive(on: .main) which delivers
@@ -1588,7 +1589,7 @@ class FloatingControlBarManager {
             "isVoiceListening": state?.isVoiceListening ?? false,
             "chatHistoryCount": state?.streaming.chatHistory.count ?? 0,
             "displayedQuery": state?.streaming.displayedQuery ?? "",
-            "queueCount": state?.messageQueue.count ?? 0,
+            "queueCount": state?.input.messageQueue.count ?? 0,
             "isTutorialActive": state?.isTutorialChatActive ?? false,
             "availableModels": ShortcutSettings.shared.availableModels.map { ["id": $0.id, "label": $0.label, "shortLabel": $0.shortLabel] }
         ]
@@ -1776,7 +1777,7 @@ class FloatingControlBarManager {
         // Reset state directly (no animation) to avoid contract-then-expand flicker
         window.state.streaming.showingAIConversation = false
         window.state.streaming.showingAIResponse = false
-        window.state.aiInputText = ""
+        window.state.input.aiInputText = ""
         window.state.streaming.currentAIMessage = nil
         window.state.isVoiceFollowUp = false
         window.state.voiceFollowUpTranscript = ""
@@ -1862,10 +1863,10 @@ class FloatingControlBarManager {
 
             // Show the input view with the transcription pre-filled (user can edit before sending)
             window.state.clearLastConversation()
-            window.state.aiInputText = query
+            window.state.input.aiInputText = query
             window.showAIConversation()
             // Override the empty text that showAIConversation sets
-            window.state.aiInputText = query
+            window.state.input.aiInputText = query
             window.orderFrontRegardless()
 
             // Focus the input field so user can immediately edit or press Enter to send
@@ -1884,7 +1885,7 @@ class FloatingControlBarManager {
         }
 
         // Insert transcription into the follow-up input field
-        window.state.pendingFollowUpText = query
+        window.state.input.pendingFollowUpText = query
         window.makeKeyAndOrderFront(nil)
 
         // Focus the follow-up input field
@@ -1985,7 +1986,7 @@ class FloatingControlBarManager {
         state.streaming.chatHistory = []
         state.streaming.displayedQuery = ""
         state.streaming.currentAIMessage = nil
-        state.aiInputText = ""  // Clear stale input so it isn't saved as a draft
+        state.input.aiInputText = ""  // Clear stale input so it isn't saved as a draft
         state.clearLastConversation()
         state.clearQueue()
 
