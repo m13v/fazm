@@ -6,6 +6,7 @@ import SwiftUI
 /// to the correct window (floating bar or detached chat).
 struct PushToTalkButton: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @EnvironmentObject var voice: VoiceState
     var isListening: Bool
     var iconSize: CGFloat = 18
     var frameSize: CGFloat = 28
@@ -15,7 +16,7 @@ struct PushToTalkButton: View {
 
     var body: some View {
         ZStack {
-            if state.voice.isVoiceFinalizing {
+            if voice.isVoiceFinalizing {
                 // Spinning arc to indicate transcription is processing
                 Circle()
                     .trim(from: 0, to: 0.65)
@@ -43,7 +44,7 @@ struct PushToTalkButton: View {
         .frame(width: frameSize, height: frameSize)
         .contentShape(Rectangle())
         .overlay(PushToTalkMouseHandler(targetState: state))
-        .help(state.voice.isVoiceFinalizing ? "Processing voice…" : "Hold to talk")
+        .help(voice.isVoiceFinalizing ? "Processing voice…" : "Hold to talk")
     }
 }
 
