@@ -902,7 +902,7 @@ struct AIResponseView: View {
         VStack(spacing: 0) {
             // Attachment thumbnails strip
             if !state.input.pendingAttachments.isEmpty {
-                ChatAttachmentStrip(attachments: $state.input.pendingAttachments)
+                ChatAttachmentStrip(attachments: Binding(get: { state.input.pendingAttachments }, set: { state.input.pendingAttachments = $0 }))
             }
 
             HStack(alignment: .center, spacing: 6) {
