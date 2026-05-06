@@ -355,7 +355,7 @@ class PushToTalkManager: ObservableObject {
       }
     }
     // Capture existing input AFTER opening the chat so any restored draft is included
-    preVoiceInputText = effectiveBarState?.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
+    preVoiceInputText = effectiveBarState?.input.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
 
     AnalyticsManager.shared.floatingBarPTTStarted(mode: "hold")
     updateBarState()
@@ -393,7 +393,7 @@ class PushToTalkManager: ObservableObject {
       }
     }
     // Capture existing input AFTER opening the chat so any restored draft is included
-    preVoiceInputText = effectiveBarState?.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
+    preVoiceInputText = effectiveBarState?.input.aiInputText.trimmingCharacters(in: .whitespaces) ?? ""
 
     AnalyticsManager.shared.floatingBarPTTStarted(mode: "locked")
 
@@ -623,7 +623,7 @@ class PushToTalkManager: ObservableObject {
       let targetState = sendOverrideState ?? barState
       let isShowingResponse = targetState?.streaming.showingAIResponse == true
       if !isShowingResponse {
-        targetState?.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
+        targetState?.input.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
       }
       pttOpenedChat = false
       // Detached-window button is the only case where override is non-nil AND
@@ -645,7 +645,7 @@ class PushToTalkManager: ObservableObject {
         // followup textView ends up with cursor set on a non-firstResponder
         // view, and the visible caret never appears at end).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-          targetState?.pendingFollowUpText = query
+          targetState?.input.pendingFollowUpText = query
           DispatchQueue.main.async {
             if isDetachedOverride, let overrideState = sendOverrideState {
               DetachedChatWindowController.shared.focusInputField(for: overrideState)
@@ -660,7 +660,7 @@ class PushToTalkManager: ObservableObject {
       if sendOverrideState == nil {
         FloatingControlBarManager.shared.openAIInputWithQuery(query)
       } else {
-        barState?.aiInputText = query
+        barState?.input.aiInputText = query
         if let overrideState = sendOverrideState {
           DetachedChatWindowController.shared.focusInputField(for: overrideState)
         }
@@ -812,7 +812,7 @@ class PushToTalkManager: ObservableObject {
 
     // Sync live transcript directly into the input field
     if pttOpenedChat {
-      effectiveBarState?.aiInputText = preVoiceInputText.isEmpty ? liveText : preVoiceInputText + " " + liveText
+      effectiveBarState?.input.aiInputText = preVoiceInputText.isEmpty ? liveText : preVoiceInputText + " " + liveText
     }
 
     // In finalizing state, a final segment means Deepgram is done — send immediately
