@@ -213,12 +213,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// Tutorial guide state.
     let tutorial = TutorialState()
 
-    /// Forwards child store changes to state.objectWillChange so legacy views
-    /// that take only `@EnvironmentObject var state: FloatingControlBarState`
-    /// still re-render when child fields update. Per-view migration to direct
-    /// child injection is the long-term CPU win; this shim preserves correctness.
-    private var childForwardCancellables: [AnyCancellable] = []
-
     @Published var isDragging: Bool = false
 
     // Audio level for PTT visualization — uses a separate observable
@@ -298,23 +292,5 @@ class FloatingControlBarState: NSObject, ObservableObject {
 
     override init() {
         super.init()
-        // Forward child store changes so views that only inject the parent state
-        // still re-render. Views that take child stores directly via
-        // `@EnvironmentObject` get granular tracking and skip this round-trip.
-        childForwardCancellables.append(
-            streaming.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        )
-        childForwardCancellables.append(
-            input.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        )
-        childForwardCancellables.append(
-            voice.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        )
-        childForwardCancellables.append(
-            workspace.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        )
-        childForwardCancellables.append(
-            tutorial.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        )
     }
 }
