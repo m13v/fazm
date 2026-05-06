@@ -494,7 +494,7 @@ class TutorialChatGuide {
         cancellables.removeAll()
 
         // Watch for response text containing the step-done marker
-        barState.$currentAIMessage
+        barState.streaming.$currentAIMessage
             .compactMap { $0 }
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak barState] message in
@@ -504,7 +504,7 @@ class TutorialChatGuide {
                 // Always strip the marker so it never shows to the user
                 let hasMarker = message.text.contains(marker)
                 if hasMarker {
-                    barState.currentAIMessage?.text = message.text
+                    barState.streaming.currentAIMessage?.text = message.text
                         .replacingOccurrences(of: marker, with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     self.stepDoneMarkerSeen = true
@@ -520,7 +520,7 @@ class TutorialChatGuide {
             .store(in: &cancellables)
 
         // Watch for when a new query is sent
-        barState.$displayedQuery
+        barState.streaming.$displayedQuery
             .removeDuplicates()
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -530,7 +530,7 @@ class TutorialChatGuide {
                 // but only if the AI already responded to the current step (not still streaming).
                 // The user engaging after seeing a response means the step's goal was met enough.
                 if barState.tutorialWaitingForResponse, !self.stepDoneMarkerSeen,
-                   let currentMsg = barState.currentAIMessage,
+                   let currentMsg = barState.streaming.currentAIMessage,
                    !currentMsg.text.isEmpty, !currentMsg.isStreaming {
                     log("TutorialChatGuide: Auto-advancing step (user sent follow-up without marker)")
                     self.advanceStep(barState: barState)
@@ -557,21 +557,21 @@ class TutorialChatGuide {
     /// Inject a tutorial message into the chat as a continuation of the conversation.
     private func injectTutorialMessage(_ message: ChatMessage, barState: FloatingControlBarState) {
         // Archive current exchange to history if there is one
-        if let currentMessage = barState.currentAIMessage,
-           !barState.displayedQuery.isEmpty,
+        if let currentMessage = barState.streaming.currentAIMessage,
+           !barState.streaming.displayedQuery.isEmpty,
            !currentMessage.text.isEmpty {
-            barState.chatHistory.append(
-                FloatingChatExchange(question: barState.displayedQuery, aiMessage: currentMessage)
+            barState.streaming.chatHistory.append(
+                FloatingChatExchange(question: barState.streaming.displayedQuery, aiMessage: currentMessage)
             )
         }
 
         // Set empty query so the question bar is hidden, showing just the guide message
-        barState.displayedQuery = ""
-        barState.currentAIMessage = message
-        barState.isAILoading = false
-        if !barState.showingAIResponse {
+        barState.streaming.displayedQuery = ""
+        barState.streaming.currentAIMessage = message
+        barState.streaming.isAILoading = false
+        if !barState.streaming.showingAIResponse {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                barState.showingAIResponse = true
+                barState.streaming.showingAIResponse = true
             }
         }
     }
