@@ -48,7 +48,7 @@ struct FloatingControlBarView: View {
                             .allowsHitTesting(false)
                     }
                 }
-                .onDrop(of: [.fileURL, .image], isTargeted: $state.input.isDragOverChat) { providers in
+                .onDrop(of: [.fileURL, .image], isTargeted: Binding(get: { state.input.isDragOverChat }, set: { state.input.isDragOverChat = $0 })) { providers in
                     NSLog("FloatingBar: onDrop received %d providers", providers.count)
                     for provider in providers {
                         NSLog("FloatingBar: provider types: %@", provider.registeredTypeIdentifiers)
