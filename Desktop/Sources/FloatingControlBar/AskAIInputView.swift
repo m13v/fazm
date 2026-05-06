@@ -39,14 +39,14 @@ struct AskAIInputView: View {
             .padding(.trailing, 16)
 
             // Attachment thumbnails strip
-            if !state.pendingAttachments.isEmpty {
-                ChatAttachmentStrip(attachments: $state.pendingAttachments)
+            if !state.input.pendingAttachments.isEmpty {
+                ChatAttachmentStrip(attachments: $state.input.pendingAttachments)
             }
 
             HStack(spacing: 6) {
                 ChatAttachmentButton {
                     ChatAttachmentHelper.openFilePicker { urls in
-                        ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
+                        ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
                     }
                 }
 
@@ -67,10 +67,10 @@ struct AskAIInputView: View {
                         },
                         focusOnAppear: true,
                         onPasteFiles: { urls in
-                            ChatAttachmentHelper.addFiles(from: urls, to: &state.pendingAttachments)
+                            ChatAttachmentHelper.addFiles(from: urls, to: &state.input.pendingAttachments)
                         },
                         onPasteImageData: { data in
-                            ChatAttachmentHelper.addPastedImage(data, to: &state.pendingAttachments)
+                            ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
                         },
                         minHeight: minHeight,
                         maxHeight: maxHeight,
@@ -115,16 +115,16 @@ struct AskAIInputView: View {
 
     private func sendCurrentMessage() {
         let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !state.pendingAttachments.isEmpty else { return }
+        guard !trimmed.isEmpty || !state.input.pendingAttachments.isEmpty else { return }
         guard !state.streaming.isAILoading else { return }
         state.showSendButtonHint = false
-        let attachmentsToSend = state.pendingAttachments
-        state.pendingAttachments = []
+        let attachmentsToSend = state.input.pendingAttachments
+        state.input.pendingAttachments = []
         onSend?(trimmed, attachmentsToSend)
     }
 
     private var hasInput: Bool {
-        !localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.pendingAttachments.isEmpty
+        !localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.input.pendingAttachments.isEmpty
     }
 
     private var canSend: Bool {
