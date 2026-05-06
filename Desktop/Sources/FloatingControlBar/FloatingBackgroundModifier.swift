@@ -29,7 +29,7 @@ struct FloatingBackgroundModifier: ViewModifier {
 
     /// Use solid background when the AI conversation is open and not collapsed, or during push-to-talk.
     private var useSolid: Bool {
-        (state.streaming.showingAIConversation && !state.isCollapsed) || state.isVoiceListening
+        (state.streaming.showingAIConversation && !state.isCollapsed) || state.voice.isVoiceListening
     }
 
     func body(content: Content) -> some View {
