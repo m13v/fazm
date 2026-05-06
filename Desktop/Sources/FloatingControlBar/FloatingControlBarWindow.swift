@@ -247,6 +247,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         .environmentObject(state.streaming)
         .environmentObject(state.input)
         .environmentObject(state.voice)
+        .environmentObject(state.workspace)
+        .environmentObject(state.tutorial)
 
         hostingView = NSHostingView(rootView: AnyView(
             swiftUIView
