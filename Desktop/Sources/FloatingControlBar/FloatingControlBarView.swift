@@ -42,13 +42,13 @@ struct FloatingControlBarView: View {
                     }
                 }
                 .overlay {
-                    if state.isDragOverChat {
+                    if state.input.isDragOverChat {
                         ChatDragOverlay()
                             .padding(4)
                             .allowsHitTesting(false)
                     }
                 }
-                .onDrop(of: [.fileURL, .image], isTargeted: $state.isDragOverChat) { providers in
+                .onDrop(of: [.fileURL, .image], isTargeted: $state.input.isDragOverChat) { providers in
                     NSLog("FloatingBar: onDrop received %d providers", providers.count)
                     for provider in providers {
                         NSLog("FloatingBar: provider types: %@", provider.registeredTypeIdentifiers)
@@ -70,7 +70,7 @@ struct FloatingControlBarView: View {
                                 guard let url = resolvedURL else { return }
                                 NSLog("FloatingBar: drop fileURL: %@", url.lastPathComponent)
                                 DispatchQueue.main.async {
-                                    ChatAttachmentHelper.addFiles(from: [url], to: &state.pendingAttachments)
+                                    ChatAttachmentHelper.addFiles(from: [url], to: &state.input.pendingAttachments)
                                 }
                             }
                         } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
@@ -88,7 +88,7 @@ struct FloatingControlBarView: View {
                                 guard let data = imageData else { return }
                                 NSLog("FloatingBar: drop image data: %d bytes", data.count)
                                 DispatchQueue.main.async {
-                                    ChatAttachmentHelper.addPastedImage(data, to: &state.pendingAttachments)
+                                    ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
                                 }
                             }
                         }
@@ -366,11 +366,11 @@ struct FloatingControlBarView: View {
         VStack(spacing: 0) {
             AskAIInputView(
                 userInput: Binding(
-                    get: { state.aiInputText },
-                    set: { state.aiInputText = $0 }
+                    get: { state.input.aiInputText },
+                    set: { state.input.aiInputText = $0 }
                 ),
                 onSend: { message, attachments in
-                    state.aiInputText = ""
+                    state.input.aiInputText = ""
                     state.streaming.displayedQuery = message
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                         state.streaming.showingAIResponse = true
@@ -388,7 +388,7 @@ struct FloatingControlBarView: View {
                     guard let state = state else { return }
                     // 106 = controlBarView(50) + Group top padding(8) + AskAIInputView top bar(24) + input vertical padding(24)
                     let totalHeight = height + 106
-                    state.inputViewHeight = totalHeight
+                    state.input.inputViewHeight = totalHeight
                 }
             )
 
@@ -463,11 +463,11 @@ struct FloatingControlBarView: View {
                 onSendQuery(message, attachments)
             },
             onEnqueueMessage: { message in
-                guard state.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
+                guard state.input.messageQueue.count < FloatingControlBarState.maxQueueSize else { return }
                 state.enqueue(message)
                 onEnqueueMessage?(message)
                 AnalyticsManager.shared.floatingBarMessageQueued(
-                    queueSize: state.messageQueue.count,
+                    queueSize: state.input.messageQueue.count,
                     messageLength: message.count
                 )
             },
@@ -504,7 +504,7 @@ struct FloatingControlBarView: View {
                 onClearQueue?()
             },
             onReorderQueue: { source, dest in
-                state.messageQueue.move(fromOffsets: source, toOffset: dest)
+                state.input.messageQueue.move(fromOffsets: source, toOffset: dest)
                 onReorderQueue?(source, dest)
             },
             onStopAgent: onStopAgent,
