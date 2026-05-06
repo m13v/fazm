@@ -297,13 +297,13 @@ struct DetachedChatView: View {
             onChangeWorkspace: onChangeWorkspace
         )
         .overlay {
-            if state.input.isDragOverChat {
+            if input.isDragOverChat {
                 ChatDragOverlay()
                     .padding(4)
                     .allowsHitTesting(false)
             }
         }
-        .onDrop(of: [.fileURL, .image], isTargeted: Binding(get: { state.input.isDragOverChat }, set: { state.input.isDragOverChat = $0 })) { providers in
+        .onDrop(of: [.fileURL, .image], isTargeted: Binding(get: { input.isDragOverChat }, set: { input.isDragOverChat = $0 })) { providers in
             for provider in providers {
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                     provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
@@ -321,7 +321,7 @@ struct DetachedChatView: View {
                         }
                         guard let url = resolvedURL else { return }
                         DispatchQueue.main.async {
-                            ChatAttachmentHelper.addFiles(from: [url], to: &state.input.pendingAttachments)
+                            ChatAttachmentHelper.addFiles(from: [url], to: &input.pendingAttachments)
                         }
                     }
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
@@ -337,7 +337,7 @@ struct DetachedChatView: View {
                         }
                         guard let data = imageData else { return }
                         DispatchQueue.main.async {
-                            ChatAttachmentHelper.addPastedImage(data, to: &state.input.pendingAttachments)
+                            ChatAttachmentHelper.addPastedImage(data, to: &input.pendingAttachments)
                         }
                     }
                 }
