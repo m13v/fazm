@@ -15,7 +15,7 @@ struct PushToTalkButton: View {
 
     var body: some View {
         ZStack {
-            if state.isVoiceFinalizing {
+            if state.voice.isVoiceFinalizing {
                 // Spinning arc to indicate transcription is processing
                 Circle()
                     .trim(from: 0, to: 0.65)
@@ -43,7 +43,7 @@ struct PushToTalkButton: View {
         .frame(width: frameSize, height: frameSize)
         .contentShape(Rectangle())
         .overlay(PushToTalkMouseHandler(targetState: state))
-        .help(state.isVoiceFinalizing ? "Processing voice…" : "Hold to talk")
+        .help(state.voice.isVoiceFinalizing ? "Processing voice…" : "Hold to talk")
     }
 }
 
