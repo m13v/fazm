@@ -246,6 +246,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         .environmentObject(state)
         .environmentObject(state.streaming)
         .environmentObject(state.input)
+        .environmentObject(state.voice)
 
         hostingView = NSHostingView(rootView: AnyView(
             swiftUIView
@@ -337,7 +338,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         AnalyticsManager.shared.floatingBarAskFazmClosed()
 
         // End tutorial chat guide if active
-        if state.isTutorialChatActive {
+        if state.tutorial.isTutorialChatActive {
             TutorialChatGuide.shared.finish(barState: state)
         }
 
@@ -346,7 +347,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
 
         // Cancel PTT if in follow-up mode
-        if state.isVoiceFollowUp {
+        if state.voice.isVoiceFollowUp {
             PushToTalkManager.shared.cancelListening()
         }
 
@@ -378,8 +379,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.input.aiInputText = ""
             state.streaming.currentAIMessage = nil
             state.streaming.chatHistory = []
-            state.isVoiceFollowUp = false
-            state.voiceFollowUpTranscript = ""
+            state.voice.isVoiceFollowUp = false
+            state.voice.voiceFollowUpTranscript = ""
         }
         // Suppress hover resizes while the close animation plays, otherwise onHover
         // fires mid-animation, reads an intermediate frame, and causes position drift.
@@ -446,7 +447,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private func installGlobalClickOutsideMonitor() {
         removeGlobalClickOutsideMonitor()
         globalClickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, self.isVisible, self.state.streaming.showingAIConversation, !self.suppressClickOutsideDismiss, !self.state.isCollapsed, !self.state.isVoiceListening else { return }
+            guard let self, self.isVisible, self.state.streaming.showingAIConversation, !self.suppressClickOutsideDismiss, !self.state.isCollapsed, !self.state.voice.isVoiceListening else { return }
             // Don't dismiss while ACP is listening for agent output (covers tool calls
             // between streamed text — see windowDidResignKey for full reasoning).
             if FloatingControlBarManager.shared.isChatActive { return }
@@ -520,9 +521,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     // MARK: - Public State Updates
 
     func updateRecordingState(isRecording: Bool, duration: Int, isInitialising: Bool) {
-        state.isRecording = isRecording
-        state.duration = duration
-        state.isInitialising = isInitialising
+        state.voice.isRecording = isRecording
+        state.voice.duration = duration
+        state.voice.isInitialising = isInitialising
     }
 
     func showAIConversation() {
@@ -609,7 +610,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     func startNewChat() {
         // End tutorial chat guide if active
-        if state.isTutorialChatActive {
+        if state.tutorial.isTutorialChatActive {
             TutorialChatGuide.shared.finish(barState: state)
         }
 
@@ -780,7 +781,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from bottom so the pill expands upward.
     func resizeForHover(expanded: Bool) {
-        guard !state.streaming.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
+        guard !state.streaming.showingAIConversation, !state.voice.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -934,7 +935,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         guard state.streaming.showingAIConversation else { return }
 
         // Don't dismiss when already collapsed or during push-to-talk
-        guard !state.isCollapsed, !state.isVoiceListening else { return }
+        guard !state.isCollapsed, !state.voice.isVoiceListening else { return }
 
         // Only dismiss when the user physically clicks away within our app.
         // Programmatic focus changes — e.g. the AI agent activating a browser
@@ -1348,10 +1349,10 @@ class FloatingControlBarManager {
                 // Wait for prompts to load, then auto-send each step's query
                 try? await Task.sleep(for: .seconds(2))
 
-                let prompts = barState.tutorialPrompts.isEmpty ? TutorialChatGuide.defaultPrompts : barState.tutorialPrompts
+                let prompts = barState.tutorial.tutorialPrompts.isEmpty ? TutorialChatGuide.defaultPrompts : barState.tutorial.tutorialPrompts
 
                 for (i, prompt) in prompts.enumerated() {
-                    guard barState.isTutorialChatActive else {
+                    guard barState.tutorial.isTutorialChatActive else {
                         log("FloatingControlBarManager: Tutorial test — chat guide ended early at step \(i)")
                         break
                     }
@@ -1586,11 +1587,11 @@ class FloatingControlBarManager {
             "showingAIConversation": state?.streaming.showingAIConversation ?? false,
             "showingAIResponse": state?.streaming.showingAIResponse ?? false,
             "isAILoading": state?.streaming.isAILoading ?? false,
-            "isVoiceListening": state?.isVoiceListening ?? false,
+            "isVoiceListening": state?.voice.isVoiceListening ?? false,
             "chatHistoryCount": state?.streaming.chatHistory.count ?? 0,
             "displayedQuery": state?.streaming.displayedQuery ?? "",
             "queueCount": state?.input.messageQueue.count ?? 0,
-            "isTutorialActive": state?.isTutorialChatActive ?? false,
+            "isTutorialActive": state?.tutorial.isTutorialChatActive ?? false,
             "availableModels": ShortcutSettings.shared.availableModels.map { ["id": $0.id, "label": $0.label, "shortLabel": $0.shortLabel] }
         ]
 
@@ -1779,8 +1780,8 @@ class FloatingControlBarManager {
         window.state.streaming.showingAIResponse = false
         window.state.input.aiInputText = ""
         window.state.streaming.currentAIMessage = nil
-        window.state.isVoiceFollowUp = false
-        window.state.voiceFollowUpTranscript = ""
+        window.state.voice.isVoiceFollowUp = false
+        window.state.voice.voiceFollowUpTranscript = ""
 
         guard let provider = self.chatProvider else { return }
 
@@ -2021,7 +2022,7 @@ class FloatingControlBarManager {
             ?? DetachedChatWindowController.shared.lastActiveWindow
         let inheritState = focusedPopOut?.state
         if let inheritState = inheritState {
-            log("FloatingControlBarManager: Inheriting workspace from focused pop-out: '\(inheritState.workspaceDirectory)'")
+            log("FloatingControlBarManager: Inheriting workspace from focused pop-out: '\(inheritState.workspace.workspaceDirectory)'")
         }
 
         DetachedChatWindowController.shared.show(
@@ -2234,7 +2235,7 @@ class FloatingControlBarManager {
 
         // Convert user attachments to bridge format
         let bridgeAttachments: [[String: String]]? = attachments.isEmpty ? nil : attachments.map { $0.bridgeDict }
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating", attachments: bridgeAttachments)
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: barWindow.state.tutorial.tutorialSystemPromptSuffix, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent, sessionKey: "floating", attachments: bridgeAttachments)
 
         // Handle errors, credit exhaustion, auth, paywall, etc.
         ChatQueryLifecycle.handlePostQuery(provider: provider, state: barWindow.state, sessionKey: "floating", messageCountBefore: messageCountBefore)
