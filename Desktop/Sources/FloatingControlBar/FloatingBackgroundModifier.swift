@@ -26,10 +26,12 @@ struct VisualEffectView: NSViewRepresentable {
 struct FloatingBackgroundModifier: ViewModifier {
     let cornerRadius: CGFloat
     @EnvironmentObject private var state: FloatingControlBarState
+    @EnvironmentObject var streaming: StreamingResponseState
+    @EnvironmentObject var voice: VoiceState
 
     /// Use solid background when the AI conversation is open and not collapsed, or during push-to-talk.
     private var useSolid: Bool {
-        (state.streaming.showingAIConversation && !state.isCollapsed) || state.voice.isVoiceListening
+        (streaming.showingAIConversation && !state.isCollapsed) || voice.isVoiceListening
     }
 
     func body(content: Content) -> some View {
