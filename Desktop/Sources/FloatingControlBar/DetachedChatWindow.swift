@@ -97,6 +97,8 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
         .environmentObject(state.streaming)
         .environmentObject(state.input)
         .environmentObject(state.voice)
+        .environmentObject(state.workspace)
+        .environmentObject(state.tutorial)
 
         let hosting = NSHostingView(rootView: AnyView(
             chatView
