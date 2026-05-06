@@ -51,7 +51,7 @@ struct AskAIInputView: View {
                 }
 
                 ZStack(alignment: .topLeading) {
-                    if localInput.isEmpty && !state.isVoiceListening {
+                    if localInput.isEmpty && !state.voice.isVoiceListening {
                         Text("Ask a question...")
                             .scaledFont(size: 13)
                             .foregroundColor(.secondary)
@@ -134,7 +134,7 @@ struct AskAIInputView: View {
     // MARK: - Subviews
 
     private var micButton: some View {
-        PushToTalkButton(isListening: state.isVoiceListening, iconSize: 18, frameSize: 28)
+        PushToTalkButton(isListening: state.voice.isVoiceListening, iconSize: 18, frameSize: 28)
     }
 
     private var sendButton: some View {
