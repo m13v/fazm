@@ -144,7 +144,7 @@ struct FloatingControlBarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottomTrailing) {
-            if isHovering && !state.isVoiceListening {
+            if isHovering && !state.voice.isVoiceListening {
                 Button {
                     openFloatingBarSettings()
                 } label: {
@@ -174,7 +174,7 @@ struct FloatingControlBarView: View {
                 (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
             }
         }
-        .floatingBackground(cornerRadius: isHovering || state.streaming.showingAIConversation || state.isVoiceListening ? 20 : 5)
+        .floatingBackground(cornerRadius: isHovering || state.streaming.showingAIConversation || state.voice.isVoiceListening ? 20 : 5)
     }
 
     private func openFloatingBarSettings() {
@@ -189,7 +189,7 @@ struct FloatingControlBarView: View {
 
     private var controlBarView: some View {
         Group {
-            if state.isVoiceListening && !state.isVoiceFollowUp {
+            if state.voice.isVoiceListening && !state.voice.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
@@ -324,7 +324,7 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 8) {
-            if state.isVoiceFinalizing {
+            if state.voice.isVoiceFinalizing {
                 // Transcribing loading indicator
                 ProgressView()
                     .controlSize(.small)
@@ -343,7 +343,7 @@ struct FloatingControlBarView: View {
                 )
             }
 
-            if state.isVoiceLocked && !state.isVoiceFinalizing {
+            if state.voice.isVoiceLocked && !state.voice.isVoiceFinalizing {
                 Text("LOCKED")
                     .scaledFont(size: 10, weight: .bold)
                     .foregroundColor(.orange)
@@ -355,8 +355,8 @@ struct FloatingControlBarView: View {
 
             ObservedTranscriptView(
                 audioLevel: state.audioLevel,
-                isVoiceFinalizing: state.isVoiceFinalizing,
-                isVoiceLocked: state.isVoiceLocked,
+                isVoiceFinalizing: state.voice.isVoiceFinalizing,
+                isVoiceLocked: state.voice.isVoiceLocked,
                 pttKeySymbol: shortcutSettings.pttKey.symbol
             )
         }
@@ -424,12 +424,12 @@ struct FloatingControlBarView: View {
             userInput: state.streaming.displayedQuery,
             chatHistory: state.streaming.chatHistory,
             isVoiceFollowUp: Binding(
-                get: { state.isVoiceFollowUp },
-                set: { state.isVoiceFollowUp = $0 }
+                get: { state.voice.isVoiceFollowUp },
+                set: { state.voice.isVoiceFollowUp = $0 }
             ),
             voiceFollowUpTranscript: Binding(
-                get: { state.voiceFollowUpTranscript },
-                set: { state.voiceFollowUpTranscript = $0 }
+                get: { state.voice.voiceFollowUpTranscript },
+                set: { state.voice.voiceFollowUpTranscript = $0 }
             ),
             suggestedReplies: Binding(
                 get: { state.streaming.suggestedReplies },
