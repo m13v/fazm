@@ -99,6 +99,50 @@ final class StreamingResponseState: ObservableObject {
     }
 }
 
+/// User input state — typed text, attachments, queued messages, drag overlay.
+/// Split from `FloatingControlBarState` so the input box doesn't re-render on
+/// streaming/voice/settings changes.
+@MainActor
+final class InputState: ObservableObject {
+    @Published var aiInputText: String = ""
+    @Published var pendingFollowUpText: String = ""
+    @Published var pendingAttachments: [ChatAttachment] = []
+    @Published var isDragOverChat: Bool = false
+    @Published var inputViewHeight: CGFloat = 146
+    @Published var messageQueue: [QueuedMessage] = []
+
+    /// Draft input text preserved when the conversation is dismissed without sending.
+    var draftInputText: String = ""
+
+    /// Maximum number of queued messages.
+    static let maxQueueSize = 10
+
+    /// Append a message to the queue. Returns false if queue is full.
+    @discardableResult
+    func enqueue(_ text: String) -> Bool {
+        guard messageQueue.count < Self.maxQueueSize else { return false }
+        messageQueue.append(QueuedMessage(text: text))
+        return true
+    }
+
+    /// Remove a queued message by ID.
+    func dequeue(_ id: UUID) {
+        messageQueue.removeAll { $0.id == id }
+    }
+
+    /// Remove and return the first queued message.
+    @discardableResult
+    func dequeueFirst() -> QueuedMessage? {
+        guard !messageQueue.isEmpty else { return nil }
+        return messageQueue.removeFirst()
+    }
+
+    /// Clear all queued messages.
+    func clearQueue() {
+        messageQueue.removeAll()
+    }
+}
+
 /// Observable object holding the state for the floating control bar.
 ///
 /// Streaming-related fields live on `streaming` (a child `StreamingResponseState`)
