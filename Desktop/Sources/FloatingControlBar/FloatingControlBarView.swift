@@ -33,9 +33,9 @@ struct FloatingControlBarView: View {
     var body: some View {
         VStack(spacing: 0) {
             // AI conversation view - conditionally visible (expands upward above the bar)
-            if state.showingAIConversation {
+            if state.streaming.showingAIConversation {
                 Group {
-                    if state.showingAIResponse {
+                    if state.streaming.showingAIResponse {
                         aiResponseView
                     } else {
                         aiInputView
@@ -117,7 +117,7 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
                 }
                 .overlay(alignment: .topTrailing) {
-                    if state.showingAIResponse {
+                    if state.streaming.showingAIResponse {
                         ZStack {
                             ResizeHandleView(targetWindow: window)
                                 .frame(width: 20, height: 20)
@@ -174,7 +174,7 @@ struct FloatingControlBarView: View {
                 (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
             }
         }
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 5)
+        .floatingBackground(cornerRadius: isHovering || state.streaming.showingAIConversation || state.isVoiceListening ? 20 : 5)
     }
 
     private func openFloatingBarSettings() {
@@ -195,7 +195,7 @@ struct FloatingControlBarView: View {
                     .padding(.vertical, 3)
                     .frame(height: 50)
                     .transition(.opacity)
-            } else if isHovering || state.showingAIConversation {
+            } else if isHovering || state.streaming.showingAIConversation {
                 HStack(spacing: 0) {
                     if updaterViewModel.updateAvailable {
                         updateButton
@@ -371,11 +371,11 @@ struct FloatingControlBarView: View {
                 ),
                 onSend: { message, attachments in
                     state.aiInputText = ""
-                    state.displayedQuery = message
+                    state.streaming.displayedQuery = message
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        state.showingAIResponse = true
-                        state.isAILoading = true
-                        state.currentAIMessage = nil
+                        state.streaming.showingAIResponse = true
+                        state.streaming.isAILoading = true
+                        state.streaming.currentAIMessage = nil
                     }
                     onSendQuery(message, attachments)
                     // Focus the follow-up input after the view transition settles
@@ -392,7 +392,7 @@ struct FloatingControlBarView: View {
                 }
             )
 
-            if !state.chatHistory.isEmpty || state.showingAIResponse {
+            if !state.streaming.chatHistory.isEmpty || state.streaming.showingAIResponse {
                 Button(action: onNewChat) {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
@@ -417,12 +417,12 @@ struct FloatingControlBarView: View {
     private var aiResponseView: some View {
         AIResponseView(
             isLoading: Binding(
-                get: { state.isAILoading },
-                set: { state.isAILoading = $0 }
+                get: { state.streaming.isAILoading },
+                set: { state.streaming.isAILoading = $0 }
             ),
-            currentMessage: state.currentAIMessage,
-            userInput: state.displayedQuery,
-            chatHistory: state.chatHistory,
+            currentMessage: state.streaming.currentAIMessage,
+            userInput: state.streaming.displayedQuery,
+            chatHistory: state.streaming.chatHistory,
             isVoiceFollowUp: Binding(
                 get: { state.isVoiceFollowUp },
                 set: { state.isVoiceFollowUp = $0 }
@@ -432,33 +432,33 @@ struct FloatingControlBarView: View {
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
             suggestedReplies: Binding(
-                get: { state.suggestedReplies },
-                set: { state.suggestedReplies = $0 }
+                get: { state.streaming.suggestedReplies },
+                set: { state.streaming.suggestedReplies = $0 }
             ),
             suggestedReplyQuestion: Binding(
-                get: { state.suggestedReplyQuestion },
-                set: { state.suggestedReplyQuestion = $0 }
+                get: { state.streaming.suggestedReplyQuestion },
+                set: { state.streaming.suggestedReplyQuestion = $0 }
             ),
             onClose: onCloseAI,
             onNewChat: onNewChat,
             onSendFollowUp: { message, attachments in
-                state.suggestedReplies = []
-                state.suggestedReplyQuestion = ""
+                state.streaming.suggestedReplies = []
+                state.streaming.suggestedReplyQuestion = ""
                 // Archive current exchange to chat history
-                let currentQuery = state.displayedQuery
+                let currentQuery = state.streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    let aiMessage = state.currentAIMessage ?? ChatMessage(
+                    let aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
 
-                state.displayedQuery = message
+                state.streaming.displayedQuery = message
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    state.isAILoading = true
-                    state.currentAIMessage = nil
+                    state.streaming.isAILoading = true
+                    state.streaming.currentAIMessage = nil
                 }
                 onSendQuery(message, attachments)
             },
@@ -475,9 +475,9 @@ struct FloatingControlBarView: View {
                 // Remove from queue
                 state.dequeue(item.id)
                 // Archive partial exchange and interrupt
-                let currentQuery = state.displayedQuery
+                let currentQuery = state.streaming.displayedQuery
                 if !currentQuery.isEmpty {
-                    var aiMessage = state.currentAIMessage ?? ChatMessage(
+                    var aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
                         id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
                         isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
                     )
@@ -487,12 +487,12 @@ struct FloatingControlBarView: View {
                         }
                         return block
                     }
-                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+                    state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
                 }
                 state.flushPendingChatObserverExchanges()
-                state.displayedQuery = item.text
-                state.isAILoading = true
-                state.currentAIMessage = nil
+                state.streaming.displayedQuery = item.text
+                state.streaming.isAILoading = true
+                state.streaming.currentAIMessage = nil
                 onSendNowQueued?(item)
             },
             onDeleteQueued: { item in
