@@ -390,7 +390,7 @@ class SessionRecordingManager {
             .store(in: &activityCancellables)
 
         // 3. AI conversation opened → resume
-        barState.$showingAIConversation
+        barState.streaming.$showingAIConversation
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] showing in
