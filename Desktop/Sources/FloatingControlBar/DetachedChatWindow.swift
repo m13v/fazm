@@ -481,10 +481,10 @@ class DetachedChatWindowController {
         // Workspace: prefer inherited (from currently focused pop-out) over shared provider,
         // so Cmd+Shift+N from a per-window-workspace pop-out keeps that same workspace.
         if let source = inheritWorkspaceFrom {
-            detachedState.workspace.workspaceDirectory = source.workspaceDirectory
-            detachedState.workspace.projectClaudeMdContent = source.projectClaudeMdContent
-            detachedState.workspace.projectClaudeMdPath = source.projectClaudeMdPath
-            detachedState.workspace.projectDiscoveredSkills = source.projectDiscoveredSkills
+            detachedState.workspace.workspaceDirectory = source.workspace.workspaceDirectory
+            detachedState.workspace.projectClaudeMdContent = source.workspace.projectClaudeMdContent
+            detachedState.workspace.projectClaudeMdPath = source.workspace.projectClaudeMdPath
+            detachedState.workspace.projectDiscoveredSkills = source.workspace.projectDiscoveredSkills
         } else {
             detachedState.workspace.workspaceDirectory = chatProvider.aiChatWorkingDirectory
             detachedState.workspace.projectClaudeMdContent = chatProvider.projectClaudeMdContent
