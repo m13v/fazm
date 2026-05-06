@@ -3,6 +3,11 @@ import SwiftUI
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @EnvironmentObject var streaming: StreamingResponseState
+    @EnvironmentObject var input: InputState
+    @EnvironmentObject var voice: VoiceState
+    @EnvironmentObject var workspace: WorkspaceSettingsState
+    @EnvironmentObject var tutorial: TutorialState
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
@@ -86,7 +91,7 @@ struct AIResponseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if state.tutorial.isTutorialChatActive {
+            if tutorial.isTutorialChatActive {
                 tutorialBanner
             }
 
@@ -178,7 +183,7 @@ struct AIResponseView: View {
                         shouldFollowContent = true
                         scrollToBottom(proxy: proxy)
                     }
-                    .onChange(of: state.streaming.pendingChatObserverExchanges.count) {
+                    .onChange(of: streaming.pendingChatObserverExchanges.count) {
                         shouldFollowContent = true
                         scrollToBottom(proxy: proxy)
                     }
@@ -223,11 +228,11 @@ struct AIResponseView: View {
                 suggestedRepliesView
             }
 
-            if !state.input.messageQueue.isEmpty {
+            if !input.messageQueue.isEmpty {
                 MessageQueueView(
                     queue: Binding(
-                        get: { state.input.messageQueue },
-                        set: { state.input.messageQueue = $0 }
+                        get: { input.messageQueue },
+                        set: { input.messageQueue = $0 }
                     ),
                     onSendNow: { item in onSendNow?(item) },
                     onDelete: { item in onDeleteQueued?(item) },
@@ -235,11 +240,11 @@ struct AIResponseView: View {
                     onReorder: { source, dest in onReorderQueue?(source, dest) }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: state.input.messageQueue.count)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: input.messageQueue.count)
             }
 
             // Chat observer thinking indicator — only when no cards have arrived yet
-            if state.streaming.isChatObserverRunning && !hasAnyChatObserverCards {
+            if streaming.isChatObserverRunning && !hasAnyChatObserverCards {
                 chatObserverThinkingIndicator
             }
 
@@ -304,7 +309,7 @@ struct AIResponseView: View {
 
     /// The effective workspace for this view: per-window state if set, otherwise global default.
     private var aiChatWorkingDirectory: String {
-        state.workspace.workspaceDirectory.isEmpty ? globalWorkspaceDirectory : state.workspace.workspaceDirectory
+        workspace.workspaceDirectory.isEmpty ? globalWorkspaceDirectory : workspace.workspaceDirectory
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, anchor: String = "bottom") {
@@ -324,7 +329,7 @@ struct AIResponseView: View {
 
     private var headerView: some View {
         HStack(spacing: 12) {
-            if state.streaming.isCompacting {
+            if streaming.isCompacting {
                 ProgressView()
                     .scaleEffect(0.6)
                     .frame(width: 16, height: 16)
@@ -519,7 +524,7 @@ struct AIResponseView: View {
         HStack(spacing: 6) {
             Image(systemName: "graduationcap.fill")
                 .scaledFont(size: 11)
-            Text("Getting Started — Step \(min(state.tutorial.tutorialChatStep + 1, state.tutorial.tutorialPrompts.count)) of \(state.tutorial.tutorialPrompts.count)")
+            Text("Getting Started — Step \(min(tutorial.tutorialChatStep + 1, tutorial.tutorialPrompts.count)) of \(tutorial.tutorialPrompts.count)")
                 .scaledFont(size: 11, weight: .medium)
             Spacer()
             Button("Skip") {
@@ -591,7 +596,7 @@ struct AIResponseView: View {
                             actedAction: card.actedAction
                         )
                     },
-                    isChatObserverRunning: state.streaming.isChatObserverRunning,
+                    isChatObserverRunning: streaming.isChatObserverRunning,
                     onAction: { id, action in
                         handleChatObserverCardAction(activityId: id, action: action)
                     }
