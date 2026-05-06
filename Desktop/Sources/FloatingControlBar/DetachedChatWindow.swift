@@ -95,6 +95,8 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
         )
         .environmentObject(state)
         .environmentObject(state.streaming)
+        .environmentObject(state.input)
+        .environmentObject(state.voice)
 
         let hosting = NSHostingView(rootView: AnyView(
             chatView
@@ -204,12 +206,12 @@ struct DetachedChatView: View {
             userInput: state.streaming.displayedQuery,
             chatHistory: state.streaming.chatHistory,
             isVoiceFollowUp: Binding(
-                get: { state.isVoiceFollowUp },
-                set: { state.isVoiceFollowUp = $0 }
+                get: { state.voice.isVoiceFollowUp },
+                set: { state.voice.isVoiceFollowUp = $0 }
             ),
             voiceFollowUpTranscript: Binding(
-                get: { state.voiceFollowUpTranscript },
-                set: { state.voiceFollowUpTranscript = $0 }
+                get: { state.voice.voiceFollowUpTranscript },
+                set: { state.voice.voiceFollowUpTranscript = $0 }
             ),
             suggestedReplies: Binding(
                 get: { state.streaming.suggestedReplies },
@@ -220,8 +222,8 @@ struct DetachedChatView: View {
                 set: { state.streaming.suggestedReplyQuestion = $0 }
             ),
             localModel: Binding(
-                get: { state.selectedModel },
-                set: { state.selectedModel = $0 }
+                get: { state.workspace.selectedModel },
+                set: { state.workspace.selectedModel = $0 }
             ),
             onClose: nil,
             onNewChat: onNewChat,
@@ -413,7 +415,7 @@ class DetachedChatWindowController {
     /// dropdowns flip to the requested model immediately.
     func applyModelToAllWindows(_ modelId: String) {
         for entry in entries.values {
-            entry.window.state.selectedModel = modelId
+            entry.window.state.workspace.selectedModel = modelId
         }
     }
 
@@ -437,8 +439,8 @@ class DetachedChatWindowController {
                 sessionKey: entry.sessionKey,
                 x: f.origin.x, y: f.origin.y,
                 width: f.size.width, height: f.size.height,
-                workspace: entry.window.state.workspaceDirectory,
-                selectedModel: entry.window.state.selectedModel
+                workspace: entry.window.state.workspace.workspaceDirectory,
+                selectedModel: entry.window.state.workspace.selectedModel
             )
         }
         if let data = try? JSONEncoder().encode(snapshots) {
@@ -479,15 +481,15 @@ class DetachedChatWindowController {
         // Workspace: prefer inherited (from currently focused pop-out) over shared provider,
         // so Cmd+Shift+N from a per-window-workspace pop-out keeps that same workspace.
         if let source = inheritWorkspaceFrom {
-            detachedState.workspaceDirectory = source.workspaceDirectory
-            detachedState.projectClaudeMdContent = source.projectClaudeMdContent
-            detachedState.projectClaudeMdPath = source.projectClaudeMdPath
-            detachedState.projectDiscoveredSkills = source.projectDiscoveredSkills
+            detachedState.workspace.workspaceDirectory = source.workspaceDirectory
+            detachedState.workspace.projectClaudeMdContent = source.projectClaudeMdContent
+            detachedState.workspace.projectClaudeMdPath = source.projectClaudeMdPath
+            detachedState.workspace.projectDiscoveredSkills = source.projectDiscoveredSkills
         } else {
-            detachedState.workspaceDirectory = chatProvider.aiChatWorkingDirectory
-            detachedState.projectClaudeMdContent = chatProvider.projectClaudeMdContent
-            detachedState.projectClaudeMdPath = chatProvider.projectClaudeMdPath
-            detachedState.projectDiscoveredSkills = chatProvider.projectDiscoveredSkills
+            detachedState.workspace.workspaceDirectory = chatProvider.aiChatWorkingDirectory
+            detachedState.workspace.projectClaudeMdContent = chatProvider.projectClaudeMdContent
+            detachedState.workspace.projectClaudeMdPath = chatProvider.projectClaudeMdPath
+            detachedState.workspace.projectDiscoveredSkills = chatProvider.projectDiscoveredSkills
         }
 
         let win = DetachedChatWindow(state: detachedState, sessionKey: sessionKey)
@@ -665,15 +667,15 @@ class DetachedChatWindowController {
                 detachedState.streaming.isAILoading = false
 
                 // Restore per-window model selection and workspace
-                detachedState.selectedModel = snapshot.selectedModel
-                detachedState.workspaceDirectory = snapshot.workspace
+                detachedState.workspace.selectedModel = snapshot.selectedModel
+                detachedState.workspace.workspaceDirectory = snapshot.workspace
                 if !snapshot.workspace.isEmpty {
                     Task {
                         let config = await ChatProvider.discoverProjectConfig(workspace: snapshot.workspace)
                         await MainActor.run {
-                            detachedState.projectClaudeMdContent = config.claudeMdContent
-                            detachedState.projectClaudeMdPath = config.claudeMdPath
-                            detachedState.projectDiscoveredSkills = config.skills
+                            detachedState.workspace.projectClaudeMdContent = config.claudeMdContent
+                            detachedState.workspace.projectClaudeMdPath = config.claudeMdPath
+                            detachedState.workspace.projectDiscoveredSkills = config.skills
                         }
                     }
                 }
@@ -710,8 +712,8 @@ class DetachedChatWindowController {
                         sessionKey: entry.sessionKey,
                         x: f.origin.x, y: f.origin.y,
                         width: f.size.width, height: f.size.height,
-                        workspace: entry.window.state.workspaceDirectory,
-                        selectedModel: entry.window.state.selectedModel
+                        workspace: entry.window.state.workspace.workspaceDirectory,
+                        selectedModel: entry.window.state.workspace.selectedModel
                     )
                 } + failedSnapshots
                 if let data = try? JSONEncoder().encode(allSnapshots) {
@@ -841,15 +843,15 @@ class DetachedChatWindowController {
             let newPath = url.path
 
             // Store workspace on per-window state (not the shared provider)
-            state.workspaceDirectory = newPath
+            state.workspace.workspaceDirectory = newPath
 
             // Discover project CLAUDE.md for this window's workspace
             Task {
                 let projConfig = await ChatProvider.discoverProjectConfig(workspace: newPath)
                 await MainActor.run {
-                    state.projectClaudeMdContent = projConfig.claudeMdContent
-                    state.projectClaudeMdPath = projConfig.claudeMdPath
-                    state.projectDiscoveredSkills = projConfig.skills
+                    state.workspace.projectClaudeMdContent = projConfig.claudeMdContent
+                    state.workspace.projectClaudeMdPath = projConfig.claudeMdPath
+                    state.workspace.projectDiscoveredSkills = projConfig.skills
                 }
             }
 
@@ -1001,12 +1003,12 @@ class DetachedChatWindowController {
 
         subscribeToResponse(provider: provider, state: state, winId: winId, messageCountBefore: messageCountBefore)
 
-        let windowCwd = state.workspaceDirectory.isEmpty ? nil : state.workspaceDirectory
+        let windowCwd = state.workspace.workspaceDirectory.isEmpty ? nil : state.workspace.workspaceDirectory
         Task { @MainActor in
             let bridgeAttachments: [[String: String]]? = attachments.isEmpty ? nil : attachments.map { $0.bridgeDict }
             await provider.sendMessage(
                 message,
-                model: state.selectedModel,
+                model: state.workspace.selectedModel,
                 systemPromptSuffix: nil,
                 systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent,
                 sessionKey: sessionKey,
