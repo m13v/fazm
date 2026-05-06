@@ -1343,10 +1343,10 @@ class ChatProvider: ObservableObject {
                     if authMode == "chatgpt", let pending = CodexBackendManager.shared.pendingPickerModelId {
                         ShortcutSettings.shared.selectedModel = pending
                         // The floating bar and every detached chat window each track their own
-                        // `state.selectedModel`. Updating only the global default leaves the
+                        // `state.workspace.selectedModel`. Updating only the global default leaves the
                         // visible dropdown stuck on the previously selected model after OAuth,
                         // so we have to flip every per-window state too.
-                        FloatingControlBarManager.shared.barState?.selectedModel = pending
+                        FloatingControlBarManager.shared.barState?.workspace.selectedModel = pending
                         DetachedChatWindowController.shared.applyModelToAllWindows(pending)
                         CodexBackendManager.shared.pendingPickerModelId = nil
                         log("ChatProvider: promoted pending Codex model \(pending) after OAuth")
