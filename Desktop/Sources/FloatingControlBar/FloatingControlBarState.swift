@@ -278,6 +278,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
     func dequeueFirst() -> QueuedMessage? { input.dequeueFirst() }
     func clearQueue() { input.clearQueue() }
 
+    /// Forwarder for the queue size limit so existing
+    /// `FloatingControlBarState.maxQueueSize` references continue to compile.
+    static let maxQueueSize = InputState.maxQueueSize
+
     override init() {
         super.init()
         // Forward child store changes so views that only inject the parent state
