@@ -379,26 +379,6 @@ actor AppDatabase {
         // Migrate data from legacy path if this is first launch with per-user paths
         migrateFromLegacyPathIfNeeded(to: fazmDir)
 
-        // Rename omi.db → fazm.db if needed (rebrand migration)
-        let legacyOmiDB = fazmDir.appendingPathComponent("omi.db").path
-        let fazmDBPath = fazmDir.appendingPathComponent("fazm.db").path
-        if FileManager.default.fileExists(atPath: legacyOmiDB) && !FileManager.default.fileExists(atPath: fazmDBPath) {
-            do {
-                try FileManager.default.moveItem(atPath: legacyOmiDB, toPath: fazmDBPath)
-                // Also move WAL/SHM if present
-                for suffix in ["-wal", "-shm"] {
-                    let src = legacyOmiDB + suffix
-                    let dst = fazmDBPath + suffix
-                    if FileManager.default.fileExists(atPath: src) {
-                        try FileManager.default.moveItem(atPath: src, toPath: dst)
-                    }
-                }
-                log("RewindDatabase: Migrated omi.db → fazm.db")
-            } catch {
-                logError("RewindDatabase: Failed to rename omi.db → fazm.db", error: error)
-            }
-        }
-
         let dbPath = fazmDir.appendingPathComponent("fazm.db").path
         let flagPath = fazmDir.appendingPathComponent(".fazm_running").path
         runningFlagPath = flagPath
@@ -730,7 +710,7 @@ actor AppDatabase {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd_HHmmss"
         let timestamp = formatter.string(from: Date())
-        let backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp).db")
+        let backupPath = backupDir.appendingPathComponent("fazm_corrupted_\(timestamp).db")
 
         // Backup the corrupted database (for potential manual recovery)
         log("RewindDatabase: Backing up corrupted database to \(backupPath.path)")
@@ -918,7 +898,6 @@ actor AppDatabase {
     private func migrate(_ queue: DatabasePool) throws {
         var migrator = DatabaseMigrator()
 
-        // Single clean migration for Fazm (no legacy OMI tables).
         // Creates only the active tables used by the app.
         // Note: memories will live in a separate DB (separate conversation).
         migrator.registerMigration("fazmV1") { db in
