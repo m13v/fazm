@@ -161,58 +161,61 @@ actor AppDatabase {
             // Merge remaining DBs into the newly moved target
             let remaining = otherDirs.filter { $0.url != source.url }
             if !remaining.isEmpty {
-                mergeMessagesFromOtherDatabases(remaining.map(\.dbPath), into: targetDB.path)
-                cleanupMergedDirectories(remaining.map(\.url))
+                let merged = mergeMessagesFromOtherDatabases(remaining.map(\.dbPath), into: targetDB.path)
+                let succeededDirs = remaining.filter { merged.contains($0.dbPath) }.map(\.url)
+                cleanupMergedDirectories(succeededDirs)
+                quarantineFailedMerges(remaining.filter { !merged.contains($0.dbPath) }.map(\.url))
             }
         } else {
             // Target exists — merge messages from all other DBs into it
-            mergeMessagesFromOtherDatabases(otherDirs.map(\.dbPath), into: targetDB.path)
-            cleanupMergedDirectories(otherDirs.map(\.url))
+            let merged = mergeMessagesFromOtherDatabases(otherDirs.map(\.dbPath), into: targetDB.path)
+            let succeededDirs = otherDirs.filter { merged.contains($0.dbPath) }.map(\.url)
+            cleanupMergedDirectories(succeededDirs)
+            quarantineFailedMerges(otherDirs.filter { !merged.contains($0.dbPath) }.map(\.url))
         }
     }
 
     /// Merge chat_messages from source databases into the target database.
     /// Uses INSERT OR IGNORE to skip duplicates (matched by messageId).
-    private func mergeMessagesFromOtherDatabases(_ sourcePaths: [String], into targetPath: String) {
+    /// Returns the set of source paths whose merge succeeded — only those are safe to delete.
+    private func mergeMessagesFromOtherDatabases(_ sourcePaths: [String], into targetPath: String) -> Set<String> {
+        var succeeded: Set<String> = []
         for sourcePath in sourcePaths {
-            do {
-                // Open target DB directly with sqlite3
-                var targetDb: OpaquePointer?
-                guard sqlite3_open(targetPath, &targetDb) == SQLITE_OK, let db = targetDb else {
-                    log("RewindDatabase: Merge — failed to open target DB")
-                    continue
-                }
-                defer { sqlite3_close(db) }
-
-                // Attach the source DB
-                let attachSQL = "ATTACH DATABASE '\(sourcePath)' AS source"
-                guard sqlite3_exec(db, attachSQL, nil, nil, nil) == SQLITE_OK else {
-                    log("RewindDatabase: Merge — failed to attach \(sourcePath)")
-                    continue
-                }
-
-                // Merge chat_messages
-                let mergeSQL = """
-                    INSERT OR IGNORE INTO main.chat_messages
-                        (taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced)
-                    SELECT taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced
-                    FROM source.chat_messages
-                """
-                if sqlite3_exec(db, mergeSQL, nil, nil, nil) == SQLITE_OK {
-                    let count = sqlite3_changes(db)
-                    if count > 0 {
-                        log("RewindDatabase: Merged \(count) messages from \(URL(fileURLWithPath: sourcePath).deletingLastPathComponent().lastPathComponent)")
-                    }
-                } else {
-                    log("RewindDatabase: Merge — failed to merge messages from \(sourcePath)")
-                }
-
-                sqlite3_exec(db, "DETACH DATABASE source", nil, nil, nil)
+            var targetDb: OpaquePointer?
+            guard sqlite3_open(targetPath, &targetDb) == SQLITE_OK, let db = targetDb else {
+                log("RewindDatabase: Merge — failed to open target DB for \(sourcePath)")
+                if let targetDb { sqlite3_close(targetDb) }
+                continue
             }
+
+            let attachSQL = "ATTACH DATABASE '\(sourcePath)' AS source"
+            guard sqlite3_exec(db, attachSQL, nil, nil, nil) == SQLITE_OK else {
+                log("RewindDatabase: Merge — failed to attach \(sourcePath): \(String(cString: sqlite3_errmsg(db)))")
+                sqlite3_close(db)
+                continue
+            }
+
+            let mergeSQL = """
+                INSERT OR IGNORE INTO main.chat_messages
+                    (taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced)
+                SELECT taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced
+                FROM source.chat_messages
+            """
+            if sqlite3_exec(db, mergeSQL, nil, nil, nil) == SQLITE_OK {
+                let count = sqlite3_changes(db)
+                log("RewindDatabase: Merged \(count) messages from \(URL(fileURLWithPath: sourcePath).deletingLastPathComponent().lastPathComponent)")
+                succeeded.insert(sourcePath)
+            } else {
+                log("RewindDatabase: Merge — failed to merge messages from \(sourcePath): \(String(cString: sqlite3_errmsg(db)))")
+            }
+
+            sqlite3_exec(db, "DETACH DATABASE source", nil, nil, nil)
+            sqlite3_close(db)
         }
+        return succeeded
     }
 
-    /// Remove directories that have been successfully merged.
+    /// Remove directories whose merge succeeded.
     private func cleanupMergedDirectories(_ dirs: [URL]) {
         let fm = FileManager.default
         for dir in dirs {
@@ -221,6 +224,28 @@ actor AppDatabase {
                 log("RewindDatabase: Cleaned up merged directory \(dir.lastPathComponent)")
             } catch {
                 log("RewindDatabase: Failed to clean up \(dir.lastPathComponent): \(error)")
+            }
+        }
+    }
+
+    /// Move directories whose merge failed to a quarantine folder so they are not lost.
+    /// They can be recovered manually after the merge logic is fixed.
+    private func quarantineFailedMerges(_ dirs: [URL]) {
+        guard !dirs.isEmpty else { return }
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let quarantine = appSupport
+            .appendingPathComponent("Fazm", isDirectory: true)
+            .appendingPathComponent("merge-failed", isDirectory: true)
+        try? fm.createDirectory(at: quarantine, withIntermediateDirectories: true)
+        let stamp = Int(Date().timeIntervalSince1970)
+        for dir in dirs {
+            let dest = quarantine.appendingPathComponent("\(dir.lastPathComponent).\(stamp)", isDirectory: true)
+            do {
+                try fm.moveItem(at: dir, to: dest)
+                log("RewindDatabase: Quarantined failed-merge directory \(dir.lastPathComponent) → merge-failed/\(dest.lastPathComponent)")
+            } catch {
+                log("RewindDatabase: Failed to quarantine \(dir.lastPathComponent): \(error). LEAVING IN PLACE — do not delete.")
             }
         }
     }
