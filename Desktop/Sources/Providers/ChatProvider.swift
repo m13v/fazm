@@ -2994,6 +2994,7 @@ class ChatProvider: ObservableObject {
             if !SubscriptionService.shared.isActive {
                 await SubscriptionService.shared.refreshStatus()
                 if SubscriptionService.shared.shouldShowPaywall() {
+                    log("ChatProvider: pre-query paywall — no active subscription, blocking send")
                     showPaywall = true
                     PaywallWindowController.shared.show(chatProvider: self)
                     sendingSessionKeys.remove(effectiveKey)
