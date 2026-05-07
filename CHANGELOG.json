@@ -2,7 +2,8 @@
   "unreleased": [
     "Massively reduced CPU usage during chat streaming, especially with multiple pop-out windows open: token deltas now flow through per-message granular observation instead of republishing the entire conversation array, so a single response no longer pegs a CPU core. Internally this restructures the floating-bar state into focused stores (streaming, input, voice, workspace, tutorial) so an updating message only re-renders the views actually showing that message",
     "Fixed an occasional crash when the floating bar resized to fit a new response, caused by reentrant SwiftUI body re-evaluations during the AppKit display cycle",
-    "Removed redundant launch-time paywall check; sign-in gate and pre-query gate now handle subscription enforcement"
+    "Removed redundant launch-time paywall check; sign-in gate and pre-query gate now handle subscription enforcement",
+    "Added log line when pre-query paywall blocks a chat send for diagnostic visibility"
   ],
   "releases": [
     {
