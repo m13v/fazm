@@ -2989,18 +2989,16 @@ class ChatProvider: ObservableObject {
         }
 
         // Pre-query paywall: hard gate. If no active subscription, block immediately.
-        // Skipped only during onboarding so the user can finish the intro chat flow.
-        if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-            if !SubscriptionService.shared.isActive {
-                await SubscriptionService.shared.refreshStatus()
-                if SubscriptionService.shared.shouldShowPaywall() {
-                    log("ChatProvider: pre-query paywall — no active subscription, blocking send")
-                    showPaywall = true
-                    PaywallWindowController.shared.show(chatProvider: self)
-                    sendingSessionKeys.remove(effectiveKey)
-                    isSending = !sendingSessionKeys.isEmpty
-                    return
-                }
+        // Fires regardless of onboarding state — onboarding chat must also pass the gate.
+        if !SubscriptionService.shared.isActive {
+            await SubscriptionService.shared.refreshStatus()
+            if SubscriptionService.shared.shouldShowPaywall() {
+                log("ChatProvider: pre-query paywall — no active subscription, blocking send")
+                showPaywall = true
+                PaywallWindowController.shared.show(chatProvider: self)
+                sendingSessionKeys.remove(effectiveKey)
+                isSending = !sendingSessionKeys.isEmpty
+                return
             }
         }
 
