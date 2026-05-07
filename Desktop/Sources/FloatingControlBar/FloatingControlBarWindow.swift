@@ -1317,9 +1317,9 @@ class FloatingControlBarManager {
         self.window = barWindow
 
         // Debug: replay post-onboarding tutorial via distributed notification
-        // Trigger from terminal: `defaults write com.omi.computer-macos hasSeenPostOnboardingTutorial -bool false && /usr/bin/notifyutil -p com.omi.replayTutorial`
+        // Trigger from terminal: `defaults write com.fazm.app hasSeenPostOnboardingTutorial -bool false && /usr/bin/notifyutil -p com.fazm.replayTutorial`
         DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.omi.replayTutorial"),
+            forName: NSNotification.Name("com.fazm.replayTutorial"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
