@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 import NaturalLanguage
 
@@ -7,8 +6,9 @@ import NaturalLanguage
 /// Deepgram Aura is preferred for en, es, fr, de, it, nl, ja (cheaper, faster).
 /// Everything else (Russian, Chinese, Korean, Portuguese, Arabic, Hindi,
 /// Polish, Ukrainian, etc.) routes to ElevenLabs `eleven_multilingual_v2`,
-/// which handles 29 languages with a single voice ID. AVSpeechSynthesizer
-/// remains as a last-ditch offline fallback if ElevenLabs is unreachable.
+/// which handles 29 languages with a single voice ID. Languages outside
+/// both providers resolve to `.unsupported` and the speak tool stays silent;
+/// macOS system TTS is intentionally not used as a fallback.
 ///
 /// Anti-thrash: a "sticky" detected language is held in UserDefaults across
 /// utterances. The voice only flips when the new utterance is both long
@@ -24,7 +24,7 @@ enum VoiceLanguageRouter {
     enum Resolution {
         case deepgram(model: String, languageCode: String)
         case elevenlabs(voiceId: String, languageCode: String)
-        case system(voice: AVSpeechSynthesisVoice, languageCode: String)
+        case unsupported(languageCode: String)
     }
 
     static let stickyLangKey = "voiceResponseStickyLang"
@@ -153,46 +153,6 @@ enum VoiceLanguageRouter {
         if let model = deepgramVoices[languageCode] {
             return .deepgram(model: model, languageCode: languageCode)
         }
-        let bcp47 = bcp47(for: languageCode)
-        let voice = AVSpeechSynthesisVoice(language: bcp47)
-            ?? AVSpeechSynthesisVoice(language: languageCode)
-            ?? AVSpeechSynthesisVoice(language: "en-US")
-            ?? AVSpeechSynthesisVoice(identifier: AVSpeechSynthesisVoiceIdentifierAlex)
-        if let voice {
-            return .system(voice: voice, languageCode: languageCode)
-        }
-        // Last resort: return Deepgram English so we never silently drop audio.
-        return .deepgram(model: "aura-luna-en", languageCode: "en")
-    }
-
-    /// Public wrapper around `bcp47(for:)` for callers that need a BCP-47
-    /// tag for AVSpeechSynthesisVoice without re-implementing the mapping.
-    static func bcp47Public(for code: String) -> String {
-        bcp47(for: code)
-    }
-
-    private static func bcp47(for code: String) -> String {
-        switch code {
-        case "ru": return "ru-RU"
-        case "zh": return "zh-CN"
-        case "ko": return "ko-KR"
-        case "pt": return "pt-BR"
-        case "ar": return "ar-SA"
-        case "hi": return "hi-IN"
-        case "tr": return "tr-TR"
-        case "pl": return "pl-PL"
-        case "uk": return "uk-UA"
-        case "th": return "th-TH"
-        case "vi": return "vi-VN"
-        case "id": return "id-ID"
-        case "he": return "he-IL"
-        case "sv": return "sv-SE"
-        case "da": return "da-DK"
-        case "fi": return "fi-FI"
-        case "no": return "nb-NO"
-        case "cs": return "cs-CZ"
-        case "el": return "el-GR"
-        default: return "\(code)-\(code.uppercased())"
-        }
+        return .unsupported(languageCode: languageCode)
     }
 }
