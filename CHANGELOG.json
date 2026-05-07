@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed data-loss bug where legacy chat databases were deleted even when the merge into the active database failed; failed sources now move to a merge-failed quarantine folder"
+  ],
   "releases": [
     {
       "version": "2.9.0",
