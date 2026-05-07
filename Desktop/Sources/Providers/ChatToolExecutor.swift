@@ -948,29 +948,18 @@ class ChatToolExecutor {
 
     /// Shared audio player for TTS playback (kept alive to prevent dealloc during playback)
     private static var ttsAudioPlayer: AVAudioPlayer?
-    /// AVSpeech fallback synthesizer (only used if /usr/bin/say cannot launch).
-    private static let speechSynthesizer = AVSpeechSynthesizer()
-    /// Running /usr/bin/say process for system-voice languages.
-    /// AVSpeechSynthesizer was unreliable inside the bundled app on Sequoia, so we shell out.
-    private static var ttsSayProcess: Process?
 
-    /// Stop any currently playing TTS audio (Deepgram or system).
+    /// Stop any currently playing TTS audio (ElevenLabs or Deepgram).
     static func stopTTSPlayback() {
         if let player = ttsAudioPlayer, player.isPlaying {
             player.stop()
         }
         ttsAudioPlayer = nil
-        if let proc = ttsSayProcess, proc.isRunning {
-            proc.terminate()
-        }
-        ttsSayProcess = nil
-        if speechSynthesizer.isSpeaking {
-            speechSynthesizer.stopSpeaking(at: .immediate)
-        }
     }
 
-    /// Speak text aloud. The voice follows the detected language of the text:
-    /// Deepgram Aura for en/es/fr/de/it/nl/ja, AVSpeechSynthesizer for everything else.
+    /// Speak text aloud via ElevenLabs (multilingual) or Deepgram (en/es/fr/de/it/nl/ja).
+    /// If the upstream provider fails, returns an error and stays silent.
+    /// macOS system TTS (/usr/bin/say, AVSpeechSynthesizer) is intentionally not used as a fallback.
     private static func executeSpeakResponse(_ args: [String: Any]) async -> String {
         guard let text = args["text"] as? String, !text.isEmpty else {
             return "Error: missing 'text' parameter"
@@ -988,21 +977,10 @@ class ChatToolExecutor {
         case .deepgram(let model, let lang):
             return await speakViaDeepgram(text: text, model: model, languageCode: lang, speed: clampedSpeed)
         case .elevenlabs(let voiceId, let lang):
-            // Try ElevenLabs first; if the API call fails (no key, network, 4xx),
-            // fall back to system voice so the user still hears something.
-            let result = await speakViaElevenLabs(text: text, voiceId: voiceId, languageCode: lang, speed: clampedSpeed)
-            if result.hasPrefix("OK:") {
-                return result
-            }
-            log("speak_response: elevenlabs failed (\(result)), falling back to system voice for \(lang)")
-            if let voice = AVSpeechSynthesisVoice(language: VoiceLanguageRouter.bcp47Public(for: lang))
-                ?? AVSpeechSynthesisVoice(language: lang)
-                ?? AVSpeechSynthesisVoice(language: "en-US") {
-                return speakViaSystem(text: text, voice: voice, languageCode: lang, speed: clampedSpeed)
-            }
-            return result
-        case .system(let voice, let lang):
-            return speakViaSystem(text: text, voice: voice, languageCode: lang, speed: clampedSpeed)
+            return await speakViaElevenLabs(text: text, voiceId: voiceId, languageCode: lang, speed: clampedSpeed)
+        case .unsupported(let lang):
+            log("speak_response: no TTS provider for language '\(lang)', staying silent")
+            return "Error: no TTS provider configured for language '\(lang)'"
         }
     }
 
@@ -1106,25 +1084,4 @@ class ChatToolExecutor {
         }
     }
 
-    private static func speakViaSystem(text: String, voice: AVSpeechSynthesisVoice, languageCode: String, speed: Double) -> String {
-        let voiceName = voice.name
-        let wpm = max(80, min(360, Int(175.0 * speed)))
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        process.arguments = ["-v", voiceName, "-r", "\(wpm)", text]
-        do {
-            try process.run()
-            ttsSayProcess = process
-            log("speak_response: system TTS via /usr/bin/say lang=\(languageCode), voice=\(voiceName), wpm=\(wpm)")
-            return "OK: speaking \(text.count) chars (system, \(languageCode))"
-        } catch {
-            log("speak_response: /usr/bin/say failed (\(error)), falling back to AVSpeechSynthesizer")
-            let utterance = AVSpeechUtterance(string: text)
-            utterance.voice = voice
-            let target = AVSpeechUtteranceDefaultSpeechRate * Float(speed)
-            utterance.rate = max(AVSpeechUtteranceMinimumSpeechRate, min(AVSpeechUtteranceMaximumSpeechRate, target))
-            speechSynthesizer.speak(utterance)
-            return "OK: speaking \(text.count) chars (system fallback, \(languageCode))"
-        }
-    }
 }
