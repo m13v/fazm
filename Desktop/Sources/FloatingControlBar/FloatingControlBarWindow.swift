@@ -745,7 +745,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         // On macOS 26+ (Tahoe), animated setFrame triggers NSHostingView.updateAnimatedWindowSize
         // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
-        // causing an infinite constraint update loop (OMI-COMPUTER-1J). Disable implicit animations
+        // causing an infinite constraint update loop. Disable implicit animations
         // during the resize to prevent the updateAnimatedWindowSize code path.
         let animDuration: CGFloat = animated ? 0.4 : 0
         NSAnimationContext.beginGrouping()
