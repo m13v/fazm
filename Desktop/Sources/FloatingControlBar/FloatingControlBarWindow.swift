@@ -1,6 +1,5 @@
 import Cocoa
 import Combine
-import ObjCExceptionCatcher
 import SwiftUI
 
 /// NSWindow subclass for the floating control bar.
@@ -749,29 +748,23 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // causing an infinite constraint update loop. Disable implicit animations
         // during the resize to prevent the updateAnimatedWindowSize code path.
         //
-        // Even with that workaround, the inner NSTextView's frame change can still trigger
-        // tracking-area cursor-rect invalidation and NSWindow's structural-region update to
-        // throw an uncaught NSException on first response render. Wrap in ObjCExceptionCatcher
-        // so the exception is logged + swallowed instead of crashing the app.
+        // Even with that workaround, animated resizes can still throw an uncaught NSException
+        // from `_updateStructuralRegionsOnNextDisplayCycle` during the CA transaction commit
+        // (NSTextView frame change → tracking-area invalidation → window structural-region
+        // update). The exception is intercepted by NSApplicationCrashOnExceptions (enabled by
+        // SentrySDK) before any Swift @try/@catch can unwind, so we cannot recover from it.
+        // The mitigation is at the call site: callers passing `animated:true` should not be
+        // stacking resizes during a streaming response. See `resizeToResponseHeightPublic`
+        // and its callers.
         let animDuration: CGFloat = animated ? 0.4 : 0
-        let frameRect = NSRect(origin: newOrigin, size: constrainedSize)
-        if let exception = ObjCExceptionCatcher.catching({
-            NSAnimationContext.beginGrouping()
-            NSAnimationContext.current.duration = animDuration
-            NSAnimationContext.current.allowsImplicitAnimation = false
-            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
-                controlPoints: 0.2, 0.9, 0.3, 1.0  // approximates spring(response: 0.4, dampingFraction: 0.8)
-            )
-            self.setFrame(frameRect, display: true, animate: animated)
-            NSAnimationContext.endGrouping()
-        }) {
-            log("FloatingControlBar: NSException during resizeAnchored — \(exception.name.rawValue): \(exception.reason ?? "nil") userInfo=\(exception.userInfo ?? [:])")
-            // Best-effort fallback: try a non-animated, non-displayed setFrame so the window
-            // still ends up at the right size for the next display cycle.
-            _ = ObjCExceptionCatcher.catching({
-                self.setFrame(frameRect, display: false, animate: false)
-            })
-        }
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = animDuration
+        NSAnimationContext.current.allowsImplicitAnimation = false
+        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
+            controlPoints: 0.2, 0.9, 0.3, 1.0  // approximates spring(response: 0.4, dampingFraction: 0.8)
+        )
+        self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
+        NSAnimationContext.endGrouping()
 
         if animated {
             // Reset flag after animation duration to prevent overlapping resizes
@@ -2258,9 +2251,14 @@ class FloatingControlBarManager {
         // Handle errors, credit exhaustion, auth, paywall, etc.
         ChatQueryLifecycle.handlePostQuery(provider: provider, state: barWindow.state, sessionKey: "floating", messageCountBefore: messageCountBefore)
 
-        // Floating bar specific: resize window to fit the response/error
+        // Floating bar specific: resize window to fit the response/error.
+        // Use animated:false — animated:true here triggers an uncaught NSException
+        // in `_updateStructuralRegionsOnNextDisplayCycle` during the CA transaction
+        // commit on macOS 26+ (Tahoe). The first stream-chunk resize at the call
+        // site above already snaps to the response height non-animated; this final
+        // call only fires for late growth and an instant snap is acceptable UX.
         if barWindow.state.streaming.showingAIResponse {
-            barWindow.resizeToResponseHeightPublic(animated: true)
+            barWindow.resizeToResponseHeightPublic(animated: false)
         }
     }
 }
