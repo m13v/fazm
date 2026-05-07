@@ -2209,7 +2209,7 @@ struct SettingsContentView: View {
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Floating bar visibility toggle
-            settingsCard(settingId: "advanced.preferences.askomi") {
+            settingsCard(settingId: "advanced.preferences.askfazm") {
                 HStack(spacing: 16) {
                     Circle()
                         .fill(showAskFazmBar ? FazmColors.success : FazmColors.textTertiary.opacity(0.3))
