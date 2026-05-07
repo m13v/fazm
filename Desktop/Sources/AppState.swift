@@ -807,12 +807,10 @@ class AppState: ObservableObject {
             // 4. Ensure this app is the authoritative version in Launch Services
             ScreenCaptureService.ensureLaunchServicesRegistration()
 
-            // 5. Reset ALL TCC permissions using tccutil for current and legacy bundle IDs
+            // 5. Reset ALL TCC permissions using tccutil
             let bundleIds = [
-                "com.fazm.app",                 // Current production
-                "com.fazm.desktop-dev",         // Current development
-                "com.omi.computer-macos",       // Legacy production (pre-rebrand)
-                "com.omi.desktop-dev"           // Legacy development (pre-rebrand)
+                "com.fazm.app",                 // Production
+                "com.fazm.desktop-dev"          // Development
             ]
 
             for id in bundleIds {
@@ -864,10 +862,10 @@ class AppState: ObservableObject {
         let fileManager = FileManager.default
         let homeDir = fileManager.homeDirectoryForCurrentUser.path
 
-        // Clean Fazm/Omi apps from Trash (they still pollute Launch Services!)
+        // Clean Fazm apps from Trash (they still pollute Launch Services!)
         let trashPath = "\(homeDir)/.Trash"
         if let contents = try? fileManager.contentsOfDirectory(atPath: trashPath) {
-            for item in contents where item.lowercased().contains("fazm") || item.lowercased().contains("omi") {
+            for item in contents where item.lowercased().contains("fazm") {
                 let itemPath = "\(trashPath)/\(item)"
                 do {
                     try fileManager.removeItem(atPath: itemPath)
@@ -881,7 +879,7 @@ class AppState: ObservableObject {
         // Clean DMG staging directories
         let tmpDir = "/private/tmp"
         if let contents = try? fileManager.contentsOfDirectory(atPath: tmpDir) {
-            for item in contents where item.hasPrefix("fazm-dmg-staging") || item.hasPrefix("fazm-dmg-test") || item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test") {
+            for item in contents where item.hasPrefix("fazm-dmg-staging") || item.hasPrefix("fazm-dmg-test") {
                 let itemPath = "\(tmpDir)/\(item)"
                 do {
                     try fileManager.removeItem(atPath: itemPath)
@@ -892,18 +890,16 @@ class AppState: ObservableObject {
             }
         }
 
-        // Clean Xcode DerivedData Fazm/Omi builds
+        // Clean Xcode DerivedData Fazm builds
         let derivedDataPath = "\(homeDir)/Library/Developer/Xcode/DerivedData"
         if let contents = try? fileManager.contentsOfDirectory(atPath: derivedDataPath) {
-            for item in contents where item.lowercased().contains("fazm") || item.lowercased().contains("omi") {
+            for item in contents where item.lowercased().contains("fazm") {
                 let buildProductsPath = "\(derivedDataPath)/\(item)/Build/Products"
                 if let buildDirs = try? fileManager.contentsOfDirectory(atPath: buildProductsPath) {
                     for buildDir in buildDirs {
                         let appPath = "\(buildProductsPath)/\(buildDir)/Fazm.app"
                         let appPath2 = "\(buildProductsPath)/\(buildDir)/Fazm Dev.app"
-                        let appPath3 = "\(buildProductsPath)/\(buildDir)/Omi.app"
-                        let appPath4 = "\(buildProductsPath)/\(buildDir)/Omi Computer.app"
-                        for path in [appPath, appPath2, appPath3, appPath4] {
+                        for path in [appPath, appPath2] {
                             if fileManager.fileExists(atPath: path) {
                                 do {
                                     try fileManager.removeItem(atPath: path)
@@ -919,14 +915,14 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Eject any mounted Fazm/Omi DMG volumes
+    /// Eject any mounted Fazm DMG volumes
     private nonisolated func ejectMountedDMGVolumes() {
         let fileManager = FileManager.default
         let volumesPath = "/Volumes"
 
         guard let contents = try? fileManager.contentsOfDirectory(atPath: volumesPath) else { return }
 
-        for volume in contents where volume.lowercased().contains("fazm") || volume.lowercased().contains("omi") || volume.hasPrefix("dmg.") {
+        for volume in contents where volume.lowercased().contains("fazm") || volume.hasPrefix("dmg.") {
             let volumePath = "\(volumesPath)/\(volume)"
 
             // Try diskutil eject first
@@ -976,14 +972,14 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Clean user TCC database entries for Fazm/Omi apps
+    /// Clean user TCC database entries for Fazm apps
     private nonisolated func cleanUserTCCDatabase() {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let tccDbPath = "\(homeDir)/Library/Application Support/com.apple.TCC/TCC.db"
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.fazm.app%' OR client LIKE '%com.omi.computer-macos%';"]
+        process.arguments = [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.fazm.app%';"]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 
@@ -998,7 +994,7 @@ class AppState: ObservableObject {
         // Also clean entries for dev bundle IDs
         let process2 = Process()
         process2.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process2.arguments = [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.fazm.desktop%' OR client LIKE '%com.omi.desktop%';"]
+        process2.arguments = [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.fazm.desktop%';"]
         process2.standardOutput = FileHandle.nullDevice
         process2.standardError = FileHandle.nullDevice
 
