@@ -417,6 +417,9 @@ interface QueryContext {
  * If `buf` clearly does NOT start with one of these markers, we exit fast with
  * the buffer unchanged so we don't add latency to normal responses.
  */
+// [POISON-FIX-PLAN] L2b: this function has a chunk-boundary bug when the
+// first delta chunk is just "(". See anchor at `lastCreditExhaustedAt`
+// declaration for the proposed one-line fix and required test case.
 function stripHarnessPrefix(buf: string): { done: true; suffix: string } | { done: false } {
   const trimmed = buf.trimStart();
 
@@ -1244,12 +1247,63 @@ const MAX_IMAGE_TURNS = 20;
 let activeSessionId = "";
 let activeAbort: AbortController | null = null;
 let interruptRequested = false;
-/** [POISON-DIAG] Cross-session poisoning hypothesis (May 6 2026): when ANY
- *  session hits credit_exhausted, the SDK enters a drain state that poisons
- *  unrelated healthy sessions on next session/resume. Record the most-recent
- *  credit_exhausted event so [STUCK-EMPTY-TURN] can log whether a different
- *  pop-out's credit error preceded it. Confirm or refute with field data
- *  before flipping the L1 fix (unregister-all-on-credit-exhausted). */
+/** [POISON-FIX-PLAN] — May 6 2026 — anchor for two pending fixes around
+ *  credit-limit-induced session poisoning. If you're triaging a stuck pop-out
+ *  after a credit/rate limit reset, or a leaking `(your turn — respond to
+ *  the current message above)` line at the start of an assistant reply, this
+ *  block is the plan of record. Sister breadcrumbs (also tagged
+ *  [POISON-FIX-PLAN]) sit at each code site below.
+ *
+ *  HYPOTHESIS (under verification via [POISON-DIAG] log below)
+ *    When ANY pop-out hits credit_exhausted, the Claude Code SDK enters a
+ *    drain state that poisons unrelated healthy sessions on their next
+ *    session/resume — they return end_turn at 0ms with output tokens but
+ *    0 streaming notifications. Field evidence: fazm.log May 6 2026 15:41,
+ *    pop-out E29B50EC hit limit at T+0; pop-out 90908EB6's healthy session
+ *    a68427af (running cleanly since T-2.5h) returned poisoned at T+88s.
+ *    Today the bridge unregisters only the offending sessionKey on
+ *    credit_exhausted; every other registered session stays trusted, and
+ *    they all silently turn into landmines.
+ *
+ *  L1 FIX (preventive) — confirm with [POISON-DIAG] data first
+ *    Trigger: production logs show crossSession=true with low ageMs across
+ *    multiple [STUCK-EMPTY-TURN] incidents.
+ *    Change: at each credit_exhausted emit site (search for
+ *    `lastCreditExhaustedAt = Date.now()` — three sites), replace the
+ *    single-key unregister with unregister-all:
+ *        for (const k of Array.from(sessions.keys())) {
+ *          unregisterSession(k);
+ *          imageTurnCounts.delete(k);
+ *        }
+ *        activeSessionId = "";
+ *    Effect: every active pop-out's next query goes through session/new
+ *    with priorContext replay; the "resume a healthy session that turns out
+ *    to be poisoned" failure mode disappears entirely.
+ *
+ *  L2 FIX (defensive) — independent of L1, ship anytime
+ *    L2a (proper): the recovery preamble built in handleQuery (search
+ *    "RECENT TRANSCRIPT") uses `User: ... Assistant: ... --- RECENT
+ *    TRANSCRIPT --- ... User's current message: ...` framing. Opus 4.7
+ *    occasionally pattern-matches this as a stage-direction prompt and
+ *    emits `(your turn — respond to the current message above)` as the
+ *    leading text of its reply. Reshape: drop `User:`/`Assistant:` role
+ *    labels (use `(my earlier message)` / `(your earlier reply)` or a
+ *    third-person summary), drop the `--- RECENT TRANSCRIPT ---` markers,
+ *    drop the `User's current message:` label (put fullPrompt at the
+ *    bottom unlabeled). Add an explicit "answer directly, do not narrate
+ *    or quote the context above" instruction. This removes the trained-
+ *    behavior trigger.
+ *
+ *    L2b (band-aid for any residual leak): `stripHarnessPrefix` has a
+ *    chunk-boundary bug — when the first text-delta chunk is just "(",
+ *    the function returns done:true and emits the "(" before the rest of
+ *    "(your turn" arrives. Fix: in the trailing partial-match guard at
+ *    the bottom of the function, add `if (next === "(" && buf.length -
+ *    pos < "(your turn".length) return { done: false };` next to the
+ *    existing `<` guard. Add a chunk=`(` case to scripts/test-strip.mjs.
+ *
+ *  [POISON-DIAG] — diagnostic state for the L1 hypothesis. Read at the
+ *  [STUCK-EMPTY-TURN] log; written at every credit_exhausted emit site. */
 let lastCreditExhaustedAt: number | null = null;
 let lastCreditExhaustedSessionKey: string | null = null;
 /** Sessions that were interrupted (timeout/cancel) and may be in a broken state.
@@ -2333,6 +2387,11 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       }
       const restoredCount = replay.length;
 
+      // [POISON-FIX-PLAN] L2a: this preamble's `User:`/`Assistant:` /
+      // `--- RECENT TRANSCRIPT ---` framing is what makes Opus 4.7
+      // occasionally emit `(your turn — respond to the current message
+      // above)` as leading reply text. See anchor at the
+      // `lastCreditExhaustedAt` declaration for the proposed reshape.
       if (restoredCount > 0) {
         const transcript = replay
           .map((e) => {
