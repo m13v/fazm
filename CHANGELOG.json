@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Fixed data-loss bug where legacy chat databases were deleted even when the merge into the active database failed; failed sources now move to a merge-failed quarantine folder",
-    "Removed legacy Omi cleanup paths and rebrand-migration code; renamed com.omi.replayTutorial debug notification to com.fazm.replayTutorial"
+    "Removed legacy Omi cleanup paths and rebrand-migration code; renamed com.omi.replayTutorial debug notification to com.fazm.replayTutorial",
+    "Scoped dev build to a separate ~/Library/Application Support/Fazm-Dev/ directory so dev and prod can no longer cross-contaminate each other\u2019s user data"
   ],
   "releases": [
     {
