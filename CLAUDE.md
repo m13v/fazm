@@ -93,7 +93,7 @@ See `scripts/SESSION-RECORDING.md` for full guide — toggle per-user recording,
 ### Debug Triggers (running app)
 Replay the post-onboarding tutorial:
 ```bash
-xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.omi.replayTutorial"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.replayTutorial"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
 ```
 
 Send a text query to the floating bar (no voice/UI needed):
