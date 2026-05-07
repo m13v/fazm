@@ -126,12 +126,7 @@ class ScreenCaptureManager {
     /// Downscales large images and adjusts quality to stay under the API size limit.
     private static func saveImage(_ image: CGImage) -> URL? {
         let fileManager = FileManager.default
-        guard let appSupportDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            log("ScreenCaptureManager: Could not find Application Support directory")
-            return nil
-        }
-        let screenshotsDirectory = appSupportDirectory
-            .appendingPathComponent("Fazm")
+        let screenshotsDirectory = AppPaths.supportRoot
             .appendingPathComponent("Screenshots")
 
         do {
@@ -180,9 +175,7 @@ class ScreenCaptureManager {
     /// Delete screenshots older than the specified number of days.
     static func cleanupOldScreenshots(olderThan days: Int = 30) {
         let fileManager = FileManager.default
-        guard let appSupportDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-        let screenshotsDirectory = appSupportDirectory
-            .appendingPathComponent("Fazm")
+        let screenshotsDirectory = AppPaths.supportRoot
             .appendingPathComponent("Screenshots")
 
         guard let files = try? fileManager.contentsOfDirectory(at: screenshotsDirectory, includingPropertiesForKeys: [.creationDateKey]) else { return }
