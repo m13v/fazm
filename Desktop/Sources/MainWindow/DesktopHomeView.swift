@@ -76,18 +76,6 @@ struct DesktopHomeView: View {
                                 }
                             }
                         }
-
-                        // Hard paywall on every launch: refresh subscription status, and if not
-                        // active, fire the paywall window before the user can do anything.
-                        // No free trial, no free daily messages.
-                        Task { @MainActor in
-                            await SubscriptionService.shared.refreshStatus()
-                            if SubscriptionService.shared.shouldShowPaywall() {
-                                log("DesktopHomeView: launch-gate — no active subscription, showing paywall")
-                                viewModelContainer.chatProvider.showPaywall = true
-                                PaywallWindowController.shared.show(chatProvider: viewModelContainer.chatProvider)
-                            }
-                        }
                     }
                     .task {
                         await viewModelContainer.loadAllData()
