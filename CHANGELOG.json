@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed data-loss bug where legacy chat databases were deleted even when the merge into the active database failed; failed sources now move to a merge-failed quarantine folder"
+    "Fixed data-loss bug where legacy chat databases were deleted even when the merge into the active database failed; failed sources now move to a merge-failed quarantine folder",
+    "Removed legacy Omi cleanup paths and rebrand-migration code; renamed com.omi.replayTutorial debug notification to com.fazm.replayTutorial"
   ],
   "releases": [
     {
