@@ -30,9 +30,7 @@ enum UpdateRollbackManager {
 
     /// Directory for the backup app bundle and metadata
     private static var backupDirectory: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return appSupport
-            .appendingPathComponent("Fazm", isDirectory: true)
+        AppPaths.supportRoot
             .appendingPathComponent("UpdateBackup", isDirectory: true)
     }
 
