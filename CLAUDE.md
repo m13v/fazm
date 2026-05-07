@@ -133,14 +133,23 @@ cat /tmp/fazm-control-state.json
 State JSON includes: `model`, `modelLabel`, `voiceEnabled`, `workspace`, `isVisible`, `showingAIConversation`, `showingAIResponse`, `isAILoading`, `isVoiceListening`, `chatHistoryCount`, `displayedQuery`, `queueCount`, `isTutorialActive`, `availableModels`, and optionally `currentMessagePreview`/`isStreaming`.
 
 ### SQLite Database & Active User
-Messages are stored in `~/Library/Application Support/Fazm/users/<UUID>/fazm.db` (both prod and dev share this directory). To find the active user for the currently running build:
+Prod and dev now write to **separate** parent directories so neither build's data-migration logic can ever touch the other's user dirs:
+
+- **Prod (`com.fazm.app`)**: `~/Library/Application Support/Fazm/users/<UID>/fazm.db`
+- **Dev (`com.fazm.desktop-dev`)**: `~/Library/Application Support/Fazm-Dev/users/<UID>/fazm.db`
+
+The split is done via `AppPaths.supportRoot` in `Desktop/Sources/Extensions/AppPaths.swift` (any unknown bundle ID falls back to `Fazm/` for safety).
+
+To find the active user for the currently running build:
 
 ```bash
-defaults read com.fazm.desktop-dev auth_userId  # dev build (Fazm Dev)
-defaults read com.fazm.app auth_userId           # prod build (Fazm)
+defaults read com.fazm.desktop-dev auth_tokenUserId  # dev build (Fazm Dev)
+defaults read com.fazm.app auth_tokenUserId          # prod build (Fazm)
 ```
 
-These return different UUIDs even for the same Apple ID — dev and prod create separate user records. Always use this before querying or polling any SQLite DB; never guess by timestamp.
+These return different Firebase UIDs even for the same Apple ID — dev and prod create separate user records. Always use this before querying or polling any SQLite DB; never guess by timestamp.
+
+External scripts (inbox pipelines, routines, cron-runner) that hardcode `~/Library/Application Support/Fazm/users/<UID>/fazm.db` continue to target prod data, which is the intended behavior.
 
 ### Release Health (Sentry)
 Check errors in the latest (or specific) release using the **sentry-release skill**:
