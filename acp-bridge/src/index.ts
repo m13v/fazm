@@ -1244,6 +1244,14 @@ const MAX_IMAGE_TURNS = 20;
 let activeSessionId = "";
 let activeAbort: AbortController | null = null;
 let interruptRequested = false;
+/** [POISON-DIAG] Cross-session poisoning hypothesis (May 6 2026): when ANY
+ *  session hits credit_exhausted, the SDK enters a drain state that poisons
+ *  unrelated healthy sessions on next session/resume. Record the most-recent
+ *  credit_exhausted event so [STUCK-EMPTY-TURN] can log whether a different
+ *  pop-out's credit error preceded it. Confirm or refute with field data
+ *  before flipping the L1 fix (unregister-all-on-credit-exhausted). */
+let lastCreditExhaustedAt: number | null = null;
+let lastCreditExhaustedSessionKey: string | null = null;
 /** Sessions that were interrupted (timeout/cancel) and may be in a broken state.
  *  When reusing such a session, we apply a TTFT watchdog — if ACP doesn't respond
  *  within 30s, the session is discarded and a fresh one is created. */
@@ -2732,7 +2740,13 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           _retryDepth < 1
         );
         if (isEmptyAssistantTurn) {
-          logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms (notifications=${notificationCount}, outputTokens=${outputTokens}) — session ${sessionId} is poisoned. Forcing fresh session with priorContext replay (depth=${_retryDepth}).`);
+          // [POISON-DIAG] If a different sessionKey hit credit_exhausted shortly
+          // before this stuck turn, that's evidence for the cross-session
+          // poisoning hypothesis (the L1 fix would unregister-all on credit
+          // event). Log so we can confirm with field data before changing behavior.
+          const poisonAgeMs = lastCreditExhaustedAt != null ? Date.now() - lastCreditExhaustedAt : null;
+          const poisonCrossSession = lastCreditExhaustedSessionKey != null && lastCreditExhaustedSessionKey !== sessionKey;
+          logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms (notifications=${notificationCount}, outputTokens=${outputTokens}) — session ${sessionId} is poisoned. Forcing fresh session with priorContext replay (depth=${_retryDepth}). [POISON-DIAG] lastCreditExhausted: ageMs=${poisonAgeMs ?? "never"} key=${lastCreditExhaustedSessionKey ?? "none"} currentKey=${sessionKey} crossSession=${poisonCrossSession}`);
           const stuckSessionId = sessionId;
           unregisterSession(sessionKey);
           imageTurnCounts.delete(sessionKey);
@@ -2928,6 +2942,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         pendingTools.length = 0;
         clearAllToolTimers();
         sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
+        lastCreditExhaustedAt = Date.now();
+        lastCreditExhaustedSessionKey = sessionKey;
         // Drop the ACP session so the next prompt is a fresh session/resume.
         // Without this, the Claude Code SDK leaves the session in a stuck state
         // where the very next session/prompt resolves instantly with
@@ -3039,6 +3055,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         const isRegexBilling = /credit|balance|quota|exhausted|hit your.*limit|out of extra usage/i.test(errMsg);
         if (isBillingOrRate || isRegexBilling) {
           sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
+          lastCreditExhaustedAt = Date.now();
+          lastCreditExhaustedSessionKey = sessionKey;
         } else {
           sendWithSession(sessionId, { type: "error", message: errMsg });
         }
@@ -3091,6 +3109,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     if (outerStructuredCredit || outerRegexCredit) {
       logErr(`Credit/rate limit exhausted (outer): ${errMsg}`);
       sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
+      lastCreditExhaustedAt = Date.now();
+      lastCreditExhaustedSessionKey = incomingSessionKey;
       // Same stuck-session cleanup as the inner credit_exhausted branch.
       // Use incomingSessionKey here because the inner-scoped sessionKey
       // is not visible in the outer catch.
