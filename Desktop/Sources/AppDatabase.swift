@@ -121,9 +121,7 @@ actor AppDatabase {
     /// (previous sign-out/sign-in cycles created duplicate directories for the same user).
     private func migrateFromLegacyUserDirectory(to newUserId: String) {
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let usersDir = appSupport
-            .appendingPathComponent("Fazm", isDirectory: true)
+        let usersDir = AppPaths.supportRoot
             .appendingPathComponent("users", isDirectory: true)
         let targetDir = usersDir.appendingPathComponent(newUserId, isDirectory: true)
         let targetDB = targetDir.appendingPathComponent("fazm.db")
@@ -233,9 +231,7 @@ actor AppDatabase {
     private func quarantineFailedMerges(_ dirs: [URL]) {
         guard !dirs.isEmpty else { return }
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let quarantine = appSupport
-            .appendingPathComponent("Fazm", isDirectory: true)
+        let quarantine = AppPaths.supportRoot
             .appendingPathComponent("merge-failed", isDirectory: true)
         try? fm.createDirectory(at: quarantine, withIntermediateDirectories: true)
         let stamp = Int(Date().timeIntervalSince1970)
@@ -277,24 +273,20 @@ actor AppDatabase {
         try await initialize()
     }
 
-    /// Returns the per-user base directory: ~/Library/Application Support/Fazm/users/{userId}/
+    /// Returns the per-user base directory: <AppSupport>/users/{userId}/
     /// Falls back to the static currentUserId (set synchronously at app start) when
     /// configure() hasn't been called yet (e.g., TierManager triggers init early).
     private func userBaseDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let userId = configuredUserId ?? AppDatabase.currentUserId ?? "anonymous"
-        return appSupport
-            .appendingPathComponent("Fazm", isDirectory: true)
+        return AppPaths.supportRoot
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
     }
 
     /// Static version of userBaseDirectory for nonisolated markCleanShutdown
     private static func staticUserBaseDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let userId = currentUserId ?? "anonymous"
-        return appSupport
-            .appendingPathComponent("Fazm", isDirectory: true)
+        return AppPaths.supportRoot
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
     }
@@ -515,10 +507,9 @@ actor AppDatabase {
     /// Handles both first-time migration (DB move) and partial re-runs (directory merges).
     private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
         let fileManager = FileManager.default
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let fazmDir = appSupport.appendingPathComponent("Fazm", isDirectory: true)
+        let fazmDir = AppPaths.supportRoot
 
-        // Determine migration source: prefer legacy root (Fazm/fazm.db), fall back to anonymous dir.
+        // Determine migration source: prefer legacy root (<AppSupport>/fazm.db), fall back to anonymous dir.
         // The anonymous fallback covers the case where TierManager or another early caller
         // triggered initialize() before configure(userId:) was called, causing data to land
         // in users/anonymous/ instead of the real user's directory.
