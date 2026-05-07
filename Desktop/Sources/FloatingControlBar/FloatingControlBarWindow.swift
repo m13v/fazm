@@ -1,5 +1,6 @@
 import Cocoa
 import Combine
+import ObjCExceptionCatcher
 import SwiftUI
 
 /// NSWindow subclass for the floating control bar.
@@ -747,15 +748,30 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
         // causing an infinite constraint update loop. Disable implicit animations
         // during the resize to prevent the updateAnimatedWindowSize code path.
+        //
+        // Even with that workaround, the inner NSTextView's frame change can still trigger
+        // tracking-area cursor-rect invalidation and NSWindow's structural-region update to
+        // throw an uncaught NSException on first response render. Wrap in ObjCExceptionCatcher
+        // so the exception is logged + swallowed instead of crashing the app.
         let animDuration: CGFloat = animated ? 0.4 : 0
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = animDuration
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
-            controlPoints: 0.2, 0.9, 0.3, 1.0  // approximates spring(response: 0.4, dampingFraction: 0.8)
-        )
-        self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
-        NSAnimationContext.endGrouping()
+        let frameRect = NSRect(origin: newOrigin, size: constrainedSize)
+        if let exception = ObjCExceptionCatcher.catching({
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = animDuration
+            NSAnimationContext.current.allowsImplicitAnimation = false
+            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.2, 0.9, 0.3, 1.0  // approximates spring(response: 0.4, dampingFraction: 0.8)
+            )
+            self.setFrame(frameRect, display: true, animate: animated)
+            NSAnimationContext.endGrouping()
+        }) {
+            log("FloatingControlBar: NSException during resizeAnchored — \(exception.name.rawValue): \(exception.reason ?? "nil") userInfo=\(exception.userInfo ?? [:])")
+            // Best-effort fallback: try a non-animated, non-displayed setFrame so the window
+            // still ends up at the right size for the next display cycle.
+            _ = ObjCExceptionCatcher.catching({
+                self.setFrame(frameRect, display: false, animate: false)
+            })
+        }
 
         if animated {
             // Reset flag after animation duration to prevent overlapping resizes
