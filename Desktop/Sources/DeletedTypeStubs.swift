@@ -32,10 +32,7 @@ enum AudioSource: String {
 
 enum ConversationSource: String {
     case desktop
-    case omi
     case phone
-
-    static func from(deviceType: String) -> ConversationSource { .omi }
 }
 
 // AudioCaptureService — real implementation in AudioCaptureService.swift
@@ -444,9 +441,6 @@ class APIClient {
             return nil
         }
     }
-
-    /// Legacy stub name — redirects to fetchTotalBuiltinCost
-    func fetchTotalOmiAICost() async -> Double? { await fetchTotalBuiltinCost() }
 
     /// Forward LLM usage to the Fazm backend so it can be ingested into Mediar's dashboard.
     func recordExternalLlmTrace(model: String, inputTokens: Int, outputTokens: Int, totalTokens: Int, source: String) async {
