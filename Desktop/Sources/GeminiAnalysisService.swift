@@ -139,8 +139,7 @@ actor GeminiAnalysisService {
     }
 
     init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let baseDir = appSupport.appendingPathComponent("Fazm/gemini-analysis", isDirectory: true)
+        let baseDir = AppPaths.supportRoot.appendingPathComponent("gemini-analysis", isDirectory: true)
         self.chunksDir = baseDir.appendingPathComponent("chunks", isDirectory: true)
         self.bufferIndexURL = baseDir.appendingPathComponent("buffer-index.json")
 
