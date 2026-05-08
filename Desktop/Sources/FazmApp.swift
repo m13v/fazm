@@ -183,6 +183,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(FazmApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
+        // Cap URLCache.shared. The default macOS cap (~512 MB disk + ~20 MB memory) lets
+        // CFNetwork dirty multi-GB of file-backed memory writing to ~/Library/Caches/com.fazm.app/Cache.db,
+        // which trips the OS disk-write resource limit (`Action taken: none` warnings in
+        // /Library/Logs/DiagnosticReports/Fazm_*.diag — heaviest stack is __CFURLCache::CreateAndStoreCacheNode).
+        // 50 MB disk / 16 MB memory is enough for normal HTTP caching and keeps us well under any limit.
+        URLCache.shared = URLCache(memoryCapacity: 16 * 1024 * 1024,
+                                   diskCapacity:   50 * 1024 * 1024,
+                                   diskPath: nil)
+
         // Apply user's appearance preference (light/dark/system)
         AppearanceManager.shared.applyAppearance()
 
