@@ -59,6 +59,7 @@ private struct QueueItemRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var showCopied = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -76,7 +77,28 @@ private struct QueueItemRow: View {
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Delete button (on hover)
+            // Copy + Delete buttons (on hover)
+            if isHovered || showCopied {
+                Button(action: {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(item.text, forType: .string)
+                    showCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        showCopied = false
+                    }
+                }) {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 9, weight: .medium)
+                        .foregroundColor(showCopied ? .green : FazmColors.overlayForeground.opacity(0.4))
+                        .frame(width: 18, height: 18)
+                        .background(FazmColors.overlayForeground.opacity(0.1))
+                        .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+                .help("Copy message")
+                .transition(.opacity)
+            }
+
             if isHovered {
                 Button(action: onDelete) {
                     Image(systemName: "xmark")
