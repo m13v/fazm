@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Reduced disk-write pressure and fixed a code-signing seal regression that broke Sparkle on some installs"
+  ],
   "releases": [
     {
       "version": "2.9.1",
