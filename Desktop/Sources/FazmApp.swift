@@ -192,6 +192,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                    diskCapacity:   50 * 1024 * 1024,
                                    diskPath: nil)
 
+        // Clean Python __pycache__ directories left inside the bundle by older builds.
+        // Future invocations honor PYTHONDONTWRITEBYTECODE/PYTHONPYCACHEPREFIX (set in
+        // ChatPrompts.bundledPythonPath and acp-bridge), but already-installed bundles still
+        // carry the .pyc files that broke the code-signing seal.
+        Self.cleanBundledPycaches()
+
         // Apply user's appearance preference (light/dark/system)
         AppearanceManager.shared.applyAppearance()
 
@@ -495,6 +501,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+
+    /// Removes Python __pycache__ directories from the bundled google-workspace-mcp venv.
+    /// Bytecode files written next to imported sources break the bundle's code-signing seal
+    /// (codesign verify=FAILED → "a sealed resource is missing or invalid"), which interferes
+    /// with Sparkle and notarization-aware paths. Runs async on a utility queue so it never
+    /// blocks launch; failures are silent (e.g. no write access to /Applications).
+    static func cleanBundledPycaches() {
+        let venvRoot = Bundle.main.bundlePath + "/Contents/Resources/google-workspace-mcp/.venv"
+        DispatchQueue.global(qos: .utility).async {
+            let fm = FileManager.default
+            guard fm.fileExists(atPath: venvRoot),
+                  let enumerator = fm.enumerator(atPath: venvRoot) else { return }
+            var dirs: [String] = []
+            for case let relPath as String in enumerator where (relPath as NSString).lastPathComponent == "__pycache__" {
+                dirs.append(venvRoot + "/" + relPath)
+            }
+            var removed = 0
+            for path in dirs {
+                if (try? fm.removeItem(atPath: path)) != nil { removed += 1 }
+            }
+            if removed > 0 {
+                NSLog("AppDelegate: cleaned %d __pycache__ dir(s) from bundle to restore code-signing seal", removed)
+            }
+        }
+    }
 
     /// One-time icon cache reset to force macOS to pick up the new squircle icon.
     /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
