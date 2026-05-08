@@ -2707,6 +2707,50 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           }
         }
 
+        // Detect deferred-replay (no prior interrupt): the SDK returned an
+        // entire turn in <50ms with tokenized input way smaller than the
+        // user's prompt. Real Claude generation can't complete this fast
+        // even with a fully cached prefix — the SDK is flushing buffered
+        // notifications from a previous turn as this prompt's response.
+        //
+        // Reproducing case (May 8 2026, session 6b1f7981): two consecutive
+        // user messages got duration=1ms responses. The reply text answered
+        // the *previous* turn's question instead of the user's current one
+        // (e.g. user asked "Why Sonnet?" and got pipeline-status text;
+        // follow-up "I asked about Sonnet versus Opus" got the actual
+        // Sonnet explanation). INTERRUPT-REPLAY missed this because the
+        // session was never explicitly cancelled and prompts were short
+        // (<50 chars); STALE-TASK-RETRY missed it because outputTokens was
+        // hundreds, not <100.
+        //
+        // Recovery is the same as INTERRUPT-REPLAY: destroy the leaking
+        // session and recreate fresh with priorContext replay, so the new
+        // session starts from a clean SDK state.
+        if (!isNewSession && _retryDepth < 1) {
+          const inputTokens = promptResult.usage?.inputTokens ?? 0;
+          const looksLikeDeferredReplay =
+            promptDurationMs < 50 &&
+            outputTokens > 0 &&
+            inputTokens <= 20 &&
+            fullPrompt.length > 0;
+          if (looksLikeDeferredReplay) {
+            logErr(`[DEFERRED-REPLAY] Detected deferred-response replay on session ${sessionId} (duration=${promptDurationMs}ms, inputTokens=${inputTokens}, outputTokens=${outputTokens}, fullTextLen=${fullText.length}, promptLen=${fullPrompt.length}). Forcing fresh session with priorContext replay (depth=${_retryDepth}).`);
+            const stuckSessionId = sessionId;
+            unregisterSession(sessionKey);
+            imageTurnCounts.delete(sessionKey);
+            interruptedSessions.delete(sessionId);
+            activeSessionId = "";
+            for (const name of pendingTools) {
+              sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
+            }
+            pendingTools.length = 0;
+            clearAllToolTimers();
+            msg.resume = undefined;
+            msg._priorStuckSessionId = stuckSessionId;
+            return handleQuery(msg, _retryDepth + 1);
+          }
+        }
+
         // Detect stale-task-response: prompt completed very fast with stale task
         // notifications and minimal output. This means Claude responded to a background
         // task completion from a previous turn instead of the user's actual question.
