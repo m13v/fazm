@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Reduced disk-write pressure and fixed a code-signing seal regression that broke Sparkle on some installs",
-    "Fixed AI responses being split into two bubbles when the model used interleaved thinking mid-sentence"
+    "Fixed AI responses being split into two bubbles when the model used interleaved thinking mid-sentence",
+    "Fixed pop-out chat occasionally showing a stale reply that belonged to the previous message"
   ],
   "releases": [
     {
