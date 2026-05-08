@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Reduced disk-write pressure and fixed a code-signing seal regression that broke Sparkle on some installs"
+    "Reduced disk-write pressure and fixed a code-signing seal regression that broke Sparkle on some installs",
+    "Fixed AI responses being split into two bubbles when the model used interleaved thinking mid-sentence"
   ],
   "releases": [
     {
