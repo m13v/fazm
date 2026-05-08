@@ -4174,10 +4174,21 @@ class ChatProvider: ObservableObject {
         if !textBuffered.isEmpty {
             streamingBuffers[id]?.textBuffer = ""
 
-            if !forceNewTextBlock,
-               let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + textBuffered)
+            // Find the last text block, skipping over thinking/tool/etc. blocks.
+            // Opus 4.7's interleaved thinking interrupts text mid-sentence with a
+            // thinking block; we must still merge the surrounding text fragments
+            // into one bubble instead of splitting them.
+            let lastTextIndex: Int? = {
+                if forceNewTextBlock { return nil }
+                for i in messages[index].contentBlocks.indices.reversed() {
+                    if case .text = messages[index].contentBlocks[i] { return i }
+                }
+                return nil
+            }()
+
+            if let i = lastTextIndex,
+               case .text(let blockId, let existing) = messages[index].contentBlocks[i] {
+                messages[index].contentBlocks[i] = .text(id: blockId, text: existing + textBuffered)
                 messages[index].text += textBuffered
             } else {
                 // Deduplicate: when the model repeats the same text after an
