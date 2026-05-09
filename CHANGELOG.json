@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed Upgrade button silently doing nothing when your auth session expired; the app now detects the desync, signs you out, and prompts you to sign in again"
+  ],
   "releases": [
     {
       "version": "2.9.2",
