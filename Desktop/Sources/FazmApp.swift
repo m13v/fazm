@@ -1193,6 +1193,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         AnalyticsManager.shared.appBecameActive()
+        Task { @MainActor in AuthService.shared.reconcileAuthState() }
     }
 
     func applicationWillResignActive(_ notification: Notification) {
