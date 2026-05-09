@@ -123,7 +123,7 @@ final class ClaudeUsageAlarmMonitor {
                 do {
                     try process.run()
                 } catch {
-                    NSLog("ClaudeUsageAlarmMonitor: failed to launch claude-meter: %@", String(describing: error))
+                    log("ClaudeUsageAlarmMonitor: failed to launch claude-meter: \(error)")
                     continuation.resume(returning: nil)
                     return
                 }
@@ -138,7 +138,7 @@ final class ClaudeUsageAlarmMonitor {
                 }
                 if group.wait(timeout: deadline) == .timedOut {
                     process.terminate()
-                    NSLog("ClaudeUsageAlarmMonitor: claude-meter timed out")
+                    log("ClaudeUsageAlarmMonitor: claude-meter timed out")
                     continuation.resume(returning: nil)
                     return
                 }
@@ -213,6 +213,6 @@ final class ClaudeUsageAlarmMonitor {
     }
 
     private func logLine(_ message: String) {
-        NSLog("ClaudeUsageAlarmMonitor: %@", message)
+        log("ClaudeUsageAlarmMonitor: \(message)")
     }
 }
