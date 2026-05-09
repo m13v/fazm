@@ -279,17 +279,26 @@ struct SelectableMarkdown: View {
         let fontSize = round(14 * fontScale)
         // Use cached NSAttributedString if available for the current font scale.
         // During streaming, attrCache is pre-populated by the onChange(of: text)
-        // path before cachedSegments updates, so this should hit the styled
-        // version on the first render. On rare cache misses (init, font scale
-        // change) we kick off a background parse and render nothing in the
-        // meantime — better a momentary blank than a height-shifting fallback.
+        // path before cachedSegments updates, so this hits the styled version
+        // on the first render and avoids the fallback-then-styled height swap.
         let cached: NSAttributedString? = (cachedFontScale == fontScale) ? attrCache[content] : nil
 
         Group {
             if let s = cached {
                 PlainCopyText(attributedString: s)
             } else {
-                Color.clear.frame(height: ceil(fontSize * 1.3))
+                // First-render fallback (history load, font-scale change).
+                // Streaming never reaches this path because onChange(of: text)
+                // pre-populates attrCache before cachedSegments publishes.
+                let baseColor: NSColor = sender == .user ? .white : NSColor(FazmColors.textPrimary)
+                let fallbackAttr = NSAttributedString(
+                    string: content,
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: fontSize),
+                        .foregroundColor: baseColor,
+                    ]
+                )
+                PlainCopyText(attributedString: fallbackAttr)
             }
         }
         .onAppear {
