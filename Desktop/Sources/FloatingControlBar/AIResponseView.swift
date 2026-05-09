@@ -794,6 +794,7 @@ struct AIResponseView: View {
                     .padding(.horizontal, 4)
                     .padding(.vertical, 8)
                 }
+                .id(message.id)
             } else {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
