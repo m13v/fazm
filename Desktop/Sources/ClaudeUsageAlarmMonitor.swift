@@ -47,9 +47,22 @@ final class ClaudeUsageAlarmMonitor {
     func start() {
         guard timer == nil else { return }
 
-        // Skip entirely if the CLI isn't installed; nothing to monitor.
+        // Programmatic test hook — fires the alarm without needing the UI.
+        // Trigger: xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.testAlarm"), object: nil, userInfo: nil, deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.fazm.testAlarm"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.logLine("test alarm received via distributed notification")
+            self?.playTestAlarm()
+        }
+
+        // Skip the polling timer entirely if the CLI isn't installed.
+        // The test-alarm hook above still works so the user can verify the
+        // sound, and the dropdown toggle still functions.
         guard FileManager.default.isExecutableFile(atPath: claudeMeterCLI) else {
-            logLine("starting skipped — claude-meter CLI not found at \(claudeMeterCLI)")
+            logLine("polling disabled — claude-meter CLI not found at \(claudeMeterCLI). Dropdown + test-alarm still active.")
             return
         }
 
