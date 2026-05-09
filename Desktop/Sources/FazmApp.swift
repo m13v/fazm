@@ -157,6 +157,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // unset, so the `speak_response` MCP tool was never registered and voice stayed silent.
         UserDefaults.standard.register(defaults: [
             "voiceResponseEnabled": true,
+            ClaudeUsageAlarmMonitor.enabledKey: true,
         ])
 
         // Disable App Nap — the floating bar relies on global event monitors and timers
@@ -475,6 +476,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Clean up old screenshots in the background
         Task.detached { ScreenCaptureManager.cleanupOldScreenshots() }
+
+        // Start the Claude 5-hour usage alarm monitor (default-on; user can
+        // mute it via the bell-icon dropdown in the floating-bar header).
+        ClaudeUsageAlarmMonitor.shared.start()
 
         // Mark successful launch — resets the crash-loop counter.
         // Must be at the END of applicationDidFinishLaunching so that crashes during
