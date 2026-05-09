@@ -725,7 +725,7 @@ class AuthService: NSObject {
     func reconcileAuthState() {
         let stored = UserDefaults.standard.bool(forKey: "auth_isSignedIn")
         guard stored && !isSignedIn else { return }
-        log("AuthService: auth state desync detected (stored=true, tokens missing) — signing out")
+        log("AuthService: auth state desync detected (stored=true, tokens missing); signing out")
         signOut()
     }
 
