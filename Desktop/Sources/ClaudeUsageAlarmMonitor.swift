@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import UserNotifications
 
 /// Watches the user's Claude plan 5-hour rolling-window utilization (via the
 /// locally-installed `claude-meter` CLI) and plays an alarm sound when usage
@@ -48,11 +49,14 @@ final class ClaudeUsageAlarmMonitor {
 
         // Skip entirely if the CLI isn't installed; nothing to monitor.
         guard FileManager.default.isExecutableFile(atPath: claudeMeterCLI) else {
-            log("ClaudeUsageAlarmMonitor: claude-meter CLI not found at \(claudeMeterCLI); monitor disabled")
+            logLine("starting skipped — claude-meter CLI not found at \(claudeMeterCLI)")
             return
         }
 
-        log("ClaudeUsageAlarmMonitor: starting, threshold=\(threshold)%, poll=\(pollInterval)s")
+        logLine("starting, threshold=\(threshold)%, poll=\(pollInterval)s")
+
+        // Ask once for notification permission (silent if already decided).
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         // First check after a short delay so we don't block startup.
         Task { [weak self] in
@@ -88,22 +92,14 @@ final class ClaudeUsageAlarmMonitor {
         guard let snapshot = await runClaudeMeter() else { return }
         guard let (utilization, resetsAt) = maxFiveHourUtilization(in: snapshot) else { return }
 
-        // Window changed — re-arm.
-        if resetsAt != lastFiredWindowResetsAt {
-            // Only "re-arm" if the previous window has actually rolled over.
-            // We treat any change in resetsAt as a new window.
-            if lastFiredWindowResetsAt != nil {
-                log("ClaudeUsageAlarmMonitor: 5h window rolled over, re-arming alarm")
-            }
-            // Don't immediately set lastFiredWindowResetsAt = resetsAt — that
-            // would only happen once we actually fire. This way we re-arm.
-            if lastFiredWindowResetsAt != resetsAt {
-                lastFiredWindowResetsAt = nil
-            }
+        // If the window identifier changed since we last fired, re-arm.
+        if let last = lastFiredWindowResetsAt, last != resetsAt {
+            logLine("5h window rolled over (was \(last), now \(resetsAt ?? "nil")), re-arming")
+            lastFiredWindowResetsAt = nil
         }
 
         if utilization >= threshold, lastFiredWindowResetsAt == nil {
-            log("ClaudeUsageAlarmMonitor: utilization=\(utilization)% >= \(threshold)%, firing alarm (window resets at \(resetsAt ?? "?"))")
+            logLine("utilization=\(utilization)% >= \(threshold)%, firing alarm (window resets at \(resetsAt ?? "?"))")
             lastFiredWindowResetsAt = resetsAt ?? "fired"
             playAlarmSound()
             postSystemNotification(utilization: utilization, resetsAt: resetsAt)
@@ -112,21 +108,22 @@ final class ClaudeUsageAlarmMonitor {
 
     /// Run `claude-meter --json` and return the parsed array.
     private func runClaudeMeter() async -> [[String: Any]]? {
-        await withCheckedContinuation { continuation in
+        let cliPath = claudeMeterCLI
+        return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: self.claudeMeterCLI)
+                process.executableURL = URL(fileURLWithPath: cliPath)
                 process.arguments = ["--json"]
 
-                let stdout = Pipe()
-                let stderr = Pipe()
-                process.standardOutput = stdout
-                process.standardError = stderr
+                let outPipe = Pipe()
+                let errPipe = Pipe()
+                process.standardOutput = outPipe
+                process.standardError = errPipe
 
                 do {
                     try process.run()
                 } catch {
-                    log("ClaudeUsageAlarmMonitor: failed to launch claude-meter: \(error)")
+                    NSLog("ClaudeUsageAlarmMonitor: failed to launch claude-meter: %@", String(describing: error))
                     continuation.resume(returning: nil)
                     return
                 }
@@ -141,12 +138,12 @@ final class ClaudeUsageAlarmMonitor {
                 }
                 if group.wait(timeout: deadline) == .timedOut {
                     process.terminate()
-                    log("ClaudeUsageAlarmMonitor: claude-meter timed out")
+                    NSLog("ClaudeUsageAlarmMonitor: claude-meter timed out")
                     continuation.resume(returning: nil)
                     return
                 }
 
-                let data = stdout.fileHandleForReading.readDataToEndOfFile()
+                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
                 guard !data.isEmpty,
                       let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                     continuation.resume(returning: nil)
@@ -175,7 +172,7 @@ final class ClaudeUsageAlarmMonitor {
     }
 
     /// Plays the system "Sosumi" sound three times with 0.55s spacing.
-    /// "Sosumi" is the classic Mac alert tone — sharp enough to read as an
+    /// "Sosumi" is the classic Mac alert tone, sharp enough to read as an
     /// alarm without sounding like a Slack ping.
     private func playAlarmSound() {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -194,18 +191,28 @@ final class ClaudeUsageAlarmMonitor {
     /// Best-effort visual notification so the alarm has a tappable surface,
     /// not just a sound. Falls back silently if Notifications aren't permitted.
     private func postSystemNotification(utilization: Double, resetsAt: String?) {
-        let notification = NSUserNotification()
-        notification.title = "Claude usage at \(Int(utilization))%"
-        var subtitle = "5-hour rolling window"
+        let content = UNMutableNotificationContent()
+        content.title = "Claude usage at \(Int(utilization))%"
         if let resetsAt, let resetDate = ISO8601DateFormatter().date(from: resetsAt) {
             let formatter = DateFormatter()
             formatter.timeStyle = .short
-            subtitle = "Resets at \(formatter.string(from: resetDate))"
+            content.subtitle = "5h window resets at \(formatter.string(from: resetDate))"
+        } else {
+            content.subtitle = "5-hour rolling window"
         }
-        notification.subtitle = subtitle
-        notification.informativeText = "You're close to the 5-hour limit. Wrap up or wait for the window to reset."
-        // Sound is handled separately via NSSound so we can repeat it.
-        notification.soundName = nil
-        NSUserNotificationCenter.default.deliver(notification)
+        content.body = "You're close to the 5-hour limit. Wrap up or wait for the window to reset."
+        // Sound handled separately via NSSound so we can repeat it.
+        content.sound = nil
+
+        let request = UNNotificationRequest(
+            identifier: "claude-usage-alarm-\(resetsAt ?? UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { _ in }
+    }
+
+    private func logLine(_ message: String) {
+        NSLog("ClaudeUsageAlarmMonitor: %@", message)
     }
 }
