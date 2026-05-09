@@ -214,11 +214,37 @@ struct SelectableMarkdown: View {
             }
         }
         .onChange(of: text) { _, newText in
-            // Debounce rapid streaming updates — parse at most every 100ms
+            // Debounce rapid streaming updates — parse at most every 250ms.
+            // Pre-parse styled NSAttributedStrings on the background queue
+            // BEFORE publishing cachedSegments, so the first render of any
+            // new segment uses the styled version directly. This eliminates
+            // the unstyled-fallback → styled swap that caused intrinsic
+            // height changes (and thus visible chat jumping) on every cycle.
             debounceWork?.cancel()
+            let scale = fontScale
+            let senderCopy = sender
+            let knownContent = Set(attrCache.keys)
             let work = DispatchWorkItem { [newText] in
                 let segments = Self.splitSegments(newText)
+                let fontSize = round(14 * scale)
+                var newAttrs: [String: NSAttributedString] = [:]
+                for seg in segments {
+                    if case .text = seg.kind, !knownContent.contains(seg.content),
+                       newAttrs[seg.content] == nil {
+                        let processed = Self.preprocessText(seg.content)
+                        if let styled = Self.styledNSAttributedString(
+                            from: processed, sender: senderCopy, fontSize: fontSize, fontScale: scale
+                        ) {
+                            newAttrs[seg.content] = styled
+                        }
+                    }
+                }
                 DispatchQueue.main.async {
+                    if cachedFontScale != scale {
+                        attrCache.removeAll()
+                        cachedFontScale = scale
+                    }
+                    for (k, v) in newAttrs { attrCache[k] = v }
                     cachedSegments = segments
                     parsedText = newText
                 }
@@ -228,9 +254,9 @@ struct SelectableMarkdown: View {
             // If it changed substantially (new message, edit), apply immediately.
             let delta = abs(newText.count - parsedText.count)
             if delta < 200 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+                Self.parseQueue.asyncAfter(deadline: .now() + 0.25, execute: work)
             } else {
-                work.perform()
+                Self.parseQueue.async(execute: work)
             }
         }
         .onChange(of: fontScale) {
@@ -251,23 +277,19 @@ struct SelectableMarkdown: View {
     @ViewBuilder
     private func textView(_ content: String) -> some View {
         let fontSize = round(14 * fontScale)
-        // Use cached NSAttributedString if available for the current font scale
+        // Use cached NSAttributedString if available for the current font scale.
+        // During streaming, attrCache is pre-populated by the onChange(of: text)
+        // path before cachedSegments updates, so this should hit the styled
+        // version on the first render. On rare cache misses (init, font scale
+        // change) we kick off a background parse and render nothing in the
+        // meantime — better a momentary blank than a height-shifting fallback.
         let cached: NSAttributedString? = (cachedFontScale == fontScale) ? attrCache[content] : nil
 
         Group {
             if let s = cached {
                 PlainCopyText(attributedString: s)
             } else {
-                // Show plain unstyled text immediately while background parsing runs
-                let baseColor: NSColor = sender == .user ? .white : NSColor(FazmColors.textPrimary)
-                let fallbackAttr = NSAttributedString(
-                    string: content,
-                    attributes: [
-                        .font: NSFont.systemFont(ofSize: fontSize),
-                        .foregroundColor: baseColor,
-                    ]
-                )
-                PlainCopyText(attributedString: fallbackAttr)
+                Color.clear.frame(height: ceil(fontSize * 1.3))
             }
         }
         .onAppear {
