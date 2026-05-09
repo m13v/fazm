@@ -168,6 +168,12 @@ class AuthService: NSObject {
         // Start token refresh timer (every 30 seconds, checks if refresh is needed)
         startTokenRefreshTimer()
 
+        // Reconcile any auth state desync deferred past initial SwiftUI layout
+        // (mutating @Published state during layout would crash AttributeGraph).
+        DispatchQueue.main.async { [weak self] in
+            self?.reconcileAuthState()
+        }
+
         log("AuthService: Configured, isSignedIn=\(isSignedIn), userId=\(userId ?? "nil")")
     }
 
@@ -710,6 +716,17 @@ class AuthService: NSObject {
     /// Update the shared AuthState singleton.
     private func updateAuthState() {
         AuthState.shared.update(isSignedIn: isSignedIn, userEmail: userEmail)
+    }
+
+    /// Detect and fix auth state desync: the UserDefaults `auth_isSignedIn` flag is set
+    /// but actual tokens are missing. UI thinks user is signed in, network layer disagrees,
+    /// so any token-using button silently fails (e.g. Upgrade in Settings).
+    /// Triggered at launch (deferred), on foreground, and on AuthError.notSignedIn at call sites.
+    func reconcileAuthState() {
+        let stored = UserDefaults.standard.bool(forKey: "auth_isSignedIn")
+        guard stored && !isSignedIn else { return }
+        log("AuthService: auth state desync detected (stored=true, tokens missing) — signing out")
+        signOut()
     }
 
     /// Set Sentry user context for crash reporting.
