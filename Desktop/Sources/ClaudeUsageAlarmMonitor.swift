@@ -42,6 +42,11 @@ final class ClaudeUsageAlarmMonitor {
     /// a different (newer) `resets_at`, we re-arm.
     private var lastFiredWindowResetsAt: String?
 
+    /// Tracks whether we've logged at least one successful poll. We log the
+    /// first one (so users can confirm the monitor is reading data) and stay
+    /// silent on the rest until utilization crosses the threshold.
+    private var hasLoggedFirstPoll = false
+
     private init() {}
 
     func start() {
@@ -104,6 +109,11 @@ final class ClaudeUsageAlarmMonitor {
 
         guard let snapshot = await runClaudeMeter() else { return }
         guard let (utilization, resetsAt) = maxFiveHourUtilization(in: snapshot) else { return }
+
+        if !hasLoggedFirstPoll {
+            hasLoggedFirstPoll = true
+            logLine("first poll OK: utilization=\(utilization)%, window resets at \(resetsAt ?? "?") (will fire alarm at \(threshold)%)")
+        }
 
         // If the window identifier changed since we last fired, re-arm.
         if let last = lastFiredWindowResetsAt, last != resetsAt {
