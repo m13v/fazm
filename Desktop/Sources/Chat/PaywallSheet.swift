@@ -423,8 +423,16 @@ private struct PaywallWindowContent: View {
     var body: some View {
         PaywallSheet(
             onSubscribe: {
-                Task {
-                    try? await SubscriptionService.shared.openCheckout()
+                Task { @MainActor in
+                    do {
+                        try await SubscriptionService.shared.openCheckout()
+                    } catch AuthError.notSignedIn {
+                        AuthState.shared.error = "Your session expired. Please sign in again to upgrade."
+                        AuthService.shared.reconcileAuthState()
+                        onDismiss()
+                    } catch {
+                        log("PaywallSheet: Subscribe failed: \(error.localizedDescription)")
+                    }
                 }
             },
             onDismiss: onDismiss
