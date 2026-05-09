@@ -59,8 +59,10 @@ final class ClaudeUsageAlarmMonitor {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.logLine("test alarm received via distributed notification")
-            self?.playTestAlarm()
+            Task { @MainActor in
+                self?.logLine("test alarm received via distributed notification")
+                self?.playTestAlarm()
+            }
         }
 
         // Skip the polling timer entirely if the CLI isn't installed.
