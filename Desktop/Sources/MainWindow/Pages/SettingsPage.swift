@@ -2657,7 +2657,16 @@ struct SettingsContentView: View {
                         } else {
                             Button(action: {
                                 AnalyticsManager.shared.subscriptionUpgradeTapped(source: "settings")
-                                Task { try? await SubscriptionService.shared.openCheckout() }
+                                Task { @MainActor in
+                                    do {
+                                        try await SubscriptionService.shared.openCheckout()
+                                    } catch AuthError.notSignedIn {
+                                        AuthState.shared.error = "Your session expired. Please sign in again to upgrade."
+                                        AuthService.shared.reconcileAuthState()
+                                    } catch {
+                                        log("SettingsPage: Upgrade failed: \(error.localizedDescription)")
+                                    }
+                                }
                             }) {
                                 Text("Upgrade")
                                     .scaledFont(size: 13, weight: .semibold)
