@@ -3,15 +3,19 @@ import AppKit
 import UserNotifications
 
 /// Watches the user's Claude plan 5-hour rolling-window utilization (via the
-/// locally-installed `claude-meter` CLI) and plays an alarm sound when usage
+/// menu-bar app's cached snapshot file) and plays an alarm sound when usage
 /// crosses 95% in the current window.
 ///
 /// Toggle via the `claudeUsageAlarmEnabled` UserDefault (default: true).
 /// Exposed in the floating-bar header dropdown so the user can mute the alarm.
 ///
 /// Implementation notes:
-/// - Polls every 60 seconds; `claude-meter --json` is cheap (it reads cached
-///   data the menu-bar app already fetched).
+/// - Reads `~/Library/Application Support/ClaudeMeter/snapshots.json` every
+///   60s. Zero network calls; the ClaudeMeter menu-bar app is the single
+///   poller and writes that file after every successful OAuth fetch. Earlier
+///   versions invoked `claude-meter --json`, which spawned a subprocess that
+///   re-fetched the OAuth endpoints, doubling the rate-limit pressure on
+///   Anthropic's API and causing 429s.
 /// - Fires at most once per 5-hour window. The window is identified by the
 ///   `resets_at` timestamp; when it changes, the "already-fired" flag clears
 ///   and the alarm becomes armed again.
@@ -19,6 +23,9 @@ import UserNotifications
 ///   utilization across them (most aggressive trigger).
 /// - The alarm plays the system "Sosumi" sound three times with 0.55s spacing
 ///   to feel like a notification alarm rather than a single ding.
+/// - Snapshot freshness: we trust whatever the menu bar wrote. If the file
+///   is older than 10 minutes we skip the alarm tick (the menu bar might be
+///   paused/throttled/missing) rather than fire on stale data.
 @MainActor
 final class ClaudeUsageAlarmMonitor {
     static let shared = ClaudeUsageAlarmMonitor()
@@ -30,11 +37,23 @@ final class ClaudeUsageAlarmMonitor {
     /// Threshold (percent) that triggers the alarm.
     private let threshold: Double = 95.0
 
-    /// Path to the bundled CLI shipped with the menu-bar app.
-    private let claudeMeterCLI = "/Applications/ClaudeMeter.app/Contents/MacOS/claude-meter"
+    /// Where the ClaudeMeter menu-bar app persists its latest snapshot.
+    /// We READ this file; we never spawn the CLI (which would re-fetch and
+    /// double-poll Anthropic's OAuth endpoints).
+    private let snapshotPath: String = {
+        let support = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first!
+        return support.appendingPathComponent("ClaudeMeter/snapshots.json").path
+    }()
 
     /// Polling interval. 60s matches the menu-bar app's own refresh cadence.
     private let pollInterval: TimeInterval = 60
+
+    /// Maximum age of the menu-bar's snapshot before we treat it as stale and
+    /// skip the alarm check. 10 minutes is generous: the menu bar polls every
+    /// 30s, so anything older means it's down or throttled.
+    private let maxSnapshotAge: TimeInterval = 10 * 60
 
     private var timer: Timer?
 
@@ -65,15 +84,14 @@ final class ClaudeUsageAlarmMonitor {
             }
         }
 
-        // Skip the polling timer entirely if the CLI isn't installed.
+        // Skip the polling timer entirely if the menu bar isn't running yet.
         // The test-alarm hook above still works so the user can verify the
         // sound, and the dropdown toggle still functions.
-        guard FileManager.default.isExecutableFile(atPath: claudeMeterCLI) else {
-            logLine("polling disabled — claude-meter CLI not found at \(claudeMeterCLI). Dropdown + test-alarm still active.")
-            return
+        if !FileManager.default.fileExists(atPath: snapshotPath) {
+            logLine("snapshot file not yet at \(snapshotPath); polling will pick it up once ClaudeMeter writes it. Dropdown + test-alarm still active.")
         }
 
-        logLine("starting, threshold=\(threshold)%, poll=\(pollInterval)s")
+        logLine("starting, threshold=\(threshold)%, poll=\(pollInterval)s, source=\(snapshotPath)")
 
         // Ask once for notification permission (silent if already decided).
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -109,7 +127,7 @@ final class ClaudeUsageAlarmMonitor {
         let enabled = UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true
         guard enabled else { return }
 
-        guard let snapshot = await runClaudeMeter() else { return }
+        guard let snapshot = readCachedSnapshot() else { return }
         guard let (utilization, resetsAt) = maxFiveHourUtilization(in: snapshot) else { return }
 
         if !hasLoggedFirstPoll {
@@ -131,52 +149,45 @@ final class ClaudeUsageAlarmMonitor {
         }
     }
 
-    /// Run `claude-meter --json` and return the parsed array.
-    private func runClaudeMeter() async -> [[String: Any]]? {
-        let cliPath = claudeMeterCLI
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: cliPath)
-                process.arguments = ["--json"]
+    /// Read the menu bar's cached snapshot file. Zero subprocesses, zero API
+    /// calls. Returns nil on any error (missing file, parse failure, stale
+    /// data) so `checkUsage` skips this tick.
+    private func readCachedSnapshot() -> [[String: Any]]? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: snapshotPath)) else {
+            // File not present yet, e.g. ClaudeMeter not running. Don't spam
+            // the log — the start() banner already told the user.
+            return nil
+        }
+        guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            logLine("snapshot file at \(snapshotPath) failed to parse as JSON array; skipping tick")
+            return nil
+        }
 
-                let outPipe = Pipe()
-                let errPipe = Pipe()
-                process.standardOutput = outPipe
-                process.standardError = errPipe
-
-                do {
-                    try process.run()
-                } catch {
-                    log("ClaudeUsageAlarmMonitor: failed to launch claude-meter: \(error)")
-                    continuation.resume(returning: nil)
-                    return
+        // Skip if every snapshot is older than maxSnapshotAge. Use the
+        // freshest fetched_at across snapshots so a single fresh row is enough.
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let formatterNoFrac = ISO8601DateFormatter()
+        let now = Date()
+        var freshest: Date?
+        for snap in parsed {
+            guard let fetchedAtString = snap["fetched_at"] as? String else { continue }
+            let date = formatter.date(from: fetchedAtString)
+                ?? formatterNoFrac.date(from: fetchedAtString)
+            if let date {
+                if freshest == nil || date > freshest! {
+                    freshest = date
                 }
-
-                // Hard 10s cap; the CLI usually returns in under a second.
-                let deadline = DispatchTime.now() + .seconds(10)
-                let group = DispatchGroup()
-                group.enter()
-                DispatchQueue.global().async {
-                    process.waitUntilExit()
-                    group.leave()
-                }
-                if group.wait(timeout: deadline) == .timedOut {
-                    process.terminate()
-                    log("ClaudeUsageAlarmMonitor: claude-meter timed out")
-                    continuation.resume(returning: nil)
-                    return
-                }
-
-                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-                guard !data.isEmpty,
-                      let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: parsed)
             }
         }
+        if let freshest {
+            let age = now.timeIntervalSince(freshest)
+            if age > maxSnapshotAge {
+                logLine(String(format: "snapshot is %.0fs stale (max %.0fs); skipping. ClaudeMeter may be paused or rate-limited.", age, maxSnapshotAge))
+                return nil
+            }
+        }
+        return parsed
     }
 
     /// Returns the max `usage.five_hour.utilization` across all orgs, plus the
