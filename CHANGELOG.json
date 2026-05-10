@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed chats that started and stopped immediately leaving no trace in history; empty model turns and user-stops now persist a visible marker so the failed exchange survives instead of vanishing"
+  ],
   "releases": [
     {
       "version": "2.9.3",
