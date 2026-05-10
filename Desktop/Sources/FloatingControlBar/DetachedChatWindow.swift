@@ -1104,8 +1104,7 @@ class DetachedChatWindowController {
                 // @Observable and don't need this.
                 let observer = MessageObserver(message: aiMessage) { [weak state, weak provider] msg in
                     guard let state else { return }
-                    let hasContent = !msg.text.isEmpty || !msg.contentBlocks.isEmpty
-                    let newLoading = msg.isStreaming && !hasContent
+                    let newLoading = msg.isStreaming
                     if state.streaming.isAILoading != newLoading {
                         state.streaming.isAILoading = newLoading
                     }
