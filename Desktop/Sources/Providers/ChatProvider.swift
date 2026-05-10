@@ -3526,7 +3526,18 @@ class ChatProvider: ObservableObject {
             let messageText: String
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
-                messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
+                let rawText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
+                // Empty result with no tool calls means the model produced nothing —
+                // either an interrupted stream (app rebuild, window close, user stop)
+                // or a poisoned-session empty turn the bridge couldn't recover. Stamp
+                // a marker so the bubble persists and the failure is visible instead
+                // of vanishing silently and dropping the user's question from history.
+                if rawText.isEmpty && toolNames.isEmpty {
+                    messageText = "⚠️ (no text returned — the response was interrupted or the model produced an empty turn)"
+                    log("ChatProvider: empty AI turn (no text, no tools) — saving marker so the failure is visible (session=\(sessionKey ?? "main"))")
+                } else {
+                    messageText = rawText
+                }
                 messages[index].text = messageText
                 messages[index].isStreaming = false
 
@@ -3561,6 +3572,12 @@ class ChatProvider: ObservableObject {
                 // the Combine $messages sink run, which may call clearTransferredMessages()
                 // and empty the messages array. Save the message reference now while it's
                 // still in memory.
+                //
+                // The `!messageText.isEmpty` guard still skips tool-only responses (no text,
+                // but tool calls present) — `ChatMessageStore.saveMessage` only persists `text`,
+                // not `contentBlocks`, so saving those would just produce a blank AI bubble
+                // on reload. For the previously-silent "empty turn" case (no text AND no tools)
+                // the marker stamped above makes `messageText` non-empty, so the save now runs.
                 if let freshIndex = messages.firstIndex(where: { $0.id == aiMessageId }), !messageText.isEmpty {
                     let msg = messages[freshIndex]
                     if isOnboarding {
