@@ -3533,7 +3533,7 @@ class ChatProvider: ObservableObject {
                 // a marker so the bubble persists and the failure is visible instead
                 // of vanishing silently and dropping the user's question from history.
                 if rawText.isEmpty && toolNames.isEmpty {
-                    messageText = "⚠️ (no text returned — the response was interrupted or the model produced an empty turn)"
+                    messageText = "⚠️ (no text returned; the response was interrupted, or the model produced an empty turn)"
                     log("ChatProvider: empty AI turn (no text, no tools) — saving marker so the failure is visible (session=\(sessionKey ?? "main"))")
                 } else {
                     messageText = rawText
