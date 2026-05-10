@@ -1693,6 +1693,81 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
     logErr(`Failed to load user MCP servers from ${userMcpConfigPath}: ${err}`);
   }
 
+  // Inherit global Claude Code MCP servers from ~/.claude.json (top-level mcpServers).
+  // Precedence: bundled > ~/.fazm/mcp-servers.json > ~/.claude.json. Duplicates by name
+  // are skipped so Fazm's bundled / user-overridden configs always win.
+  // Opt out by setting FAZM_DISABLE_CLAUDE_CODE_MCP=true.
+  if (process.env.FAZM_DISABLE_CLAUDE_CODE_MCP !== "true") {
+    const claudeCodeConfigPath = join(homedir(), ".claude.json");
+    try {
+      if (existsSync(claudeCodeConfigPath)) {
+        const raw = readFileSync(claudeCodeConfigPath, "utf-8");
+        const parsed = JSON.parse(raw) as {
+          mcpServers?: Record<string, {
+            type?: "stdio" | "http";
+            command?: string;
+            args?: string[];
+            env?: Record<string, string>;
+            url?: string;
+            headers?: Record<string, string>;
+            enabled?: boolean;
+          }>;
+        };
+        const claudeServers = parsed.mcpServers ?? {};
+        const existingNames = new Set(servers.map((s) => s.name));
+        for (const [name, cfg] of Object.entries(claudeServers)) {
+          if (cfg.enabled === false) continue;
+          if (existingNames.has(name)) {
+            logErr(`Claude Code MCP server "${name}" skipped: already configured by Fazm`);
+            continue;
+          }
+          const inferredType = cfg.type ?? (cfg.url ? "http" : "stdio");
+          if (inferredType === "http") {
+            if (!cfg.url) {
+              logErr(`Claude Code MCP server "${name}" skipped: http type but no url`);
+              continue;
+            }
+            const headersArr: Array<{ name: string; value: string }> = [];
+            if (cfg.headers) {
+              for (const [k, v] of Object.entries(cfg.headers)) {
+                headersArr.push({ name: k, value: String(v) });
+              }
+            }
+            servers.push({
+              name,
+              type: "http",
+              url: cfg.url,
+              headers: headersArr,
+            });
+            existingNames.add(name);
+            logErr(`Claude Code MCP server loaded (http): ${name} (${cfg.url})`);
+          } else {
+            if (!cfg.command) {
+              logErr(`Claude Code MCP server "${name}" skipped: stdio type but no command`);
+              continue;
+            }
+            const envArr: Array<{ name: string; value: string }> = [];
+            if (cfg.env) {
+              for (const [k, v] of Object.entries(cfg.env)) {
+                envArr.push({ name: k, value: String(v) });
+              }
+            }
+            servers.push({
+              name,
+              command: cfg.command,
+              args: cfg.args || [],
+              env: envArr,
+            });
+            existingNames.add(name);
+            logErr(`Claude Code MCP server loaded (stdio): ${name} (${cfg.command})`);
+          }
+        }
+      }
+    } catch (err) {
+      logErr(`Failed to load Claude Code MCP servers from ${claudeCodeConfigPath}: ${err}`);
+    }
+  }
+
   emitMcpServers(servers);
   return servers;
 }
