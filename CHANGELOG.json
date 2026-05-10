@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed chats that started and stopped immediately leaving no trace in history; empty model turns and user-stops now persist a visible marker so the failed exchange survives instead of vanishing",
-    "Fixed pop-out chats forgetting the original task after a session recovery; the first user message is now included in the replay so the model resumes with full context"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.3",
+      "date": "2026-05-10",
+      "changes": [
+        "Fixed chats that started and stopped immediately leaving no trace in history; empty model turns and user-stops now persist a visible marker so the failed exchange survives instead of vanishing",
+        "Fixed pop-out chats forgetting the original task after a session recovery; the first user message is now included in the replay so the model resumes with full context"
+      ]
+    },
     {
       "version": "2.9.3",
       "date": "2026-05-09",
