@@ -374,8 +374,6 @@ struct AIResponseView: View {
 
             VoiceMuteButton()
 
-            ClaudeUsageAlarmButton()
-
             ReportIssueButton(isHanging: isHanging)
 
             CopyConversationButton(
@@ -1253,45 +1251,6 @@ struct VoiceMuteButton: View {
         }
         .buttonStyle(.plain)
         .floatingHint(voiceResponseEnabled ? "Mute voice" : "Unmute voice")
-    }
-}
-
-// MARK: - Claude Usage Alarm Button
-
-/// Dropdown menu in the floating-bar header with one toggle:
-/// alerts the user with a sound when their Claude 5-hour usage hits 95%.
-/// Default: on. The bell icon turns orange when muted so it's obvious
-/// the alarm is off.
-struct ClaudeUsageAlarmButton: View {
-    @AppStorage("claudeUsageAlarmEnabled") private var alarmEnabled = true
-
-    var body: some View {
-        Menu {
-            Button {
-                alarmEnabled.toggle()
-                AnalyticsManager.shared.settingToggled(
-                    setting: "claude_usage_alarm",
-                    enabled: alarmEnabled
-                )
-            } label: {
-                Label(
-                    alarmEnabled ? "Sound on (alerts at 95%)" : "Sound off",
-                    systemImage: alarmEnabled ? "checkmark" : ""
-                )
-            }
-            Divider()
-            Button("Test alarm sound") {
-                ClaudeUsageAlarmMonitor.shared.playTestAlarm()
-            }
-        } label: {
-            Image(systemName: alarmEnabled ? "bell.fill" : "bell.slash.fill")
-                .scaledFont(size: 11)
-                .foregroundColor(alarmEnabled ? .secondary : .orange)
-        }
-        .menuIndicator(.hidden)
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .floatingHint(alarmEnabled ? "Claude 5h usage alarm: on" : "Claude 5h usage alarm: muted")
     }
 }
 
