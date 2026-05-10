@@ -2227,8 +2227,7 @@ class FloatingControlBarManager {
                 self.messageObserver?.cancel()
                 self.messageObserver = MessageObserver(message: aiMessage) { [weak barWindow] msg in
                     guard let barWindow else { return }
-                    let hasContent = !msg.text.isEmpty || !msg.contentBlocks.isEmpty
-                    let newLoading = msg.isStreaming && !hasContent
+                    let newLoading = msg.isStreaming
                     if barWindow.state.streaming.isAILoading != newLoading {
                         barWindow.state.streaming.isAILoading = newLoading
                     }
