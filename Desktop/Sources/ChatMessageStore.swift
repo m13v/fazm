@@ -74,7 +74,15 @@ enum ChatMessageStore {
                 var args: [DatabaseValueConvertible?] = [context]
                 if let ids = sessionIds, !ids.isEmpty {
                     let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
-                    sessionFilter = " AND session_id IN (\(placeholders))"
+                    // Include rows with NULL session_id too. The FIRST user message of a
+                    // detached pop-out is saved BEFORE the bridge has allocated an ACP
+                    // session, so its session_id column is NULL. Without this fallback,
+                    // a recovery-time priorContext load (sessionIds = [chain head]) would
+                    // silently drop the user's original prompt, and the new session would
+                    // come back with no idea what task it was working on. Floating bar
+                    // messages are unaffected because they stamp `floatingChatSessionId`
+                    // at save time, so no NULL rows exist in `__floating__` contexts.
+                    sessionFilter = " AND (session_id IN (\(placeholders)) OR session_id IS NULL)"
                     args.append(contentsOf: ids.map { $0 as DatabaseValueConvertible? })
                 } else {
                     sessionFilter = ""
