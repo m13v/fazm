@@ -328,8 +328,18 @@ workflows:
             ditto "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
           fi
 
-          install_name_tool -add_rpath "@executable_path/../Frameworks" \
-            "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+          # Add Sparkle rpath. Idempotent — install_name_tool errors and exits 1
+          # if the rpath already exists, so check first. Then HARD-VERIFY: missing
+          # rpath here means the shipped app crashes at launch with "Library not
+          # loaded: @rpath/Sparkle.framework" (regression seen in v2.9.2).
+          if ! otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks"; then
+            install_name_tool -add_rpath "@executable_path/../Frameworks" \
+              "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+          fi
+          otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks" || {
+            echo "FATAL: @executable_path/../Frameworks rpath missing on universal binary — Sparkle would crash on launch. Refusing to ship."
+            exit 1
+          }
 
           # Copy app icon
           [ -f "fazm_icon.icns" ] && cp fazm_icon.icns "$APP_BUNDLE/Contents/Resources/FazmIcon.icns"
@@ -709,6 +719,21 @@ workflows:
             thin_binary "$ARCH_APP/$APP_NAME.app/Contents/MacOS/$BINARY_NAME"
             thin_binary "$ARCH_APP/$APP_NAME.app/Contents/MacOS/mcp-server-macos-use"
             thin_binary "$ARCH_APP/$APP_NAME.app/Contents/MacOS/whatsapp-mcp"
+
+            # HARD CHECK: lipo -thin SHOULD preserve LC_RPATH, but the v2.9.2
+            # regression shipped an arm64 binary with no @executable_path/../Frameworks
+            # rpath, so we no longer trust it implicitly. Verify before re-signing,
+            # and if missing, re-add it idempotently — this is the artifact users
+            # actually install via Sparkle.
+            ARCH_BIN="$ARCH_APP/$APP_NAME.app/Contents/MacOS/$BINARY_NAME"
+            if ! otool -l "$ARCH_BIN" | grep -q "@executable_path/../Frameworks"; then
+              echo "WARNING: $ARCH binary lost @executable_path/../Frameworks rpath after thinning — re-adding"
+              install_name_tool -add_rpath "@executable_path/../Frameworks" "$ARCH_BIN"
+            fi
+            otool -l "$ARCH_BIN" | grep -q "@executable_path/../Frameworks" || {
+              echo "FATAL: $ARCH binary missing Sparkle rpath even after re-add. Refusing to ship."
+              exit 1
+            }
             thin_binary "$ARCH_APP/$APP_NAME.app/Contents/Resources/Fazm_Fazm.bundle/ffmpeg"
             thin_binary "$ARCH_APP/$APP_NAME.app/Contents/Resources/Fazm_Fazm.bundle/cloudflared"
             thin_binary "$ARCH_APP/$APP_NAME.app/Contents/Resources/Fazm_Fazm.bundle/node"
