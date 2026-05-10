@@ -4030,6 +4030,29 @@ class ChatProvider: ObservableObject {
                         Task { await ChatMessageStore.saveMessage(updatedMessage, context: "__\(effectiveKey)__", sessionId: sid) }
                     }
                 }
+            } else if let be = error as? BridgeError, case .stopped = be,
+                      let aiIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                // Stopped by the user (or by the pop-out window closing, which calls
+                // stopAgent). errorMessage was deliberately left nil so the UI doesn't
+                // show a scary banner, but we still need to persist whatever partial
+                // text streamed before the stop — otherwise the entire turn disappears
+                // from local history. Without this branch, every closed-mid-stream
+                // pop-out resulted in a __detached-UUID__ context with zero AI rows,
+                // even though the user had seen real tokens render.
+                let suffix = "\n\n⚠️ (stopped)"
+                if messages[aiIndex].text.isEmpty {
+                    messages[aiIndex].text = "⚠️ (stopped before any text was produced)"
+                } else if !messages[aiIndex].text.hasSuffix(suffix) {
+                    messages[aiIndex].text += suffix
+                }
+                let updatedMessage = messages[aiIndex]
+                if effectiveKey == "floating" {
+                    let sid = floatingChatSessionId
+                    Task { await ChatMessageStore.saveMessage(updatedMessage, context: "__floating__", sessionId: sid) }
+                } else if effectiveKey.hasPrefix("detached-") {
+                    let sid = UserDefaults.standard.string(forKey: "acpSessionId_\(effectiveKey)_\(bridgeMode)")
+                    Task { await ChatMessageStore.saveMessage(updatedMessage, context: "__\(effectiveKey)__", sessionId: sid) }
+                }
             }
 
             // Backend partial-save: spawn AFTER the suffix has been appended so the
