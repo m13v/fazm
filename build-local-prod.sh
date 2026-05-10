@@ -108,8 +108,14 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
     cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
 
-# Add rpath for Sparkle
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
+# Add rpath for Sparkle (idempotent + verified — missing rpath crashes app at launch)
+if ! otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+fi
+otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks" || {
+    echo "FATAL: Sparkle rpath missing — app would crash at launch"
+    exit 1
+}
 
 # Copy resources
 cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"

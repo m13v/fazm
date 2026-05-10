@@ -111,8 +111,14 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 # Copy binary
 cp "$BINARY_PATH" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
 
-# Add rpath for Frameworks
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
+# Add rpath for Frameworks (idempotent + verified — missing rpath crashes app at launch)
+if ! otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+fi
+otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks" || {
+    echo "FATAL: Sparkle rpath missing — app would crash at launch"
+    exit 1
+}
 
 # Copy Sparkle framework
 mkdir -p "$APP_BUNDLE/Contents/Frameworks"

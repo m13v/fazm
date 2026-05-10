@@ -241,7 +241,15 @@ else
 fi
 
 substep "Adding rpath for Frameworks"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
+# Idempotent — install_name_tool errors if rpath already exists. Hard-verify at
+# the end: missing rpath means launch crash with "Library not loaded: @rpath/Sparkle.framework"
+if ! otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+fi
+otool -l "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "@executable_path/../Frameworks" || {
+    echo "FATAL: Sparkle rpath missing — app would crash at launch"
+    exit 1
+}
 
 # Copy Sparkle framework
 SPARKLE_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sparkle.framework"

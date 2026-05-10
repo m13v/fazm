@@ -1,8 +1,14 @@
 {
-  "unreleased": [
-    "Fixed Upgrade button silently doing nothing when your auth session expired; the app now detects the desync, signs you out, and prompts you to sign in again"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.3",
+      "date": "2026-05-09",
+      "changes": [
+        "Fixed app failing to launch with a \"Library not loaded: @rpath/Sparkle.framework\" crash that broke v2.9.2 on first open",
+        "Fixed Upgrade button silently doing nothing when your auth session expired; the app now detects the desync, signs you out, and prompts you to sign in again"
+      ]
+    },
     {
       "version": "2.9.2",
       "date": "2026-05-09",

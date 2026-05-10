@@ -145,7 +145,15 @@ PROMPT_EOF
                 echo "[$(date)] Unclaimed chat for $EMAIL (will retry, attempt $FAILS/3)" >> "$LOG_DIR/founder-chat.log"
             fi
         else
-            # Success — reset failure counter
+            # Success — Claude finished cleanly (replied OR explicitly
+            # skipped). Stamp processed_at so the recovery block in
+            # check-unread-chats.js won't re-flag this chat next cycle.
+            # Without this, chats where Claude legitimately skipped (smoke
+            # test, off-topic, no useful answer) loop forever, since
+            # last_message_sender stays 'user' and the cooldown expires
+            # every 5min. Mirror of social-autoposter's mark_web_chat_processed.
+            NODE_PATH="$HOME/analytics/node_modules" "$HOME/.nvm/versions/node/v20.19.4/bin/node" \
+                "$HOME/fazm/inbox/scripts/mark-chat-processed.js" "$UID_VAL" >> "$LOG_DIR/founder-chat.log" 2>&1
             rm -f "$FAIL_COUNT_FILE"
         fi
         # Also check if Claude produced meaningful output (more than just the startup line)
