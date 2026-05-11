@@ -362,7 +362,7 @@ class DetachedChatWindowController {
     private static let registryKey = "DetachedWindowRegistry"
 
     /// Per-window state: the window, its ACP session key, and Combine subscriptions.
-    private struct WindowEntry {
+    struct WindowEntry {
         let window: DetachedChatWindow
         var sessionKey: String
         var chatCancellable: AnyCancellable?
@@ -372,6 +372,25 @@ class DetachedChatWindowController {
         var messageObserver: MessageObserver?
         var sharedProviderCancellables: [AnyCancellable] = []
         var dequeueCancellable: AnyCancellable?
+        /// Backstop timer: if the spinner has been on with no message mutations for
+        /// `safetyWatchdogIntervalSeconds`, force-clear it. Guards against tool-hang
+        /// cancel events that fail to propagate (e.g. bridge crash mid-cancel) or any
+        /// other path that leaves `isStreaming = true` after the agent loop is dead.
+        var safetyWatchdog: Task<Void, Never>?
+    }
+
+    /// Inactivity ceiling for the per-pop-out safety watchdog. The Playwright MCP
+    /// tool watchdog auto-interrupts at 120s; this gives a 10s grace window for the
+    /// cancel to propagate and the message to mutate (system card, isStreaming flip)
+    /// before we conclude the pipeline is dead and clear the spinner ourselves.
+    private static let safetyWatchdogIntervalSeconds: UInt64 = 130
+
+    /// Read-only snapshot of open pop-out entries. Exposed so ChatProvider can route
+    /// tool-hang cancel events to the right window state without exposing the mutable
+    /// per-window storage. Returned as an array of value copies — the contained
+    /// `window` reference is what callers need.
+    func entriesSnapshot() -> [WindowEntry] {
+        return Array(entries.values)
     }
 
     /// Serializable snapshot of a detached window for persistence.
@@ -896,6 +915,7 @@ class DetachedChatWindowController {
             ChatToolExecutor.unregisterCallbacks(sessionKey: sessionKey)
             self.entries[id]?.chatCancellable?.cancel()
             self.entries[id]?.messageObserver?.cancel()
+            self.entries[id]?.safetyWatchdog?.cancel()
             self.entries[id]?.sharedProviderCancellables.forEach { $0.cancel() }
             self.entries[id]?.dequeueCancellable?.cancel()
             self.entries.removeValue(forKey: id)
@@ -930,6 +950,8 @@ class DetachedChatWindowController {
             entries[winId]?.chatCancellable = nil
             entries[winId]?.messageObserver?.cancel()
             entries[winId]?.messageObserver = nil
+            entries[winId]?.safetyWatchdog?.cancel()
+            entries[winId]?.safetyWatchdog = nil
             // Listen for when this message is dequeued so we can set up the response subscriber
             entries[winId]?.dequeueCancellable?.cancel()
             entries[winId]?.dequeueCancellable = NotificationCenter.default
@@ -1102,12 +1124,16 @@ class DetachedChatWindowController {
                 // for the controller; SwiftUI views that read `aiMessage.text`
                 // already get their own per-property invalidations from
                 // @Observable and don't need this.
-                let observer = MessageObserver(message: aiMessage) { [weak state, weak provider] msg in
+                let observer = MessageObserver(message: aiMessage) { [weak self, weak state, weak provider] msg in
                     guard let state else { return }
                     let newLoading = msg.isStreaming
                     if state.streaming.isAILoading != newLoading {
                         state.streaming.isAILoading = newLoading
                     }
+                    // Safety watchdog: any mutation while streaming resets the
+                    // inactivity timer. When isStreaming flips false (normal
+                    // completion or forced-cancel from ChatProvider), cancel it.
+                    self?.scheduleSafetyWatchdog(winId: winId, isStreaming: msg.isStreaming, messageId: msg.id)
                     if !msg.isStreaming {
                         // Ensure the response is visible even if we never saw
                         // isStreaming=true (e.g., response completed before this
@@ -1128,6 +1154,43 @@ class DetachedChatWindowController {
                 self.entries[winId]?.messageObserver = observer
             }
         entries[winId]?.chatCancellable = cancellable
+    }
+
+    /// Reset the per-window safety watchdog.
+    ///
+    /// While the AI message is streaming, any mutation fires the MessageObserver and
+    /// calls this with `isStreaming = true` — we cancel the prior timer and arm a
+    /// fresh one. As long as text keeps arriving the timer never fires. If the
+    /// stream goes silent (e.g. the bridge crashed mid-cancel after a Playwright
+    /// MCP hang and the `tool_hang_canceled` event never landed), the timer fires
+    /// and forces the spinner off so the window isn't stuck visually forever.
+    fileprivate func scheduleSafetyWatchdog(winId: ObjectIdentifier, isStreaming: Bool, messageId: String) {
+        entries[winId]?.safetyWatchdog?.cancel()
+        guard isStreaming else {
+            entries[winId]?.safetyWatchdog = nil
+            return
+        }
+        let intervalNs = UInt64(Self.safetyWatchdogIntervalSeconds) * NSEC_PER_SEC
+        let task = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: intervalNs)
+            guard let self else { return }
+            guard let entry = self.entries[winId] else { return }
+            // Re-check current state — by the time we wake up streaming may have
+            // already finished cleanly. Don't touch anything in that case.
+            let state = entry.window.state
+            guard state.streaming.isAILoading || (state.streaming.currentAIMessage?.isStreaming == true),
+                  state.streaming.currentAIMessage?.id == messageId else {
+                self.entries[winId]?.safetyWatchdog = nil
+                return
+            }
+            log("[DetachedChat] safety watchdog fired: no message activity for \(Self.safetyWatchdogIntervalSeconds)s on session=\(entry.sessionKey) msgId=\(messageId) — force-clearing spinner")
+            if state.streaming.currentAIMessage?.isStreaming == true {
+                state.streaming.currentAIMessage?.isStreaming = false
+            }
+            state.streaming.isAILoading = false
+            self.entries[winId]?.safetyWatchdog = nil
+        }
+        entries[winId]?.safetyWatchdog = task
     }
 
     /// Handle `chatProviderDidDequeue` for any detached session.
