@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out chat showing a stale reply from a previous turn when the bridge recovers a poisoned session; in-flight notification draining is now silenced before the new session takes over"
+  ],
   "releases": [
     {
       "version": "2.9.4",
