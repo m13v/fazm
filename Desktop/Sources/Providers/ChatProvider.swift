@@ -3442,6 +3442,36 @@ class ChatProvider: ObservableObject {
                             )
                             if let liveIdx = self.messages.firstIndex(where: { $0.id == aiMessageId }) {
                                 self.messages.insert(notice, at: liveIdx)
+                                // Wipe any stale text/content blocks that the dead session
+                                // streamed into the live AI message before the bridge
+                                // detected the poisoning. The bridge's DEFERRED-REPLAY
+                                // detection runs post-await — by then the buffered chunks
+                                // from the dead session have already been appended via
+                                // appendToMessage. Without this wipe, the user sees the
+                                // stale reply followed by the "Session restored" card,
+                                // and then the new session's response is appended below
+                                // the stale content. Wiping leaves a clean slate so the
+                                // recovered session's stream fills an empty bubble.
+                                // liveIdx + 1 because the insert above pushed the live
+                                // message down one slot.
+                                let liveMsgIdx = liveIdx + 1
+                                if liveMsgIdx < self.messages.count,
+                                   self.messages[liveMsgIdx].id == aiMessageId {
+                                    if let buf = self.streamingBuffers[aiMessageId] {
+                                        buf.flushWorkItem?.cancel()
+                                        self.streamingBuffers[aiMessageId]?.flushWorkItem = nil
+                                        self.streamingBuffers[aiMessageId]?.textBuffer = ""
+                                        self.streamingBuffers[aiMessageId]?.thinkingBuffer = ""
+                                        self.streamingBuffers[aiMessageId]?.forceNewTextBlock = false
+                                    }
+                                    let stripped = self.messages[liveMsgIdx].text.count
+                                    let strippedBlocks = self.messages[liveMsgIdx].contentBlocks.count
+                                    self.messages[liveMsgIdx].text = ""
+                                    self.messages[liveMsgIdx].contentBlocks = []
+                                    if stripped > 0 || strippedBlocks > 0 {
+                                        log("ChatProvider: session_expired wiped stale live message id=\(aiMessageId) text=\(stripped) chars, \(strippedBlocks) content block(s)")
+                                    }
+                                }
                             } else {
                                 self.messages.append(notice)
                             }
