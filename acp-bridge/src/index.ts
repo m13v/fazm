@@ -1124,6 +1124,36 @@ function unregisterSession(sessionKey: string): void {
   logErr(`[SESSIONS] unregistered key=${sessionKey} total=${sessions.size}`);
 }
 
+/** Scrub all registered sessions after a credit_exhausted event so the Claude
+ *  Code SDK's drain-state poisoning (hypothesized — see POISON-FIX-PLAN block
+ *  above) does not infect healthy sessions on their next session/resume. Each
+ *  session's sessionId is added to `interruptedSessions` so the next query on
+ *  that key skips resume and routes through session/new + priorContext replay
+ *  (the existing recovery path at line ~2292), which also emits the
+ *  user-facing "Session restored" notice.
+ *
+ *  Production evidence (fazm.log, May 10 2026): 27 STUCK-EMPTY-TURN events,
+ *  52% with crossSession=true, p50 ageMs=117s — i.e. a credit_exhausted on
+ *  one pop-out reliably poisons unrelated pop-outs within minutes.
+ *
+ *  Side effect: the chat-observer session ("observer" key) is also scrubbed.
+ *  Its background batches will silently no-op ("no session found, skipping
+ *  batch") until the bridge restarts and warmup re-creates it. Accepted
+ *  trade-off — observer is non-critical and re-warm requires app restart. */
+function scrubAllSessionsAfterPoisoning(triggerKey: string): void {
+  const snapshot: Array<{ key: string; sessionId: string }> = [];
+  for (const [k, entry] of sessions) {
+    snapshot.push({ key: k, sessionId: entry.sessionId });
+  }
+  for (const { key, sessionId } of snapshot) {
+    interruptedSessions.add(sessionId);
+    unregisterSession(key);
+    imageTurnCounts.delete(key);
+  }
+  activeSessionId = "";
+  logErr(`[POISON-SCRUB] credit_exhausted on key=${triggerKey} — scrubbed ${snapshot.length} session(s): ${snapshot.map(s => s.key).join(",")}`);
+}
+
 // --- Persistent sessionId → cwd map ---------------------------------------
 // The Claude Agent SDK stores transcripts under
 // `~/.claude/projects/<encoded(cwd)>/<sessionId>.jsonl`. On session/resume the
@@ -1265,20 +1295,15 @@ let interruptRequested = false;
  *    credit_exhausted; every other registered session stays trusted, and
  *    they all silently turn into landmines.
  *
- *  L1 FIX (preventive) — confirm with [POISON-DIAG] data first
- *    Trigger: production logs show crossSession=true with low ageMs across
- *    multiple [STUCK-EMPTY-TURN] incidents.
- *    Change: at each credit_exhausted emit site (search for
- *    `lastCreditExhaustedAt = Date.now()` — three sites), replace the
- *    single-key unregister with unregister-all:
- *        for (const k of Array.from(sessions.keys())) {
- *          unregisterSession(k);
- *          imageTurnCounts.delete(k);
- *        }
- *        activeSessionId = "";
- *    Effect: every active pop-out's next query goes through session/new
- *    with priorContext replay; the "resume a healthy session that turns out
- *    to be poisoned" failure mode disappears entirely.
+ *  L1 FIX (preventive) — SHIPPED May 11 2026
+ *    Confirmed by POISON-DIAG data on May 10 2026: 14/27 STUCK-EMPTY-TURN
+ *    events had crossSession=true with p50 ageMs=117s.
+ *    Implementation: `scrubAllSessionsAfterPoisoning(triggerKey)` (defined
+ *    just below `unregisterSession`) is now called at each of the three
+ *    credit_exhausted emit sites. It unregisters every session and adds
+ *    each sessionId to `interruptedSessions`, so the existing skip-resume
+ *    path at line ~2292 forces every active pop-out's next query through
+ *    session/new + priorContext replay.
  *
  *  L2 FIX (defensive) — independent of L1, ship anytime
  *    L2a (proper): the recovery preamble built in handleQuery (search
@@ -3132,14 +3157,11 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
         lastCreditExhaustedAt = Date.now();
         lastCreditExhaustedSessionKey = sessionKey;
-        // Drop the ACP session so the next prompt is a fresh session/resume.
-        // Without this, the Claude Code SDK leaves the session in a stuck state
-        // where the very next session/prompt resolves instantly with
-        // stopReason=end_turn and zero notifications, surfacing as
-        // "Failed to get a response. Please try again." in the UI.
-        unregisterSession(sessionKey);
-        imageTurnCounts.delete(sessionKey);
-        activeSessionId = "";
+        // Scrub ALL sessions, not just the offending one. The SDK's drain-state
+        // poisoning (see POISON-FIX-PLAN above) leaks across sessions on the
+        // same process, so leaving healthy keys registered turns them into
+        // landmines that fail at end_turn=0ms on their next resume.
+        scrubAllSessionsAfterPoisoning(sessionKey);
         lastApiRetry = null;
         return;
       }
@@ -3245,6 +3267,11 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
           lastCreditExhaustedAt = Date.now();
           lastCreditExhaustedSessionKey = sessionKey;
+          // Scrub all sessions — see comment at the first credit_exhausted
+          // emit site above. This branch previously left every session
+          // (including the offending one) registered, so the next query on
+          // any key would hit the SDK drain state.
+          scrubAllSessionsAfterPoisoning(sessionKey);
         } else {
           sendWithSession(sessionId, { type: "error", message: errMsg });
         }
@@ -3299,12 +3326,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
       lastCreditExhaustedAt = Date.now();
       lastCreditExhaustedSessionKey = incomingSessionKey;
-      // Same stuck-session cleanup as the inner credit_exhausted branch.
-      // Use incomingSessionKey here because the inner-scoped sessionKey
-      // is not visible in the outer catch.
-      unregisterSession(incomingSessionKey);
-      imageTurnCounts.delete(incomingSessionKey);
-      activeSessionId = "";
+      // Scrub all sessions — see comment at the first credit_exhausted emit
+      // site above. incomingSessionKey is used here because the inner-scoped
+      // sessionKey is not visible in this outer catch.
+      scrubAllSessionsAfterPoisoning(incomingSessionKey);
       lastApiRetry = null;
       return;
     }
