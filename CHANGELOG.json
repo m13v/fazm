@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed pop-out chat showing a stale reply from a previous turn when the bridge recovers a poisoned session; in-flight notification draining is now silenced before the new session takes over"
+    "Fixed pop-out chat showing a stale reply from a previous turn when the bridge recovers a poisoned session; in-flight notification draining is now silenced before the new session takes over",
+    "Fixed unrelated pop-out chats silently failing after one chat hits a usage or rate limit; the bridge now invalidates every active session on credit exhaustion so the next query in each pop-out starts a fresh session with conversation context replayed"
   ],
   "releases": [
     {
