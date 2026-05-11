@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Fixed pop-out chat showing a stale reply from a previous turn when the bridge recovers a poisoned session; the live AI message bubble is now wiped clean before the new session streams its real reply",
-    "Fixed unrelated pop-out chats silently failing after one chat hits a usage or rate limit; the bridge now invalidates every active session on credit exhaustion, aborts any in-flight queries on those sessions, and replays conversation context into the next query for each pop-out"
+    "Fixed unrelated pop-out chats silently failing after one chat hits a usage or rate limit; the bridge now invalidates every active session on credit exhaustion, aborts any in-flight queries on those sessions, and replays conversation context into the next query for each pop-out",
+    "Added a three-dots typing animation in the chat header while the AI is generating, replacing the rotating spinner and 'thinking'/'using tools' label"
   ],
   "releases": [
     {
