@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out chat spinner getting stuck forever when a Playwright MCP browser tab or player tab hangs"
+  ],
   "releases": [
     {
       "version": "2.9.3",
