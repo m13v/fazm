@@ -163,6 +163,14 @@ function startToolTimer(
 
     logErr(`Tool TIMEOUT: ${title} (id=${toolCallId}) exceeded ${timeoutMs / 1000}s — synthesizing failure`);
 
+    // Drop from inFlightTools so the long-running-tool heartbeat stops
+    // emitting `Tool heartbeat: ... still running, elapsed=Ns` forever.
+    // Before this delete, stale entries accumulated across timeouts and the
+    // heartbeat kept logging tools for days (saw elapsed=73522s in prod).
+    // Each heartbeat also surfaced as `status_change` → Swift logged a
+    // spurious "Context compaction finished" every 30s per stuck entry.
+    inFlightTools.delete(toolCallId);
+
     // Remove from pendingTools (same as normal completion path)
     const idx = pendingTools.indexOf(title);
     if (idx >= 0) pendingTools.splice(idx, 1);
@@ -249,6 +257,29 @@ function clearAllToolTimers(): void {
     clearTimeout(tracked.timer);
   }
   activeToolTimers.clear();
+}
+
+// Clear watchdogs only for tools that belong to the given session. The query
+// success/error paths in handleQuery used to call clearAllToolTimers(), which
+// wiped watchdogs for every other session's in-flight tools. With multiple
+// detached pop-out chats open, ANY session ending its turn would nuke the
+// 120s tool watchdog for tools running on the others — Playwright browser_tabs
+// in another pop-out would then hang forever instead of getting auto-cancelled
+// (May 11 2026 investigation: every long-hang pattern in /tmp/fazm.log traced
+// back to a peer session's success or error path firing clearAllToolTimers).
+function clearToolTimersForSession(sessionId: string | undefined): void {
+  if (!sessionId) return;
+  const toRemove: string[] = [];
+  for (const [id, tracked] of activeToolTimers) {
+    if (tracked.sessionId === sessionId) {
+      clearTimeout(tracked.timer);
+      toRemove.push(id);
+    }
+  }
+  for (const id of toRemove) {
+    activeToolTimers.delete(id);
+    inFlightTools.delete(id);
+  }
 }
 
 // --- In-flight tool diagnostic tracking ---
@@ -2822,7 +2853,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
               sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
             }
             pendingTools.length = 0;
-            clearAllToolTimers();
+            clearToolTimersForSession(sessionId);
             // Skip resume entirely; recurse with stuck-session marker so the
             // next call goes straight to session/new + priorContext replay.
             msg.resume = undefined;
@@ -2870,7 +2901,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
               sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
             }
             pendingTools.length = 0;
-            clearAllToolTimers();
+            clearToolTimersForSession(sessionId);
             msg.resume = undefined;
             msg._priorStuckSessionId = stuckSessionId;
             return handleQuery(msg, _retryDepth + 1);
@@ -2895,7 +2926,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           staleTaskNotificationCount = 0;
           currentTurnTaskIds.clear();
           pendingTools.length = 0;
-          clearAllToolTimers();
+          clearToolTimersForSession(sessionId);
           // Re-send the same prompt; the stale task notification is now consumed
           promptStartTime = Date.now();
           const retryPayload = { sessionId, prompt: [{ type: "text", text: fullPrompt }] };
@@ -2911,7 +2942,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
             sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
-          clearAllToolTimers();
+          clearToolTimersForSession(sessionId);
 
           if (sessionKey !== "observer" && sessions.has("observer")) {
             bufferChatObserverTurn("user", fullPrompt);
@@ -2986,7 +3017,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
             sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
-          clearAllToolTimers();
+          clearToolTimersForSession(sessionId);
           // Skip resume entirely; recurse with stuck-session marker so the next
           // call goes straight to session/new + priorContext replay + session_expired
           // notice. This is the recovery path the user is supposed to see in the chat.
@@ -3003,7 +3034,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        clearAllToolTimers();
+        clearToolTimersForSession(sessionId);
 
         // Buffer conversation turns for the observer session (skip if this IS the observer)
         if (sessionKey !== "observer" && sessions.has("observer")) {
@@ -3061,7 +3092,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
             sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
-          clearAllToolTimers();
+          clearToolTimersForSession(sessionId);
 
           if (sessionKey !== "observer" && sessions.has("observer")) {
             bufferChatObserverTurn("user", fullPrompt);
@@ -3098,7 +3129,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
             sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
-          clearAllToolTimers();
+          clearToolTimersForSession(sessionId);
           logErr(
             `Query interrupted by user, sending partial result (${fullText.length} chars)`
           );
@@ -3122,7 +3153,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
             sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
           }
           pendingTools.length = 0;
-          clearAllToolTimers();
+          clearToolTimersForSession(sessionId);
           sendWithSession(sessionId, { type: "builtin_key_invalid", message: errMsg });
           unregisterSession(sessionKey);
           imageTurnCounts.delete(sessionKey);
@@ -3171,7 +3202,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        clearAllToolTimers();
+        clearToolTimersForSession(sessionId);
         sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
         lastCreditExhaustedAt = Date.now();
         lastCreditExhaustedSessionKey = sessionKey;
@@ -3194,7 +3225,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        clearAllToolTimers();
+        clearToolTimersForSession(sessionId);
 
         // Retry with a hint
         retryingWithHint = true;
@@ -3234,7 +3265,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        clearAllToolTimers();
+        clearToolTimersForSession(sessionId);
         unregisterSession(sessionKey);
         imageTurnCounts.delete(sessionKey);
         activeSessionId = "";
@@ -3277,7 +3308,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        clearAllToolTimers();
+        clearToolTimersForSession(sessionId);
         const isBillingOrRate = isStructuredNonRetryable
           && (apiRetryErrorType === "billing_error" || apiRetryErrorType === "rate_limit");
         const isRegexBilling = /credit|balance|quota|exhausted|hit your.*limit|out of extra usage/i.test(errMsg);
@@ -3305,7 +3336,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        clearAllToolTimers();
+        clearToolTimersForSession(sessionId);
         sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
       }
       return;
