@@ -1051,6 +1051,8 @@ class DetachedChatWindowController {
             self.entries[winId]?.chatCancellable = nil
             self.entries[winId]?.messageObserver?.cancel()
             self.entries[winId]?.messageObserver = nil
+            self.entries[winId]?.safetyWatchdog?.cancel()
+            self.entries[winId]?.safetyWatchdog = nil
 
             // Shared post-query: error handling, credit exhaustion, auth, paywall, etc.
             ChatQueryLifecycle.handlePostQuery(provider: provider, state: state, sessionKey: sessionKey, messageCountBefore: messageCountBefore)
@@ -1074,6 +1076,8 @@ class DetachedChatWindowController {
         entries[winId]?.chatCancellable?.cancel()
         entries[winId]?.messageObserver?.cancel()
         entries[winId]?.messageObserver = nil
+        entries[winId]?.safetyWatchdog?.cancel()
+        entries[winId]?.safetyWatchdog = nil
         // Build the chain into a local first; assigning directly into
         // entries[winId]?.chatCancellable holds an exclusive (_modify) access on
         // `entries` while the RHS evaluates. `.sink` subscribes synchronously and
