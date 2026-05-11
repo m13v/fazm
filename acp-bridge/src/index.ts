@@ -2765,6 +2765,12 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           if (looksLikeReplay) {
             logErr(`[INTERRUPT-REPLAY] Detected deferred-response replay on previously-interrupted session ${sessionId} (duration=${promptDurationMs}ms, inputTokens=${inputTokens}, outputTokens=${outputTokens}, fullTextLen=${fullText.length}, promptLen=${fullPrompt.length}). Forcing fresh session with priorContext replay (depth=${_retryDepth}).`);
             const stuckSessionId = sessionId;
+            // Silence in-flight notification draining from the dead session.
+            // The SDK keeps emitting buffered chunks for ~tens of ms after we
+            // detect the replay; without abort, those textDeltas reach Swift
+            // and the stale reply is rendered in the UI before the new
+            // session's real response can replace it.
+            abortController.abort();
             unregisterSession(sessionKey);
             imageTurnCounts.delete(sessionKey);
             interruptedSessions.delete(sessionId);
@@ -2811,6 +2817,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           if (looksLikeDeferredReplay) {
             logErr(`[DEFERRED-REPLAY] Detected deferred-response replay on session ${sessionId} (duration=${promptDurationMs}ms, inputTokens=${inputTokens}, outputTokens=${outputTokens}, fullTextLen=${fullText.length}, promptLen=${fullPrompt.length}). Forcing fresh session with priorContext replay (depth=${_retryDepth}).`);
             const stuckSessionId = sessionId;
+            // Silence in-flight notification draining (see INTERRUPT-REPLAY above).
+            abortController.abort();
             unregisterSession(sessionKey);
             imageTurnCounts.delete(sessionKey);
             interruptedSessions.delete(sessionId);
@@ -2926,6 +2934,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           const poisonCrossSession = lastCreditExhaustedSessionKey != null && lastCreditExhaustedSessionKey !== sessionKey;
           logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms (notifications=${notificationCount}, outputTokens=${outputTokens}) — session ${sessionId} is poisoned. Forcing fresh session with priorContext replay (depth=${_retryDepth}). [POISON-DIAG] lastCreditExhausted: ageMs=${poisonAgeMs ?? "never"} key=${lastCreditExhaustedSessionKey ?? "none"} currentKey=${sessionKey} crossSession=${poisonCrossSession}`);
           const stuckSessionId = sessionId;
+          // Silence in-flight notification draining (see INTERRUPT-REPLAY above).
+          abortController.abort();
           unregisterSession(sessionKey);
           imageTurnCounts.delete(sessionKey);
           activeSessionId = "";
