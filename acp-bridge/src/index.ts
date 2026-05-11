@@ -1151,7 +1151,25 @@ function scrubAllSessionsAfterPoisoning(triggerKey: string): void {
     imageTurnCounts.delete(key);
   }
   activeSessionId = "";
-  logErr(`[POISON-SCRUB] credit_exhausted on key=${triggerKey} — scrubbed ${snapshot.length} session(s): ${snapshot.map(s => s.key).join(",")}`);
+  // Abort any in-flight queries on OTHER sessions so their notification
+  // handlers stop draining the (now-poisoned) SDK queue. Without this,
+  // a mid-stream query on a different session would keep appending text
+  // until session/prompt resolves — and the SDK drain state may corrupt
+  // its tail tokens too. The per-handler abort gate at line ~2527 stops
+  // further notifications from reaching `handleSessionUpdate`; the catch
+  // block at line ~3284 then emits a partial result so Swift unwedges.
+  // The query that fired credit_exhausted (triggerKey) is excluded from
+  // the abort — we're currently inside its handleQuery and its caller is
+  // already finishing the credit_exhausted reporting path.
+  const abortedKeys: string[] = [];
+  for (const [k, ctx] of activeQueries) {
+    if (k === triggerKey) continue;
+    if (!ctx.abortController.signal.aborted) {
+      ctx.abortController.abort();
+      abortedKeys.push(k);
+    }
+  }
+  logErr(`[POISON-SCRUB] credit_exhausted on key=${triggerKey} — scrubbed ${snapshot.length} session(s): ${snapshot.map(s => s.key).join(",")}; aborted ${abortedKeys.length} in-flight quer(y/ies): ${abortedKeys.join(",")}`);
 }
 
 // --- Persistent sessionId → cwd map ---------------------------------------
