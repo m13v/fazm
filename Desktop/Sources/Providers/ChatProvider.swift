@@ -1588,7 +1588,13 @@ class ChatProvider: ObservableObject {
         guard UserDefaults.standard.bool(forKey: Self.floatingChatClearedKey) else { return }
         UserDefaults.standard.removeObject(forKey: Self.floatingChatClearedKey)
         // Only remove floating-session messages; preserve active detached-session messages.
-        messages.removeAll { ($0.sessionKey ?? "floating") == "floating" }
+        // Skip any message that's still streaming: during a tool-hang auto-interrupt the
+        // completion handler reaches its `await Task.yield()` while the message is still
+        // marked streaming, the Combine `$messages` sink drains here, and removing the
+        // streaming message orphans the pop-out's MessageObserver — leaving its spinner
+        // stuck on because the post-yield `firstIndex(by: id)` lookup returns nil and
+        // never gets to flip `isStreaming = false`.
+        messages.removeAll { ($0.sessionKey ?? "floating") == "floating" && !$0.isStreaming }
     }
 
     /// Get the saved ACP session ID for a detached session key, consuming it for resume.
@@ -3505,11 +3511,40 @@ class ChatProvider: ObservableObject {
                                     await ChatMessageStore.saveMessage(cancelNotice, context: persistContext, sessionId: nil)
                                 }
                             }
-                            // Loading state is owned by FloatingControlBarState
-                            // (`isAILoading`), not ChatProvider. The bridge already
-                            // aborted the query, which surfaces a result/error and
-                            // flows through the normal completion path that flips
-                            // the spinner off; we don't need to nudge it here.
+                            // Force the in-flight AI message off "streaming" immediately.
+                            // The bridge aborts the query and the normal completion path is
+                            // supposed to flip `isStreaming = false`, but on pop-outs the
+                            // post-yield index lookup can race with `clearTransferredMessages`
+                            // and miss. Setting it here is idempotent and unblocks every
+                            // observer (pop-out MessageObserver and floating bar) directly.
+                            if let liveIdx = self.messages.firstIndex(where: { $0.id == aiMessageId }),
+                               self.messages[liveIdx].isStreaming {
+                                self.messages[liveIdx].isStreaming = false
+                            }
+                            // Pop-outs hold their own currentAIMessage reference. If the
+                            // message was already orphaned from `self.messages`, the
+                            // reference flip above won't reach them. Walk open pop-outs
+                            // whose sessionKey matches and clear loading + streaming
+                            // directly on the window state.
+                            for entry in DetachedChatWindowController.shared.entriesSnapshot()
+                                where entry.sessionKey == sessionKey {
+                                let popoutState = entry.window.state
+                                if popoutState.streaming.currentAIMessage?.id == aiMessageId,
+                                   popoutState.streaming.currentAIMessage?.isStreaming == true {
+                                    popoutState.streaming.currentAIMessage?.isStreaming = false
+                                }
+                                popoutState.streaming.isAILoading = false
+                            }
+                            // Floating bar uses the global bar state. Same guard:
+                            // only touch it if the event applies to the floating session.
+                            if sessionKey == "floating" || sessionKey == nil,
+                               let barState = FloatingControlBarManager.shared.barState {
+                                if barState.streaming.currentAIMessage?.id == aiMessageId,
+                                   barState.streaming.currentAIMessage?.isStreaming == true {
+                                    barState.streaming.currentAIMessage?.isStreaming = false
+                                }
+                                barState.streaming.isAILoading = false
+                            }
                         }
                     }
                 }
