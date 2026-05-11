@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed Playwright pop-out chats hanging forever on tool calls; one chat completing a turn no longer wipes the 120s tool watchdog on the other open pop-outs"
+  ],
   "releases": [
     {
       "version": "2.9.5",
