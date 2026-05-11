@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed Playwright pop-out chats hanging forever on tool calls; one chat completing a turn no longer wipes the 120s tool watchdog on the other open pop-outs"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.6",
+      "date": "2026-05-11",
+      "changes": [
+        "Fixed Playwright pop-out chats hanging forever on tool calls; one chat completing a turn no longer wipes the 120s tool watchdog on the other open pop-outs"
+      ]
+    },
     {
       "version": "2.9.5",
       "date": "2026-05-11",
