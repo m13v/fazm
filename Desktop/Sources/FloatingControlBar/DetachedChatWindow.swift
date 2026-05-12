@@ -234,23 +234,14 @@ struct DetachedChatView: View {
             onClose: nil,
             onNewChat: onNewChat,
             onSendFollowUp: { message, attachments in
+                // Optimistic UI (archive previous exchange, set displayedQuery,
+                // flip isAILoading) lives in the controller's sendQuery so it
+                // only fires when the message is actually being sent. If we did
+                // it here and the controller decided to queue (zombie
+                // sendingSessionKeys after a bridge-side abort), displayedQuery
+                // and the queue chip would both show the same text.
                 streaming.suggestedReplies = []
                 streaming.suggestedReplyQuestion = ""
-                let currentQuery = streaming.displayedQuery
-                if !currentQuery.isEmpty {
-                    let aiMessage = streaming.currentAIMessage ?? ChatMessage(
-                        id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
-                        isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
-                    )
-                    log("[DetachedChat] onSendFollowUp: archiving exchange question='\(currentQuery.prefix(40))' aiMessage.id=\(aiMessage.id) historyCount=\(streaming.chatHistory.count)")
-                    streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
-                }
-                state.flushPendingChatObserverExchanges()
-                streaming.displayedQuery = message
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    streaming.isAILoading = true
-                    streaming.currentAIMessage = nil
-                }
                 onSendFollowUp(message, attachments)
             },
             onEnqueueMessage: { message in
@@ -1010,6 +1001,25 @@ class DetachedChatWindowController {
             return
         }
 
+        // Not-busy path: apply optimistic UI here (moved out of the SwiftUI
+        // wrapper) so the busy branch above doesn't double-render the message
+        // as both displayedQuery and a queue chip.
+        let currentQuery = state.streaming.displayedQuery
+        if !currentQuery.isEmpty {
+            let aiMessage = state.streaming.currentAIMessage ?? ChatMessage(
+                id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
+                isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
+            )
+            log("[DetachedChat] sendQuery: archiving exchange question='\(currentQuery.prefix(40))' aiMessage.id=\(aiMessage.id) historyCount=\(state.streaming.chatHistory.count)")
+            state.streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+        }
+        state.flushPendingChatObserverExchanges()
+        state.streaming.displayedQuery = message
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            state.streaming.isAILoading = true
+            state.streaming.currentAIMessage = nil
+        }
+
         startQuery(message: message, attachments: attachments, for: win, winId: winId, sessionKey: sessionKey, state: state, provider: provider)
     }
 
@@ -1221,6 +1231,12 @@ class DetachedChatWindowController {
                 state.streaming.currentAIMessage?.isStreaming = false
             }
             state.streaming.isAILoading = false
+            // Reconcile ChatProvider: if the bridge has gone silent for this
+            // session, the completion event will never arrive, so
+            // sendingSessionKeys would stay sticky and the next submit would be
+            // enqueued behind a zombie query — producing the displayedQuery +
+            // queue-chip duplication bug.
+            FloatingControlBarManager.shared.chatProvider?.forceClearSending(sessionKey: entry.sessionKey)
             self.entries[winId]?.safetyWatchdog = nil
         }
         entries[winId]?.safetyWatchdog = task
