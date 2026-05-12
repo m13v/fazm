@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out chat replying with placeholder text after session recovery"
+  ],
   "releases": [
     {
       "version": "2.9.8",
