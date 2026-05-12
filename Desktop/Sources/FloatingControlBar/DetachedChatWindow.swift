@@ -942,6 +942,10 @@ class DetachedChatWindowController {
 
         if provider.isSending(sessionKey: sessionKey) {
             log("[DetachedChat] sendQuery: enqueuing (this session busy) session=\(sessionKey) text='\(message.prefix(40))'")
+            // Mirror the message into the visible UI queue. Without this, the
+            // functional queue holds it but no chip renders, so the user thinks
+            // their submit was dropped.
+            state.enqueue(message)
             provider.enqueueMessage(message, sessionKey: sessionKey)
             // Cancel the old response subscription immediately so it doesn't keep
             // re-setting currentAIMessage to the previous (completed) response while
