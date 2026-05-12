@@ -445,24 +445,14 @@ struct FloatingControlBarView: View {
             onClose: onCloseAI,
             onNewChat: onNewChat,
             onSendFollowUp: { message, attachments in
+                // Optimistic UI (archive previous exchange, displayedQuery,
+                // isAILoading) lives in FloatingControlBarManager.sendAIQuery
+                // so it only fires when the message is actually being sent. If
+                // we did it here and sendAIQuery decided to queue (provider
+                // busy), displayedQuery and the queue chip would both show the
+                // same text.
                 streaming.suggestedReplies = []
                 streaming.suggestedReplyQuestion = ""
-                // Archive current exchange to chat history
-                let currentQuery = streaming.displayedQuery
-                if !currentQuery.isEmpty {
-                    let aiMessage = streaming.currentAIMessage ?? ChatMessage(
-                        id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
-                        isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
-                    )
-                    streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
-                }
-                state.flushPendingChatObserverExchanges()
-
-                streaming.displayedQuery = message
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    streaming.isAILoading = true
-                    streaming.currentAIMessage = nil
-                }
                 onSendQuery(message, attachments)
             },
             onEnqueueMessage: { message in
