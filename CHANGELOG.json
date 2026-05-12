@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed follow-up choice buttons disappearing from a pop-out chat when a different pop-out submitted a query",
-    "Fixed thinking indicator in pop-out and floating bar going blank between tool calls during a query"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.9",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed follow-up choice buttons disappearing from a pop-out chat when a different pop-out submitted a query",
+        "Fixed thinking indicator in pop-out and floating bar going blank between tool calls during a query"
+      ]
+    },
     {
       "version": "2.9.8",
       "date": "2026-05-12",
