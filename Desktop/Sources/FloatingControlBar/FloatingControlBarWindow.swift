@@ -2124,9 +2124,30 @@ class FloatingControlBarManager {
         // The queue drains automatically after the current response finishes.
         if provider.isSending {
             provider.enqueueMessage(message, sessionKey: "floating")
-            barWindow.state.streaming.isAILoading = false
+            // The SwiftUI wrapper no longer does optimistic UI on submit, so we
+            // don't need to undo a stale displayedQuery here — the queue chip is
+            // the only thing the user sees, which is correct.
             log("FloatingControlBarManager: Query enqueued (agent busy): \(message.prefix(80))")
             return
+        }
+
+        // Not-busy path: optimistic UI here (moved out of the SwiftUI wrapper)
+        // so the busy branch above doesn't double-render the message as both
+        // displayedQuery and a queue chip.
+        let streaming = barWindow.state.streaming
+        let currentQuery = streaming.displayedQuery
+        if !currentQuery.isEmpty {
+            let aiMessage = streaming.currentAIMessage ?? ChatMessage(
+                id: UUID().uuidString, text: "", createdAt: Date(), sender: .ai,
+                isStreaming: false, rating: nil, isSynced: false, citations: [], contentBlocks: [], sessionKey: nil
+            )
+            streaming.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: aiMessage))
+        }
+        barWindow.state.flushPendingChatObserverExchanges()
+        streaming.displayedQuery = message
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            streaming.isAILoading = true
+            streaming.currentAIMessage = nil
         }
 
         // Restore previous floating chat messages and session on first interaction
