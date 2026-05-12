@@ -30,9 +30,6 @@ class ChatToolExecutor {
     /// Fallback for contexts without a session key
     static var onSendFollowUp: ((_ message: String) -> Void)?
 
-    /// The session key for the currently executing tool call, set before each execution
-    static var activeSessionKey: String?
-
     /// Register per-session callbacks for quick replies and follow-ups
     static func registerCallbacks(
         sessionKey: String,
@@ -53,8 +50,13 @@ class ChatToolExecutor {
 
     private static var fileScanFileCount = 0
 
-    /// Execute a tool call and return the result as a string
-    static func execute(_ toolCall: ToolCall) async -> String {
+    /// Execute a tool call and return the result as a string.
+    ///
+    /// `sessionKey` routes session-scoped UI side effects (e.g. `ask_followup`
+    /// quick-reply buttons) to the correct pop-out window. Passing nil falls
+    /// back to the global handler, which is correct for onboarding and the
+    /// background observer session.
+    static func execute(_ toolCall: ToolCall, sessionKey: String? = nil) async -> String {
         log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
         switch toolCall.name {
@@ -103,7 +105,7 @@ class ChatToolExecutor {
             return result
 
         case "ask_followup":
-            let result = await executeAskFollowup(toolCall.arguments)
+            let result = await executeAskFollowup(toolCall.arguments, sessionKey: sessionKey)
             let question = toolCall.arguments["question"] as? String ?? ""
             let optionCount = (toolCall.arguments["options"] as? [String])?.count ?? 0
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "ask_followup", properties: ["question_length": question.count, "option_count": optionCount])
@@ -850,8 +852,15 @@ class ChatToolExecutor {
         }
     }
 
-    /// Present a follow-up question with quick-reply options to the user
-    private static func executeAskFollowup(_ args: [String: Any]) async -> String {
+    /// Present a follow-up question with quick-reply options to the user.
+    ///
+    /// `sessionKey` is threaded through from `execute(_:sessionKey:)` so we
+    /// dispatch to the originating pop-out's callback even when multiple
+    /// pop-outs have concurrent in-flight tool calls. Previously this read a
+    /// shared `static var activeSessionKey` that could be overwritten by a
+    /// later session before this read ran, causing the buttons to land in the
+    /// wrong window (or no window at all).
+    private static func executeAskFollowup(_ args: [String: Any], sessionKey: String?) async -> String {
         guard let question = args["question"] as? String else {
             return "Error: 'question' parameter is required"
         }
@@ -859,7 +868,7 @@ class ChatToolExecutor {
 
         // Notify the UI to render question text and quick-reply buttons.
         // Use per-session callback if available (pop-out windows), fall back to global.
-        if let key = activeSessionKey, let callback = quickReplyCallbacks[key] {
+        if let key = sessionKey, let callback = quickReplyCallbacks[key] {
             callback(question, options)
         } else {
             onQuickReplyOptions?(question, options)
