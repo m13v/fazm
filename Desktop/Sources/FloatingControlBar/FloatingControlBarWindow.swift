@@ -1155,6 +1155,25 @@ class FloatingControlBarManager {
             provider: chatProvider, state: barWindow.state, sessionKey: "floating"
         )
 
+        // Independent subscription on sendingSessionKeys. MessageObserver only
+        // fires on message mutations, so a session-state flip with no message
+        // mutation would leave isAILoading stale. This sink recomputes the flag
+        // whenever the set changes so the header indicator stays on during the
+        // gap between agent turns (tool result roundtrips).
+        sharedProviderCancellables.append(
+            chatProvider.$sendingSessionKeys
+                .receive(on: DispatchQueue.main)
+                .sink { [weak barWindow] keys in
+                    guard let barWindow else { return }
+                    let isSessionSending = keys.contains("floating")
+                    let msgStreaming = barWindow.state.streaming.currentAIMessage?.isStreaming ?? false
+                    let newLoading = msgStreaming || isSessionSending
+                    if barWindow.state.streaming.isAILoading != newLoading {
+                        barWindow.state.streaming.isAILoading = newLoading
+                    }
+                }
+        )
+
         barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message, attachments in
             guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
             Task { @MainActor in
@@ -2225,9 +2244,14 @@ class FloatingControlBarManager {
                 // this message so token deltas drive isAILoading and the
                 // streaming-completion side effects.
                 self.messageObserver?.cancel()
-                self.messageObserver = MessageObserver(message: aiMessage) { [weak barWindow] msg in
+                self.messageObserver = MessageObserver(message: aiMessage) { [weak barWindow, weak provider] msg in
                     guard let barWindow else { return }
-                    let newLoading = msg.isStreaming
+                    // OR with sendingSessionKeys so the indicator stays on during
+                    // the gap between agent turns (tool result roundtrips), where
+                    // msg.isStreaming briefly looks false but the query is still
+                    // live in ChatProvider.
+                    let isSessionSending = provider?.isSending(sessionKey: "floating") ?? false
+                    let newLoading = msg.isStreaming || isSessionSending
                     if barWindow.state.streaming.isAILoading != newLoading {
                         barWindow.state.streaming.isAILoading = newLoading
                     }
