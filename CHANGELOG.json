@@ -1,10 +1,15 @@
 {
-  "unreleased": [
-    "Fixed pop-out chat replying with the literal placeholder text \"(your response here)\" after a session recovery; the recovery preamble no longer tricks the model into completing it as a template, and the streaming filter also catches that placeholder family if it ever leaks again",
-    "Fixed tool call UI sometimes routing to the wrong chat window in multi-session setups",
-    "Messages typed while a chat session is still responding now appear immediately in the conversation instead of disappearing until the session frees up"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.8",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed pop-out chat replying with the literal placeholder text \"(your response here)\" after a session recovery; the recovery preamble no longer tricks the model into completing it as a template, and the streaming filter also catches that placeholder family if it ever leaks again",
+        "Fixed tool call UI sometimes routing to the wrong chat window in multi-session setups",
+        "Messages typed while a chat session is still responding now appear immediately in the conversation instead of disappearing until the session frees up"
+      ]
+    },
     {
       "version": "2.9.6",
       "date": "2026-05-11",
