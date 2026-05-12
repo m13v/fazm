@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out chat replying with the literal placeholder text \"(your response here)\" after a session recovery; the recovery preamble no longer tricks the model into completing it as a template, and the streaming filter also catches that placeholder family if it ever leaks again"
+  ],
   "releases": [
     {
       "version": "2.9.6",
