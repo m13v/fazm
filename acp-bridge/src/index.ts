@@ -2589,6 +2589,17 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // detached-E4D72AA8…). New shape: prose framing ("Earlier, the user
       // said…" / "You replied…"), no transcript markers, and the user's
       // current message sits unlabeled at the bottom.
+      //
+      // [POISON-FIX-PLAN] L2b — SHIPPED 2026-05-12 (later same day). L2a kept
+      // the drop-trailing-assistant behavior from May 5, which means the
+      // transcript ends with `The user said: <prior>` and the new user
+      // message is appended right after, unlabeled. The model read that as
+      // a transcript with a missing assistant turn and "completed" it by
+      // emitting `[No assistant response recorded for this user message.]`
+      // as its reply (fazm.log 2026-05-12 13:50 PT, session
+      // detached-FF5BC803…, msg 1E3EE157). Fix: place an explicit boundary
+      // marker between the replayed transcript and the new user message
+      // so the model can't pattern-match the dangling-user-turn shape.
       if (restoredCount > 0) {
         const transcript = replay
           .map((e) => {
@@ -2608,13 +2619,18 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           `Answer the user's new message at the bottom directly and naturally, ` +
           `in your own voice. Do NOT narrate, quote, or echo the context above. ` +
           `Do NOT begin your reply with any template-placeholder text such as ` +
-          `"(your response here)", "(your turn)", or similar — write the actual ` +
-          `answer. If the new message is a short greeting, an unrelated ` +
-          `question, or a fresh topic, treat it as such and do not assume it ` +
-          `continues the prior task unless the user explicitly references it.\n\n` +
+          `"(your response here)", "(your turn)", "[No assistant response ` +
+          `recorded ...]", or similar — write the actual answer. If the new ` +
+          `message is a short greeting, an unrelated question, or a fresh ` +
+          `topic, treat it as such and do not assume it continues the prior ` +
+          `task unless the user explicitly references it.\n\n` +
           `Earlier in this conversation (${restoredCount} message${restoredCount === 1 ? "" : "s"}, oldest first):\n` +
           transcript +
-          `\n\n${fullPrompt}`;
+          `\n\n[End of restored context. The user has just sent the message ` +
+          `below — write your actual reply to it. Do not continue, summarize, ` +
+          `or quote the transcript above, and do not emit any bracketed ` +
+          `placeholder text in place of a real reply.]\n\n` +
+          fullPrompt;
         fullPrompt = preamble;
         logErr(`Session expired: replayed ${restoredCount} prior messages into new session ${sessionId}`);
       } else {
