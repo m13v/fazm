@@ -345,7 +345,16 @@ struct AIResponseView: View {
                         .scaledFont(size: 14)
                         .foregroundColor(.orange)
                 } else {
-                    TypingIndicator()
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 16, height: 16)
+                    let hasRunningTools = currentMessage?.contentBlocks.contains(where: {
+                        if case .toolCall(_, _, .running, _, _, _) = $0 { return true }
+                        return false
+                    }) ?? false
+                    Text(hasRunningTools ? "using tools" : "thinking")
+                        .scaledFont(size: 14)
+                        .foregroundColor(.secondary)
                 }
             } else {
                 workspaceLabel
