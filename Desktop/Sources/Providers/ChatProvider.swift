@@ -2684,6 +2684,24 @@ class ChatProvider: ObservableObject {
         return sendingSessionKeys.contains(sessionKey)
     }
 
+    /// Force-mark a session as no longer sending. Called by the per-window
+    /// safety watchdog when the bridge has gone silent and the completion
+    /// event will never arrive (e.g. a bridge-side poison-scrub aborted a
+    /// sibling session without emitting an error to this one). Without this,
+    /// `sendingSessionKeys` stays sticky, the next user submit is enqueued
+    /// behind a zombie query, and the queue chip + displayedQuery end up
+    /// showing the same text. Also fires a best-effort interrupt so any
+    /// lingering bridge state for this session is cleaned up.
+    func forceClearSending(sessionKey: String) {
+        guard sendingSessionKeys.contains(sessionKey) else { return }
+        log("ChatProvider: force-clearing sending state for session=\(sessionKey) (safety watchdog)")
+        sendingSessionKeys.remove(sessionKey)
+        isSending = !sendingSessionKeys.isEmpty
+        Task {
+            await acpBridge.interrupt(sessionKey: sessionKey)
+        }
+    }
+
     /// Re-send the message that was interrupted by browser extension setup.
     func retryPendingMessage() {
         guard let text = pendingRetryMessage else { return }
