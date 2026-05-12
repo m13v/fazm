@@ -442,15 +442,54 @@ interface QueryContext {
  *
  * Patterns recognised at the start of `buf`, in order, all optional:
  *   1. leading whitespace
- *   2. `(your turn — continue from where the transcript left off)` (literal-ish, any text inside parens)
+ *   2. one parenthesised template-placeholder line (`(your turn — …)`,
+ *      `(your response here)`, `(my response)`, etc. — see HARNESS_PAREN_OPENERS)
  *   3. zero or more `<system-reminder>...</system-reminder>` blocks
  *
  * If `buf` clearly does NOT start with one of these markers, we exit fast with
  * the buffer unchanged so we don't add latency to normal responses.
  */
-// [POISON-FIX-PLAN] L2b: this function has a chunk-boundary bug when the
-// first delta chunk is just "(". See anchor at `lastCreditExhaustedAt`
-// declaration for the proposed one-line fix and required test case.
+// [POISON-FIX-PLAN] L2b — SHIPPED 2026-05-12. Recognises additional
+// template-placeholder openers beyond `(your turn`, fixes the chunk-boundary
+// bug for a lone "(" first delta, and keeps buffering until the buffer is
+// long enough to disambiguate against every known opener.
+const HARNESS_PAREN_OPENERS = [
+  "(your turn",
+  "(your response",
+  "(your reply",
+  "(your answer",
+  "(insert your response",
+  "(insert response",
+  "(insert reply",
+  "(response here",
+  "(reply here",
+  "(answer here",
+  "(my response",
+  "(my reply",
+  "(my answer",
+  "(assistant response",
+  "(assistant reply",
+] as const;
+const MAX_PAREN_OPENER_LEN = Math.max(...HARNESS_PAREN_OPENERS.map((s) => s.length));
+
+function matchParenOpener(buf: string, pos: number): string | null {
+  for (const opener of HARNESS_PAREN_OPENERS) {
+    if (buf.startsWith(opener, pos)) return opener;
+  }
+  return null;
+}
+
+function isPartialParenOpener(s: string): boolean {
+  // True iff `s` is a non-empty proper prefix of some known opener (so more
+  // bytes could complete it into a real match). Allows e.g. "(" or "(your"
+  // to keep buffering until enough has arrived to disambiguate.
+  if (s.length === 0) return false;
+  for (const opener of HARNESS_PAREN_OPENERS) {
+    if (s.length < opener.length && opener.startsWith(s)) return true;
+  }
+  return false;
+}
+
 function stripHarnessPrefix(buf: string): { done: true; suffix: string } | { done: false } {
   const trimmed = buf.trimStart();
 
@@ -458,10 +497,10 @@ function stripHarnessPrefix(buf: string): { done: true; suffix: string } | { don
   // matches though — if the buffer is short and starts with `(` or `<`, the
   // marker may still be arriving in the next chunk.
   const startsWithHarness =
-    trimmed.startsWith("(your turn") ||
+    matchParenOpener(trimmed, 0) !== null ||
     trimmed.startsWith("<system-reminder>") ||
     // partial markers we should keep buffering for
-    (trimmed.startsWith("(") && trimmed.length < "(your turn".length) ||
+    isPartialParenOpener(trimmed) ||
     (trimmed.startsWith("<") && trimmed.length < "<system-reminder>".length);
 
   if (!startsWithHarness) {
@@ -472,14 +511,21 @@ function stripHarnessPrefix(buf: string): { done: true; suffix: string } | { don
   let pos = 0;
   while (pos < buf.length && /\s/.test(buf.charAt(pos))) pos++;
 
-  // Optional `(your turn ...)` line. Match any single-line parenthesised
-  // preamble — be liberal about exact wording, since the harness phrasing
-  // can drift across model versions.
-  if (buf.startsWith("(your turn", pos)) {
+  // Optional `(<opener> ...)` line. Match any single-line parenthesised
+  // preamble whose opener is one of the known template placeholders.
+  if (matchParenOpener(buf, pos) !== null) {
     const close = buf.indexOf(")", pos);
     if (close === -1) return { done: false }; // wait for more
     pos = close + 1;
     while (pos < buf.length && /\s/.test(buf.charAt(pos))) pos++;
+  } else if (
+    buf.startsWith("(", pos) &&
+    buf.length - pos < MAX_PAREN_OPENER_LEN
+  ) {
+    // Buffer starts with `(` but we haven't seen enough bytes yet to know
+    // whether it's a real opener (e.g. `(your turn`) or just user prose in
+    // parens. Keep buffering.
+    return { done: false };
   }
 
   // Zero-or-more `<system-reminder>...</system-reminder>` blocks
@@ -1354,27 +1400,25 @@ let interruptRequested = false;
  *    path at line ~2292 forces every active pop-out's next query through
  *    session/new + priorContext replay.
  *
- *  L2 FIX (defensive) — independent of L1, ship anytime
- *    L2a (proper): the recovery preamble built in handleQuery (search
- *    "RECENT TRANSCRIPT") uses `User: ... Assistant: ... --- RECENT
- *    TRANSCRIPT --- ... User's current message: ...` framing. Opus 4.7
- *    occasionally pattern-matches this as a stage-direction prompt and
- *    emits `(your turn — respond to the current message above)` as the
- *    leading text of its reply. Reshape: drop `User:`/`Assistant:` role
- *    labels (use `(my earlier message)` / `(your earlier reply)` or a
- *    third-person summary), drop the `--- RECENT TRANSCRIPT ---` markers,
- *    drop the `User's current message:` label (put fullPrompt at the
- *    bottom unlabeled). Add an explicit "answer directly, do not narrate
- *    or quote the context above" instruction. This removes the trained-
- *    behavior trigger.
+ *  L2 FIX (defensive) — independent of L1
+ *    L2a — SHIPPED 2026-05-12. The recovery preamble in handleQuery
+ *    (search "Session restored from local history") used to use `User:`/
+ *    `Assistant:` role labels, `--- RECENT TRANSCRIPT ---` markers, and a
+ *    `User's current message:` label. Opus 4.7 pattern-matched that as a
+ *    stage-direction template and emitted `(your turn — …)` or
+ *    `(your response here)` as the literal start of its reply (field
+ *    evidence: fazm.log 2026-05-12 10:50 PT, session detached-E4D72AA8…).
+ *    Reshape: prose framing ("The user said…" / "You replied…"), no
+ *    transcript markers, current message unlabeled at the bottom, plus
+ *    an explicit "do not begin with template-placeholder text" line.
  *
- *    L2b (band-aid for any residual leak): `stripHarnessPrefix` has a
- *    chunk-boundary bug — when the first text-delta chunk is just "(",
- *    the function returns done:true and emits the "(" before the rest of
- *    "(your turn" arrives. Fix: in the trailing partial-match guard at
- *    the bottom of the function, add `if (next === "(" && buf.length -
- *    pos < "(your turn".length) return { done: false };` next to the
- *    existing `<` guard. Add a chunk=`(` case to scripts/test-strip.mjs.
+ *    L2b — SHIPPED 2026-05-12. `stripHarnessPrefix` now recognises a
+ *    list of template-placeholder openers beyond `(your turn` — it also
+ *    strips `(your response`, `(your reply`, `(my response`, etc. The
+ *    partial-buffering guard at the top of the function uses
+ *    `isPartialParenOpener` so a lone `(` first chunk keeps buffering
+ *    until enough bytes arrive to disambiguate against every known
+ *    opener. Coverage in scripts/test-strip.mjs.
  *
  *  [POISON-DIAG] — diagnostic state for the L1 hypothesis. Read at the
  *  [STUCK-EMPTY-TURN] log; written at every credit_exhausted emit site. */
@@ -2536,36 +2580,41 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       }
       const restoredCount = replay.length;
 
-      // [POISON-FIX-PLAN] L2a: this preamble's `User:`/`Assistant:` /
-      // `--- RECENT TRANSCRIPT ---` framing is what makes Opus 4.7
-      // occasionally emit `(your turn — respond to the current message
-      // above)` as leading reply text. See anchor at the
-      // `lastCreditExhaustedAt` declaration for the proposed reshape.
+      // [POISON-FIX-PLAN] L2a — SHIPPED 2026-05-12. Recovery preamble used to
+      // use `User:` / `Assistant:` role labels, `--- RECENT TRANSCRIPT ---`
+      // markers, and a `User's current message:` label. Opus 4.7 occasionally
+      // pattern-matched that as a stage-direction template and emitted
+      // `(your turn — …)` or `(your response here)` as the literal start of
+      // its reply (see fazm.log 2026-05-12 10:50 PT, session
+      // detached-E4D72AA8…). New shape: prose framing ("Earlier, the user
+      // said…" / "You replied…"), no transcript markers, and the user's
+      // current message sits unlabeled at the bottom.
       if (restoredCount > 0) {
         const transcript = replay
           .map((e) => {
-            const who = e.role === "assistant" ? "Assistant" : "User";
+            const who = e.role === "assistant" ? "You replied" : "The user said";
             // Hard-cap each entry to avoid one huge tool dump dominating the preamble.
             const text = (e.text ?? "").slice(0, 4000);
             return `${who}: ${text}`;
           })
           .join("\n\n");
         const preamble =
-          `[SESSION RESTORED FROM LOCAL HISTORY]\n` +
-          `Your previous session (${resumeFailedFromId}) was interrupted before ` +
-          `it could finish. The transcript below is recent conversation context ` +
-          `replayed from the user's local message store. Treat it as background ` +
-          `only — the prior assistant turn (if any) was dropped because it was ` +
-          `incomplete or unreliable.\n\n` +
-          `Respond DIRECTLY to the user's CURRENT MESSAGE at the bottom. Do NOT ` +
-          `assume it is a continuation of the prior task. If it is a fresh ` +
-          `question, an unrelated topic, or a short greeting, answer that — do ` +
-          `not pick up the previous task unless the user explicitly references ` +
-          `it.\n\n` +
-          `--- RECENT TRANSCRIPT (${restoredCount} message${restoredCount === 1 ? "" : "s"}, oldest first) ---\n` +
+          `[Session restored from local history.]\n` +
+          `The previous session (${resumeFailedFromId}) was interrupted before ` +
+          `it could finish. Below is recent conversation context replayed from ` +
+          `the user's local message store — treat it as background only. The ` +
+          `prior assistant turn (if any) was dropped because it was incomplete ` +
+          `or unreliable.\n\n` +
+          `Answer the user's new message at the bottom directly and naturally, ` +
+          `in your own voice. Do NOT narrate, quote, or echo the context above. ` +
+          `Do NOT begin your reply with any template-placeholder text such as ` +
+          `"(your response here)", "(your turn)", or similar — write the actual ` +
+          `answer. If the new message is a short greeting, an unrelated ` +
+          `question, or a fresh topic, treat it as such and do not assume it ` +
+          `continues the prior task unless the user explicitly references it.\n\n` +
+          `Earlier in this conversation (${restoredCount} message${restoredCount === 1 ? "" : "s"}, oldest first):\n` +
           transcript +
-          `\n--- END TRANSCRIPT ---\n\n` +
-          `User's current message:\n${fullPrompt}`;
+          `\n\n${fullPrompt}`;
         fullPrompt = preamble;
         logErr(`Session expired: replayed ${restoredCount} prior messages into new session ${sessionId}`);
       } else {
