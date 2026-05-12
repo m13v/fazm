@@ -1201,52 +1201,75 @@ function unregisterSession(sessionKey: string): void {
   logErr(`[SESSIONS] unregistered key=${sessionKey} total=${sessions.size}`);
 }
 
-/** Scrub all registered sessions after a credit_exhausted event so the Claude
- *  Code SDK's drain-state poisoning (hypothesized — see POISON-FIX-PLAN block
- *  above) does not infect healthy sessions on their next session/resume. Each
- *  session's sessionId is added to `interruptedSessions` so the next query on
- *  that key skips resume and routes through session/new + priorContext replay
- *  (the existing recovery path at line ~2292), which also emits the
- *  user-facing "Session restored" notice.
+/** Cooldown window during which a second credit_exhausted event will not
+ *  trigger another subprocess restart. The first restart already replaced the
+ *  poisoned SDK process; subsequent credit errors before the limit refreshes
+ *  just need to surface to the offending pop-out, not thrash the bridge. */
+let lastCreditExhaustedRestartAt: number | null = null;
+const CREDIT_EXHAUSTED_RESTART_COOLDOWN_MS = 30_000;
+
+/** Recover from a credit_exhausted event by restarting the ACP subprocess
+ *  rather than scrubbing in-memory state. The previous "scrub-all-sessions"
+ *  approach (deleted 2026-05-12) flagged every sessionId with
+ *  `interruptedSessions`, which permanently forced future queries through
+ *  `session/new` + priorContext replay — losing the original sessionId,
+ *  prompt cache hits, and full SDK fidelity. Worse, it aborted in-flight
+ *  queries on collateral sessions without emitting a terminal notification,
+ *  so Swift's busy flag stayed true and pop-outs got stuck even after the
+ *  limit refreshed.
  *
- *  Production evidence (fazm.log, May 10 2026): 27 STUCK-EMPTY-TURN events,
- *  52% with crossSession=true, p50 ageMs=117s — i.e. a credit_exhausted on
- *  one pop-out reliably poisons unrelated pop-outs within minutes.
+ *  The new approach mirrors what Claude Code CLI does: kill the subprocess
+ *  so any drain-state poisoning dies with it, then let the next query on
+ *  each session naturally `session/resume` from the on-disk transcript on
+ *  the fresh subprocess. Same sessionId, same cache, same SDK state.
  *
- *  Side effect: the chat-observer session ("observer" key) is also scrubbed.
- *  Its background batches will silently no-op ("no session found, skipping
- *  batch") until the bridge restarts and warmup re-creates it. Accepted
- *  trade-off — observer is non-critical and re-warm requires app restart. */
-function scrubAllSessionsAfterPoisoning(triggerKey: string): void {
-  const snapshot: Array<{ key: string; sessionId: string }> = [];
-  for (const [k, entry] of sessions) {
-    snapshot.push({ key: k, sessionId: entry.sessionId });
+ *  In-flight queries on collateral sessions are sent an `error` notification
+ *  BEFORE their controllers are aborted, so Swift unbusies cleanly. The
+ *  trigger session is excluded (its caller already sent `credit_exhausted`).
+ *
+ *  Cooldown prevents thrashing when the user types another message before
+ *  the limit refreshes and hits the limit again on the just-restarted
+ *  subprocess. */
+function restartAfterCreditExhausted(triggerKey: string): void {
+  const now = Date.now();
+  if (lastCreditExhaustedRestartAt !== null
+      && now - lastCreditExhaustedRestartAt < CREDIT_EXHAUSTED_RESTART_COOLDOWN_MS) {
+    logErr(`[CREDIT-RESTART] cooldown active (${now - lastCreditExhaustedRestartAt}ms since last restart, key=${triggerKey}) — skipping subprocess restart, prior restart already cleared SDK state`);
+    return;
   }
-  for (const { key, sessionId } of snapshot) {
-    interruptedSessions.add(sessionId);
-    unregisterSession(key);
-    imageTurnCounts.delete(key);
-  }
-  activeSessionId = "";
-  // Abort any in-flight queries on OTHER sessions so their notification
-  // handlers stop draining the (now-poisoned) SDK queue. Without this,
-  // a mid-stream query on a different session would keep appending text
-  // until session/prompt resolves — and the SDK drain state may corrupt
-  // its tail tokens too. The per-handler abort gate at line ~2527 stops
-  // further notifications from reaching `handleSessionUpdate`; the catch
-  // block at line ~3284 then emits a partial result so Swift unwedges.
-  // The query that fired credit_exhausted (triggerKey) is excluded from
-  // the abort — we're currently inside its handleQuery and its caller is
-  // already finishing the credit_exhausted reporting path.
-  const abortedKeys: string[] = [];
+  lastCreditExhaustedRestartAt = now;
+
+  // Notify Swift for each in-flight collateral query, THEN abort. The order
+  // matters: the abort makes session/prompt throw, hitting the silent-return
+  // branch at line ~3203 ("Query aborted (superseded by new query)"). That
+  // branch is correct for genuine supersession but would leave Swift's busy
+  // flag stuck on a scrub-induced abort. Emitting `error` first means Swift
+  // has already cleared isAILoading by the time the silent-return runs.
+  const collateralKeys: string[] = [];
   for (const [k, ctx] of activeQueries) {
     if (k === triggerKey) continue;
-    if (!ctx.abortController.signal.aborted) {
-      ctx.abortController.abort();
-      abortedKeys.push(k);
+    if (ctx.abortController.signal.aborted) continue;
+    collateralKeys.push(k);
+    const entry = sessions.get(k);
+    if (entry) {
+      sendWithSession(entry.sessionId, {
+        type: "error",
+        message: "Reconnecting after another session ran out of credit. Send your message again to continue.",
+      });
     }
+    ctx.abortController.abort();
   }
-  logErr(`[POISON-SCRUB] credit_exhausted on key=${triggerKey} — scrubbed ${snapshot.length} session(s): ${snapshot.map(s => s.key).join(",")}; aborted ${abortedKeys.length} in-flight quer(y/ies): ${abortedKeys.join(",")}`);
+
+  logErr(`[CREDIT-RESTART] triggered by key=${triggerKey} — restarting ACP subprocess (collateral aborted: ${collateralKeys.length}${collateralKeys.length ? ` [${collateralKeys.join(",")}]` : ""})`);
+
+  // Fire-and-forget: don't block the caller's handleQuery. The acpProcess
+  // exit handler at line ~1066 clears `sessions`/`activeSessionId`/
+  // `isInitialized`, so the next handleQuery transparently does
+  // `session/resume` on the fresh subprocess (transcripts on disk).
+  // restartAcpProcess also kicks off warmup replay in the background.
+  void restartAcpProcess().catch((err) => {
+    logErr(`[CREDIT-RESTART] subprocess restart failed: ${err}`);
+  });
 }
 
 // --- Persistent sessionId → cwd map ---------------------------------------
@@ -1390,15 +1413,27 @@ let interruptRequested = false;
  *    credit_exhausted; every other registered session stays trusted, and
  *    they all silently turn into landmines.
  *
- *  L1 FIX (preventive) — SHIPPED May 11 2026
- *    Confirmed by POISON-DIAG data on May 10 2026: 14/27 STUCK-EMPTY-TURN
- *    events had crossSession=true with p50 ageMs=117s.
- *    Implementation: `scrubAllSessionsAfterPoisoning(triggerKey)` (defined
- *    just below `unregisterSession`) is now called at each of the three
- *    credit_exhausted emit sites. It unregisters every session and adds
- *    each sessionId to `interruptedSessions`, so the existing skip-resume
- *    path at line ~2292 forces every active pop-out's next query through
- *    session/new + priorContext replay.
+ *  L1 FIX REVISED 2026-05-12 — subprocess restart instead of in-memory scrub
+ *    The May 11 `scrubAllSessionsAfterPoisoning` approach worked at preventing
+ *    silent end_turn=0ms cross-session poisoning, but had two follow-on bugs:
+ *      (1) Collateral in-flight queries were aborted with no terminal
+ *          notification to Swift (the silent-return branch at line ~3203
+ *          fires for non-user-interrupt aborts), so pop-outs stayed busy
+ *          forever — even after the limit refreshed.
+ *      (2) Every scrubbed sessionId was flagged in `interruptedSessions`,
+ *          permanently forcing future queries through `session/new` +
+ *          priorContext replay. The user lost the original sessionId,
+ *          prompt cache hits, and full SDK fidelity — a one-shot
+ *          "Session restored" banner replaced what should have been
+ *          seamless continuation.
+ *    Replacement: `restartAfterCreditExhausted(triggerKey)` (defined just
+ *    below `unregisterSession`) sends an `error` to in-flight collateral
+ *    sessions (clears Swift busy), then kills + restarts the ACP subprocess.
+ *    The fresh process has no drain-state poisoning to clear. The next
+ *    query on each session naturally does `session/resume` from the on-disk
+ *    transcript, preserving sessionId and cache fidelity — the same way
+ *    `claude --resume <id>` works in the CLI. A 30s cooldown prevents
+ *    thrashing when the user types again before the limit refreshes.
  *
  *  L2 FIX (defensive) — independent of L1
  *    L2a — SHIPPED 2026-05-12. The recovery preamble in handleQuery
@@ -3271,11 +3306,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
         lastCreditExhaustedAt = Date.now();
         lastCreditExhaustedSessionKey = sessionKey;
-        // Scrub ALL sessions, not just the offending one. The SDK's drain-state
-        // poisoning (see POISON-FIX-PLAN above) leaks across sessions on the
-        // same process, so leaving healthy keys registered turns them into
-        // landmines that fail at end_turn=0ms on their next resume.
-        scrubAllSessionsAfterPoisoning(sessionKey);
+        // Restart the ACP subprocess (see restartAfterCreditExhausted above).
+        // The fresh process clears any SDK drain-state poisoning; the next
+        // query on each session naturally session/resumes from disk.
+        restartAfterCreditExhausted(sessionKey);
         lastApiRetry = null;
         return;
       }
@@ -3381,11 +3415,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
           lastCreditExhaustedAt = Date.now();
           lastCreditExhaustedSessionKey = sessionKey;
-          // Scrub all sessions — see comment at the first credit_exhausted
-          // emit site above. This branch previously left every session
-          // (including the offending one) registered, so the next query on
-          // any key would hit the SDK drain state.
-          scrubAllSessionsAfterPoisoning(sessionKey);
+          // Restart subprocess — see restartAfterCreditExhausted comment.
+          restartAfterCreditExhausted(sessionKey);
         } else {
           sendWithSession(sessionId, { type: "error", message: errMsg });
         }
@@ -3440,10 +3471,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
       lastCreditExhaustedAt = Date.now();
       lastCreditExhaustedSessionKey = incomingSessionKey;
-      // Scrub all sessions — see comment at the first credit_exhausted emit
-      // site above. incomingSessionKey is used here because the inner-scoped
-      // sessionKey is not visible in this outer catch.
-      scrubAllSessionsAfterPoisoning(incomingSessionKey);
+      // Restart subprocess — see restartAfterCreditExhausted comment.
+      // incomingSessionKey is used here because the inner-scoped sessionKey
+      // is not visible in this outer catch.
+      restartAfterCreditExhausted(incomingSessionKey);
       lastApiRetry = null;
       return;
     }
