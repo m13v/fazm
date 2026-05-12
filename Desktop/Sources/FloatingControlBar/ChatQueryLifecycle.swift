@@ -185,14 +185,23 @@ enum ChatQueryLifecycle {
                 }
         )
 
-        // Clear stale suggested replies when ANY new query starts
+        // Clear stale suggested replies when a new query starts on THIS window's
+        // session. Without the session-key filter, a query in any pop-out clears
+        // the choice buttons in every other pop-out (bug: shared @Published on a
+        // single ChatProvider observed by all chat surfaces).
         cancellables.append(
             provider.$queryStartedCount
                 .dropFirst()
                 .receive(on: DispatchQueue.main)
-                .sink { [weak state] _ in
-                    state?.streaming.suggestedReplies = []
-                    state?.streaming.suggestedReplyQuestion = ""
+                .sink { [weak state, weak provider] _ in
+                    guard let state else { return }
+                    let currentKey = sessionKeyProvider?() ?? sessionKey
+                    let startedKey = provider?.queryStartedSessionKey
+                    if let currentKey, let startedKey, currentKey != startedKey {
+                        return
+                    }
+                    state.streaming.suggestedReplies = []
+                    state.streaming.suggestedReplyQuestion = ""
                 }
         )
 

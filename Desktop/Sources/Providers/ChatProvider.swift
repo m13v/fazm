@@ -512,6 +512,10 @@ class ChatProvider: ObservableObject {
     private var pendingBridgeRestart = false
     /// Incremented each time a new query starts (from any source: desktop, phone, etc.)
     @Published var queryStartedCount = 0
+    /// Session key of the most recent query start. Paired with `queryStartedCount` so
+    /// pop-out windows can filter "new query started" signals to their own session
+    /// and not clear another window's suggested-reply buttons.
+    @Published var queryStartedSessionKey: String?
     @Published var isClearing = false
 
     /// When a mode switch is requested while a query is in-flight (`isSending`),
@@ -2871,7 +2875,11 @@ class ChatProvider: ObservableObject {
         sendingSessionKeys.insert(effectiveKey)
         isSending = true
 
-        // Notify observers (e.g. floating bar) that a new query is starting
+        // Notify observers (e.g. floating bar) that a new query is starting.
+        // Set the session key first so subscribers can read it synchronously when
+        // the count increment publishes (both willSets fire on MainActor before
+        // any `.receive(on: .main)` sink runs).
+        queryStartedSessionKey = effectiveKey
         queryStartedCount += 1
 
         // Track the active session key so follow-ups can be chained on the same session

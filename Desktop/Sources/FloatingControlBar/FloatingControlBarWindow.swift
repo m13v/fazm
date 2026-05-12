@@ -1630,14 +1630,6 @@ class FloatingControlBarManager {
             dict["isStreaming"] = currentMessage.isStreaming
         }
 
-        // Debug: expose provider session-sending state to verify the indicator
-        // fix is on the right code path.
-        if let provider = chatProvider {
-            dict["debug_sendingSessionKeys"] = Array(provider.sendingSessionKeys).sorted()
-            dict["debug_isSendingFloating"] = provider.isSending(sessionKey: "floating")
-            dict["debug_providerIsSending"] = provider.isSending
-        }
-
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
            let json = String(data: data, encoding: .utf8) {
             try? json.write(toFile: "/tmp/fazm-control-state.json", atomically: true, encoding: .utf8)

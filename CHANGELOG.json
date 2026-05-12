@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed pop-out chat replying with placeholder text after session recovery"
+    "Fixed follow-up choice buttons disappearing from a pop-out chat when a different pop-out submitted a query",
+    "Fixed thinking indicator in pop-out and floating bar going blank between tool calls during a query"
   ],
   "releases": [
     {
