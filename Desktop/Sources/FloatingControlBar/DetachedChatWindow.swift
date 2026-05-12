@@ -1134,7 +1134,13 @@ class DetachedChatWindowController {
                 // @Observable and don't need this.
                 let observer = MessageObserver(message: aiMessage) { [weak self, weak state, weak provider] msg in
                     guard let state else { return }
-                    let newLoading = msg.isStreaming
+                    // OR with sendingSessionKeys so the indicator stays on during
+                    // the gap between agent turns (tool result roundtrips), where
+                    // msg.isStreaming briefly looks false but the query is still
+                    // live in ChatProvider. See pop-out "ball-on-AI" regression.
+                    let key = self?.entries[winId]?.sessionKey ?? currentKey
+                    let isSessionSending = key.flatMap { provider?.isSending(sessionKey: $0) } ?? false
+                    let newLoading = msg.isStreaming || isSessionSending
                     if state.streaming.isAILoading != newLoading {
                         state.streaming.isAILoading = newLoading
                     }
@@ -1162,6 +1168,25 @@ class DetachedChatWindowController {
                 self.entries[winId]?.messageObserver = observer
             }
         entries[winId]?.chatCancellable = cancellable
+
+        // Independent subscription on sendingSessionKeys. MessageObserver only
+        // fires on message mutations, so a session-state flip with no message
+        // mutation (e.g. final completion when isStreaming was already false)
+        // would leave isAILoading stale. This sink recomputes the flag whenever
+        // the set changes.
+        let sendingSub = provider.$sendingSessionKeys
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak state] keys in
+                guard let self, let state else { return }
+                let key = self.entries[winId]?.sessionKey ?? initialKey
+                let isSessionSending = key.map { keys.contains($0) } ?? false
+                let msgStreaming = state.streaming.currentAIMessage?.isStreaming ?? false
+                let newLoading = msgStreaming || isSessionSending
+                if state.streaming.isAILoading != newLoading {
+                    state.streaming.isAILoading = newLoading
+                }
+            }
+        entries[winId]?.sharedProviderCancellables.append(sendingSub)
     }
 
     /// Reset the per-window safety watchdog.
