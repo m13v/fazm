@@ -3159,8 +3159,7 @@ class ChatProvider: ObservableObject {
             }
             let toolCallHandler: ACPBridge.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                await MainActor.run { ChatToolExecutor.activeSessionKey = sessionKey }
-                let result = await ChatToolExecutor.execute(toolCall)
+                let result = await ChatToolExecutor.execute(toolCall, sessionKey: sessionKey)
                 log("Fazm tool \(name) executed for callId=\(callId)")
                 await MainActor.run { toolResults[name] = result }
                 return result
