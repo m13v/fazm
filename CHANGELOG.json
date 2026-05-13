@@ -1,10 +1,15 @@
 {
-  "unreleased": [
-    "Added timeout and Cancel button to Google sign-in so the app no longer hangs when the OAuth browser tab is closed without completing",
-    "Fixed stale subscription state lingering after sign-out; cached subscription status is now cleared so the next account does not inherit the previous user's entitlements",
-    "Detect silently-dead Task subagents and auto-cancel the stuck turn instead of hanging the pop-out forever"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.12",
+      "date": "2026-05-13",
+      "changes": [
+        "Added timeout and Cancel button to Google sign-in so the app no longer hangs when the OAuth browser tab is closed without completing",
+        "Fixed stale subscription state lingering after sign-out; cached subscription status is now cleared so the next account does not inherit the previous user's entitlements",
+        "Detect silently-dead Task subagents and auto-cancel the stuck turn instead of hanging the pop-out forever"
+      ]
+    },
     {
       "version": "2.9.10",
       "date": "2026-05-13",
