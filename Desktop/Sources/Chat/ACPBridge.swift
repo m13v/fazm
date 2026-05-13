@@ -215,6 +215,11 @@ actor ACPBridge {
     case codexLoginUrl(url: String)
     case codexLoginComplete
     case codexLoginError(error: String)
+    /// Slash command list advertised by the agent, forwarded via ACP
+    /// `available_commands_update`. Drives the input-field popover.
+    case availableCommandsUpdate(commands: [AvailableCommand])
+    /// Confirmation that `session/fork` succeeded upstream.
+    case sessionForked(fromSessionId: String, toSessionId: String, fromSessionKey: String, toSessionKey: String)
   }
 
   // MARK: - Configuration
@@ -261,6 +266,23 @@ actor ACPBridge {
   /// Called when the bridge finishes pre-warming sessions (success or failure).
   /// Set in ChatProvider.ensureBridgeStarted to fire `bridge_warmup_ready`.
   var onWarmupComplete: ((_ durationMs: Double, _ sessionKeys: [String], _ ok: Bool, _ error: String?) -> Void)?
+  /// Called when the agent updates its slash-command list (via ACP
+  /// `available_commands_update`). Drives the slash-command popover in the
+  /// input fields. Scoped by sessionKey so each pop-out can render its own
+  /// command set independently.
+  var onAvailableCommandsUpdate: ((_ sessionKey: String?, _ commands: [AvailableCommand]) -> Void)?
+  /// Called when a `session/fork` outbound succeeds. Carries both ends of the
+  /// branch so the UI can pivot to the new session while keeping the source
+  /// session resumable.
+  var onSessionForked: ((_ fromSessionId: String, _ toSessionId: String, _ fromSessionKey: String, _ toSessionKey: String) -> Void)?
+
+  /// A slash command advertised by the agent. Mirrors ACP's `AvailableCommand`
+  /// schema. Rendered in the input-field popover when the user types `/`.
+  struct AvailableCommand: Equatable, Sendable {
+    let name: String          // e.g. "compact" (no leading slash)
+    let description: String
+    let inputHint: String?    // optional argument hint, e.g. "[focus]"
+  }
 
   func setChatObserverPollHandler(_ handler: @escaping @Sendable () -> Void) {
     self.onChatObserverPoll = handler
@@ -751,6 +773,24 @@ actor ACPBridge {
   func transferSession(fromKey: String, toKey: String) {
     guard isRunning else { return }
     let msg: [String: Any] = ["type": "transferSession", "fromKey": fromKey, "toKey": toKey]
+    if let data = try? JSONSerialization.data(withJSONObject: msg),
+      let str = String(data: data, encoding: .utf8)
+    {
+      sendLine(str)
+    }
+  }
+
+  /// Fork the active session under `fromKey` into a new branch under `toKey`.
+  /// The branch starts at the end of the source conversation; the source
+  /// session is left intact and resumable. The bridge replies with a
+  /// `session_forked` event that fires `onSessionForked` so the UI can
+  /// pivot to the new chat. `cwd` and `model` default to the source's
+  /// values when omitted.
+  func forkSession(fromKey: String, toKey: String, cwd: String? = nil, model: String? = nil) {
+    guard isRunning else { return }
+    var msg: [String: Any] = ["type": "forkSession", "fromSessionKey": fromKey, "toSessionKey": toKey]
+    if let cwd = cwd { msg["cwd"] = cwd }
+    if let model = model { msg["model"] = model }
     if let data = try? JSONSerialization.data(withJSONObject: msg),
       let str = String(data: data, encoding: .utf8)
     {
@@ -1463,6 +1503,23 @@ actor ACPBridge {
       let error = dict["error"] as? String ?? "Unknown error"
       return .codexLoginError(error: error)
 
+    case "available_commands_update":
+      let rawCommands = dict["commands"] as? [[String: Any]] ?? []
+      let parsed: [AvailableCommand] = rawCommands.compactMap { entry in
+        guard let name = entry["name"] as? String, !name.isEmpty else { return nil }
+        let description = entry["description"] as? String ?? ""
+        let inputHint = entry["inputHint"] as? String
+        return AvailableCommand(name: name, description: description, inputHint: inputHint)
+      }
+      return .availableCommandsUpdate(commands: parsed)
+
+    case "session_forked":
+      let fromSid = dict["fromSessionId"] as? String ?? ""
+      let toSid = dict["toSessionId"] as? String ?? ""
+      let fromKey = dict["fromSessionKey"] as? String ?? ""
+      let toKey = dict["toSessionKey"] as? String ?? ""
+      return .sessionForked(fromSessionId: fromSid, toSessionId: toSid, fromSessionKey: fromKey, toSessionKey: toKey)
+
     default:
       log("ACPBridge: unknown message type: \(type)")
       return nil
@@ -1603,6 +1660,17 @@ actor ACPBridge {
     case .codexLoginError(let error):
       log("ACPBridge: received codex_login_error: \(error)")
       onCodexLoginError?(error)
+      return
+    case .availableCommandsUpdate(let commands):
+      log("ACPBridge: received available_commands_update sessionKey=\(sessionKey ?? "nil") count=\(commands.count)")
+      onAvailableCommandsUpdate?(sessionKey, commands)
+      return
+    case .sessionForked(let fromSid, let toSid, let fromKey, let toKey):
+      log("ACPBridge: received session_forked \(fromSid) -> \(toSid) (key \(fromKey) -> \(toKey))")
+      // Track the new session in our reverse map so subsequent inbound
+      // messages without a sessionKey can still be routed.
+      sessionIdToKey[toSid] = toKey
+      onSessionForked?(fromSid, toSid, fromKey, toKey)
       return
     case .toolUse(let callId, let name, let input):
       // If a per-session query is waiting for this tool call, let it fall through
