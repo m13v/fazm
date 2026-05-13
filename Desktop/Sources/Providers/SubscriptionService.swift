@@ -128,6 +128,16 @@ final class SubscriptionService {
         return !isActive
     }
 
+    /// Clear cached subscription state on sign-out so the next user doesn't
+    /// inherit the previous user's `isActive` flag. The next sign-in's
+    /// `refreshStatus()` call will repopulate from the backend.
+    func resetForSignOut() {
+        log("SubscriptionService: resetting cached state for sign-out")
+        isActive = false
+        status = "none"
+        currentPeriodEnd = nil
+    }
+
     private init() {
         self.backendUrl = Self.env("FAZM_BACKEND_URL").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         self.deviceId = Self.getDeviceId()
