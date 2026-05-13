@@ -529,6 +529,12 @@ class ChatProvider: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
     @Published var isSending = false
+    /// Slash-command list advertised by the agent via ACP
+    /// `available_commands_update`. Drives the slash-command popover in the
+    /// chat input fields. Empty until the first session sends an update —
+    /// guard popover rendering on `!availableCommands.isEmpty` so we don't
+    /// surface an empty palette before the agent has spoken.
+    @Published var availableCommands: [ACPBridge.AvailableCommand] = []
     /// Per-session send state. Enables concurrent queries across sessions
     /// (pop-out windows) while preserving the global `isSending` for legacy bindings.
     @Published private(set) var sendingSessionKeys: Set<String> = []
@@ -1356,6 +1362,17 @@ class ChatProvider: ObservableObject {
                     ShortcutSettings.shared.updateModels(models)
                 }
             }
+            // Slash-command list — agent advertises this via ACP
+            // `available_commands_update`. Drives the input-field popover.
+            // sessionKey is currently ignored (the command set is effectively
+            // global across floating + detached sessions); revisit if a future
+            // agent surfaces per-session command differences.
+            await acpBridge.setAvailableCommandsUpdateHandler { [weak self] _, commands in
+                Task { @MainActor [weak self] in
+                    self?.availableCommands = commands
+                    SlashCommandRegistry.shared.commands = commands
+                }
+            }
             // Phase 3.2 — codex backend probe result handler. Updates the
             // CodexBackendManager singleton; the SettingsPage subsection and
             // model picker observe it.
@@ -1544,6 +1561,28 @@ class ChatProvider: ObservableObject {
             pendingFloatingResume = nil
             // Only remove floating-session messages; preserve detached-session messages
             // so in-flight queries in popped-out windows aren't destroyed.
+            messages.removeAll { ($0.sessionKey ?? "floating") == "floating" }
+            pendingMessages.removeAll { ($0.sessionKey ?? "floating") == "floating" }
+            floatingChatSessionId = UUID().uuidString
+        }
+    }
+
+    /// Fork a named ACP session in place: the bridge calls `session/fork` on
+    /// the live session under `key`, unregisters the source, and registers
+    /// the new branch under the same key. The agent retains the prior
+    /// conversation as context for the next prompt; the source session's
+    /// `sessionId` stays alive on disk and is reachable via Conversation
+    /// History so neither branch is destroyed.
+    ///
+    /// UI side mirrors `resetSession`: clear the per-key message feed so the
+    /// user sees a fresh prompt. We do NOT touch the persisted-session-id
+    /// chain because the new session is a *resumable* branch, not a new one;
+    /// subsequent prompts continue to resume it after a bridge restart.
+    func forkSession(key: String) async {
+        await acpBridge.forkSession(fromKey: key, toKey: key)
+        if key == "floating" {
+            UserDefaults.standard.set(true, forKey: Self.floatingChatClearedKey)
+            pendingFloatingResume = nil
             messages.removeAll { ($0.sessionKey ?? "floating") == "floating" }
             pendingMessages.removeAll { ($0.sessionKey ?? "floating") == "floating" }
             floatingChatSessionId = UUID().uuidString
