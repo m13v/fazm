@@ -53,9 +53,19 @@ pub async fn get_access_token_with_scope(
         .timeout(std::time::Duration::from_secs(5))
         .build()?;
 
-    // 1. Metadata server (preferred in Cloud Run)
+    // 1. Metadata server (preferred in Cloud Run).
+    //
+    //    Important: we do NOT pass `?scopes=` here. Cloud Run service accounts
+    //    are provisioned with the `cloud-platform` scope by default, which
+    //    encompasses both Firestore (datastore) and Identity Toolkit (firebase).
+    //    Passing `?scopes=https://...` to the metadata server on Cloud Run can
+    //    return a token that fails OAuth scope checks with 403 "Insufficient
+    //    Permission" (e.g. when calling Identity Toolkit Admin endpoints). The
+    //    default broad token works for every Google API the backend touches.
+    //
+    //    The `scope` argument is still honored in the JWT-bearer fallback below.
     let meta_result = client
-        .get(format!("{METADATA_TOKEN_URL}?scopes={scope}"))
+        .get(METADATA_TOKEN_URL)
         .header("Metadata-Flavor", "Google")
         .send()
         .await;
