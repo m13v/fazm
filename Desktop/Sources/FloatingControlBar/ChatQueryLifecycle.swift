@@ -73,7 +73,8 @@ enum ChatQueryLifecycle {
                 state.showUpgradeClaudeButton = true
             }
 
-            let hasContent = !state.streaming.aiResponseText.isEmpty || !(state.streaming.currentAIMessage?.contentBlocks.isEmpty ?? true)
+            let hasBlocks = !(state.streaming.currentAIMessage?.contentBlocks.isEmpty ?? true)
+            let hasContent = !state.streaming.aiResponseText.isEmpty || hasBlocks
             let suffix = "\n\n⚠️ \(errorText)"
             if state.streaming.currentAIMessage != nil && hasContent {
                 // ChatProvider's catch block also appends this suffix to the underlying
@@ -83,6 +84,20 @@ enum ChatQueryLifecycle {
                 if !(state.streaming.currentAIMessage?.text.hasSuffix(suffix) ?? false) {
                     log("ChatQueryLifecycle: appending error to partial response (\(state.streaming.aiResponseText.count) chars): \(errorText.prefix(80))")
                     state.streaming.currentAIMessage?.text += suffix
+                }
+                // AIResponseView renders contentBlocks when non-empty and ignores .text.
+                // Inject the warning as a text block too so it actually shows in the UI.
+                if hasBlocks {
+                    let warningBlockText = "⚠️ \(errorText)"
+                    let alreadyShown = state.streaming.currentAIMessage?.contentBlocks.contains { block in
+                        if case .text(_, let t) = block { return t == warningBlockText }
+                        return false
+                    } ?? false
+                    if !alreadyShown {
+                        state.streaming.currentAIMessage?.contentBlocks.append(
+                            .text(id: "rate-limit-warning-\(UUID().uuidString)", text: warningBlockText)
+                        )
+                    }
                 }
             } else {
                 log("ChatQueryLifecycle: creating error-only AI message: \(errorText.prefix(80))")
