@@ -1489,8 +1489,12 @@ let interruptRequested = false;
  *    until enough bytes arrive to disambiguate against every known
  *    opener. Coverage in scripts/test-strip.mjs.
  *
- *  [POISON-DIAG] — diagnostic state for the L1 hypothesis. Read at the
- *  [STUCK-EMPTY-TURN] log; written at every credit_exhausted emit site. */
+ *  [POISON-DIAG] — diagnostic state written at every credit_exhausted emit
+ *  site. Was originally read by the [STUCK-EMPTY-TURN] empty-end_turn
+ *  recovery (removed: ACP defines end_turn as success). Kept because
+ *  restartAcpAfterCreditExhausted uses lastCreditExhaustedRestartAt to
+ *  rate-limit subprocess restarts, and the *At/*SessionKey fields remain
+ *  useful for any future cross-session poisoning diagnostic. */
 let lastCreditExhaustedAt: number | null = null;
 let lastCreditExhaustedSessionKey: string | null = null;
 /** Sessions that were interrupted (timeout/cancel) and may be in a broken state.
@@ -2639,8 +2643,9 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       const MAX_REPLAY = 20;
       let replay = ctxEntries.slice(-MAX_REPLAY);
       // Drop ALL trailing assistant turns. When recovery fires, the prior
-      // assistant turn is by definition unreliable: it was either truncated
-      // ([STUCK-EMPTY-TURN]), interrupted, or stuck. Even when its text looks
+      // assistant turn is by definition unreliable: it was either interrupted
+      // mid-stream or replayed stale chunks from a previous turn. Even when
+      // its text looks
       // plausible (normal prose, no toxic markers), replaying it primes the
       // recovery model so heavily that a low-information new message like
       // "Hello" gets a continuation of the prior topic instead of a direct
@@ -2718,9 +2723,13 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
 
       // User-facing reason text. Tailored per cause so the inline notice in
       // the chat tells the user WHY the session was reset, not just that it was.
+      // `stuck_session` now covers only SDK-state-corruption cases: a session
+      // that was interrupted mid-stream, or one that replayed stale chunks from
+      // a previous turn. Empty end_turn no longer routes here — per ACP it is
+      // a successful turn and is delivered to the UI as-is.
       const reasonText =
         recoveryCause === "stuck_session"
-          ? "The previous response came back empty, so I restarted this chat."
+          ? "The previous session's response was unreliable, so I restarted this chat."
           : "The upstream chat session expired and was replaced.";
       sendWithSession(sessionId, {
         type: "session_expired",
@@ -3104,71 +3113,35 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           return;
         }
 
-        // Detect empty-assistant-turn: session/prompt resolved with stopReason=end_turn
-        // but the agent never produced any text. Three flavors:
-        //   (a) "Fast stuck": zero notifications, zero output tokens, returned in <2s.
-        //       Classic poisoned-session pattern after a prior credit_exhausted left
-        //       the ACP SDK in a drain state.
-        //   (b) "Slow empty": some notifications fired (tool calls, thinking), but the
-        //       agent ended without producing any text. From the user's POV the chat
-        //       looks frozen. Most often also the result of a half-poisoned session
-        //       carried over from a previous error (rate limit, network blip).
-        //   (c) "Replay-recovery empty" (May 3 2026): a fresh session was created
-        //       via priorContext replay (recoveryCause set), and the model still
-        //       returned end_turn with no text. Usually means the replay framing
-        //       made the model think the work was already done. The recovery path
-        //       below trims trailing-empty assistant turns and re-runs with the
-        //       stronger preamble; almost always succeeds on the second pass.
+        // Empty assistant turn (fullText.length === 0 + stopReason=end_turn):
+        // we trust ACP semantics here. Per the spec, `end_turn` is a success
+        // reason — "the language model finishes responding without requesting
+        // more tools" — and the schema explicitly defines it as "the turn
+        // ended successfully." There is no protocol-level distinction between
+        // a verbose end_turn and a content-less one; both are valid outcomes.
         //
-        // For ALL flavors the recovery is the same: drop the dead session, force a
-        // fresh session/new, replay priorContext as a preamble, and emit a
-        // session_expired event so the UI renders a "I restarted this chat" notice.
-        // We do NOT try to session/resume the same id again — if the SDK is poisoned,
-        // re-resuming usually produces the same empty turn and we'd burn a retry.
+        // Previously this branch detected empty end_turn and force-spawned a
+        // fresh session with priorContext replay, on the theory that empty
+        // content meant the SDK was poisoned (e.g. drain state after a prior
+        // credit_exhausted). That heuristic was a) not in the protocol, and
+        // b) lossy: the replay carries text only, so MCP tool state (active
+        // browser tab, VM context, etc.) is destroyed and the new session
+        // operates with no knowledge of the work in flight. The replay
+        // preamble itself has also been a steady source of model-pattern-
+        // matching bugs (L2a/L2b May 12 2026 incidents).
         //
-        // The `!isNewSession || recoveryCause` clause used to be `!isNewSession`,
-        // which silently skipped recovery on the replay path (where isNewSession is
-        // always true). That bug shipped empty results to the UI as "Failed to get
-        // a response" even though the user paid for the call. Fixed May 3 2026.
-        const isEmptyAssistantTurn = (
-          fullText.length === 0 &&
-          promptResult.stopReason === "end_turn" &&
-          (!isNewSession || recoveryCause !== null) &&
-          // Cap at one cascade per user prompt (May 4 2026): previously this
-          // used `< MAX_QUERY_RETRIES` (=2) which let recovery sessions trigger
-          // additional recoveries when their preamble framing produced another
-          // empty turn. Combined with the toxic-trailing-assistant filter
-          // (lines 2125+), one recovery now reliably succeeds; if it doesn't,
-          // delivering an empty result is preferable to spawning a third
-          // session that inherits a polluted priorContext.
-          _retryDepth < 1
-        );
-        if (isEmptyAssistantTurn) {
-          // [POISON-DIAG] If a different sessionKey hit credit_exhausted shortly
-          // before this stuck turn, that's evidence for the cross-session
-          // poisoning hypothesis (the L1 fix would unregister-all on credit
-          // event). Log so we can confirm with field data before changing behavior.
-          const poisonAgeMs = lastCreditExhaustedAt != null ? Date.now() - lastCreditExhaustedAt : null;
-          const poisonCrossSession = lastCreditExhaustedSessionKey != null && lastCreditExhaustedSessionKey !== sessionKey;
-          logErr(`[STUCK-EMPTY-TURN] Empty end_turn after ${promptDurationMs}ms (notifications=${notificationCount}, outputTokens=${outputTokens}) — session ${sessionId} is poisoned. Forcing fresh session with priorContext replay (depth=${_retryDepth}). [POISON-DIAG] lastCreditExhausted: ageMs=${poisonAgeMs ?? "never"} key=${lastCreditExhaustedSessionKey ?? "none"} currentKey=${sessionKey} crossSession=${poisonCrossSession}`);
-          const stuckSessionId = sessionId;
-          // Silence in-flight notification draining (see INTERRUPT-REPLAY above).
-          abortController.abort();
-          unregisterSession(sessionKey);
-          imageTurnCounts.delete(sessionKey);
-          activeSessionId = "";
-          for (const name of pendingTools) {
-            sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
-          }
-          pendingTools.length = 0;
-          clearToolTimersForSession(sessionId);
-          // Skip resume entirely; recurse with stuck-session marker so the next
-          // call goes straight to session/new + priorContext replay + session_expired
-          // notice. This is the recovery path the user is supposed to see in the chat.
-          msg.resume = undefined;
-          msg._priorStuckSessionId = stuckSessionId;
-          return handleQuery(msg, _retryDepth + 1);
-        }
+        // If the underlying SDK actually has a drain-state bug after
+        // credit_exhausted, the fix belongs upstream (or in the
+        // credit_exhausted handler that already restarts the subprocess at
+        // line 1245+), not in the success-path of session/prompt. An empty
+        // assistant turn now flows through to the UI as an empty result,
+        // which is an honest representation of what the agent returned.
+        //
+        // INTERRUPT-REPLAY and DEFERRED-REPLAY above remain — they catch
+        // SDK-state-corruption cases where the SDK lies about what happened
+        // (replays stale chunks from a cancelled prior turn, completes in
+        // <50ms, etc.). Those are protocol-contract violations, not empty
+        // successes, so the recovery there is justified.
 
         // Increment image turn counter so we know when to stop including screenshots.
         // Image turn counting removed — screenshots are now read by the model via Read tool
