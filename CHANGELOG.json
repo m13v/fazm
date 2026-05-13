@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed chat scroll jumping when follow-up suggestions appear after an AI response"
+  ],
   "releases": [
     {
       "version": "2.9.12",
