@@ -2651,6 +2651,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       sendWithSession,
       getProvider: getCodexProvider,
       buildMcpServers,
+      registerSession,
     });
     return;
   }
