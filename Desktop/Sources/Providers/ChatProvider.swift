@@ -345,6 +345,35 @@ final class ChatMessage: Identifiable, Equatable {
         self.sessionKey = sessionKey
         self.attachments = attachments
     }
+
+    /// Plain-text representation suitable for the clipboard. Falls back to
+    /// content-block text when `text` is empty (e.g. system-event cards persist
+    /// their payload in contentBlocks and intentionally leave `text` blank).
+    var copyableText: String {
+        if !text.isEmpty { return text }
+        let parts: [String] = contentBlocks.compactMap { block in
+            switch block {
+            case .text(_, let t):
+                return t.isEmpty ? nil : t
+            case .thinking(_, let t):
+                return t.isEmpty ? nil : t
+            case .systemEvent(_, let event):
+                var s = event.title + "\n" + event.body
+                if !event.details.isEmpty {
+                    let lines = event.details.sorted(by: { $0.key < $1.key }).map { "\($0.key): \($0.value)" }
+                    s += "\n" + lines.joined(separator: "\n")
+                }
+                return s
+            case .discoveryCard(_, let title, _, let fullText):
+                return title + "\n" + fullText
+            case .observerCard(_, _, _, let content, _, _):
+                return content
+            case .toolCall:
+                return nil
+            }
+        }
+        return parts.joined(separator: "\n\n")
+    }
 }
 
 enum ChatSender: Equatable {
@@ -3516,6 +3545,34 @@ class ChatProvider: ObservableObject {
                                 Task {
                                     await ChatMessageStore.saveMessage(notice, context: persistContext, sessionId: newSessionId)
                                 }
+                            }
+                            // Mirror the card into the live window state. Pop-outs and the
+                            // floating bar render from their own observable chatHistory /
+                            // currentAIMessage refs (FloatingControlBarState), not from
+                            // self.messages — without this, the card only appears after a
+                            // relaunch, when ChatMessageStore reloads the persisted row.
+                            // Insert the notice as its own zero-question exchange just
+                            // before the in-flight exchange so it reads in conversation
+                            // order, then wipe the live AI message's stale content so the
+                            // recovered session's stream fills an empty bubble.
+                            @MainActor
+                            func injectIntoLiveState(_ st: FloatingControlBarState) {
+                                st.streaming.chatHistory.append(
+                                    FloatingChatExchange(question: "", aiMessage: notice)
+                                )
+                                if st.streaming.currentAIMessage?.id == aiMessageId {
+                                    st.streaming.currentAIMessage?.text = ""
+                                    st.streaming.currentAIMessage?.contentBlocks = []
+                                }
+                            }
+                            if let key = sessionKey, key.hasPrefix("detached-") {
+                                for entry in DetachedChatWindowController.shared.entriesSnapshot()
+                                    where entry.sessionKey == key {
+                                    injectIntoLiveState(entry.window.state)
+                                }
+                            } else if sessionKey == "floating" || sessionKey == nil,
+                                      let barState = FloatingControlBarManager.shared.barState {
+                                injectIntoLiveState(barState)
                             }
                         case .toolHangCanceled(let toolName, _, let durationSeconds, let reason):
                             log("ChatProvider: tool_hang_canceled tool=\(toolName) duration=\(durationSeconds)s — surfacing system card")
