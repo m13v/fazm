@@ -285,6 +285,237 @@ function clearToolTimersForSession(sessionId: string | undefined): void {
     activeToolTimers.delete(id);
     inFlightTools.delete(id);
   }
+  // Tasks (Task subagents) are tracked separately — clear their timers too
+  // when the parent session ends, so dead subagents from prior turns don't
+  // fire on a fresh turn.
+  clearTaskTimersForSession(sessionId);
+}
+
+// --- Subagent task watchdog (Task tool / local_agent) ---
+//
+// Why this exists: when the model invokes the `Task` tool to spawn a
+// subagent, the Claude Agent SDK holds the parent `prompt()` open until the
+// subagent fires its `task_notification`. If the subagent dies silently
+// (process killed, crashed mid-init, hit a path that exits without writing
+// its `.output` file), no notification ever arrives. The SDK's
+// `hasRunningDeferrableTasks` keeps returning true forever, `state` never
+// transitions to `idle`, the ACP adapter's `prompt()` loop never returns,
+// and the bridge's `await acpRequest("session/prompt", …)` hangs. From the
+// UI: pop-out spinner forever, no AI response saved, no recovery.
+//
+// This is a known upstream gap — see agentclientprotocol/claude-agent-acp
+// #336 / #497 / #603 / #630 and anthropics/claude-code #44783 / #58637.
+// No upstream fix has shipped (as of May 13 2026). Maintainer's recommended
+// workaround is "don't use background tasks for long work" — not usable
+// here because subagents are a default tool.
+//
+// Why this is liveness-aware (and not a fixed timer): we already tried
+// blanket timers twice — the 60s Swift hang detector (removed May 3) and
+// the per-tool auto-cancel (disabled May 12). Both killed legitimate slow
+// work because they fired on stream silence alone. This watchdog only
+// declares the subagent dead when there's positive evidence: the
+// `.output` file the SDK creates for the subagent is 0 bytes AND has not
+// been touched for > TASK_STALE_THRESHOLD_MS. If the file is growing (or
+// recently touched), we re-arm and check again later — so a legitimate
+// 90-minute subagent run won't get killed.
+//
+// Path layout per the Claude Agent SDK:
+//   /private/tmp/claude-501/<cwd-with-slashes-replaced-by-dashes>/<subagent-session-uuid>/tasks/<task-id>.output
+//
+// We don't have the cwd or subagent session UUID handy in the bridge, so
+// we glob across the tree by task-id. The set is small (tens of dirs).
+
+interface TrackedTask {
+  taskId: string;
+  description: string;
+  sessionId: string;
+  sessionKey: string;
+  startedAt: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const activeTaskTimers = new Map<string, TrackedTask>();
+
+// How often to check whether a still-tracked subagent task is alive.
+// Conservative — re-arms after each "still alive" check, so this is the
+// granularity of the death check, not a hard deadline.
+const TASK_LIVENESS_CHECK_MS = 30 * 60 * 1000; // 30 min
+
+// The .output file must be 0 bytes AND its mtime older than this for us
+// to declare the subagent dead. 10 min gives plenty of headroom for a
+// slow-starting subagent that takes a while before its first write.
+const TASK_STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 min
+
+// User-configurable override (seconds) — set to 0 to disable the watchdog.
+const taskWatchdogOverrideSec = process.env.FAZM_TASK_LIVENESS_CHECK_SECONDS
+  ? parseInt(process.env.FAZM_TASK_LIVENESS_CHECK_SECONDS, 10)
+  : 0;
+const taskWatchdogDisabled = taskWatchdogOverrideSec < 0;
+
+function getTaskLivenessCheckMs(): number {
+  if (taskWatchdogOverrideSec > 0) return taskWatchdogOverrideSec * 1000;
+  return TASK_LIVENESS_CHECK_MS;
+}
+
+const CLAUDE_TMP_ROOT = "/private/tmp/claude-501";
+
+// Walk /private/tmp/claude-501/*/*/tasks/<taskId>.output and return the first
+// match. Cheap — directory count is small. Returns null if not found.
+function findTaskOutputFile(taskId: string): string | null {
+  if (!taskId) return null;
+  let cwdDirs: string[];
+  try {
+    cwdDirs = readdirSync(CLAUDE_TMP_ROOT);
+  } catch {
+    return null;
+  }
+  const target = `${taskId}.output`;
+  for (const cwd of cwdDirs) {
+    const cwdPath = join(CLAUDE_TMP_ROOT, cwd);
+    let sessionDirs: string[];
+    try {
+      sessionDirs = readdirSync(cwdPath);
+    } catch {
+      continue;
+    }
+    for (const session of sessionDirs) {
+      const candidate = join(cwdPath, session, "tasks", target);
+      try {
+        statSync(candidate);
+        return candidate;
+      } catch {
+        // not in this session dir
+      }
+    }
+  }
+  return null;
+}
+
+// Returns one of: "alive" (re-arm), "dead" (cancel), "unknown" (no file yet
+// AND task has been tracked for less than TASK_STALE_THRESHOLD_MS — re-arm
+// but only for one more cycle; on the second unknown we declare dead).
+function checkTaskFileLiveness(taskId: string, trackedSinceMs: number): { state: "alive" | "dead" | "unknown"; reason: string } {
+  const file = findTaskOutputFile(taskId);
+  if (!file) {
+    const ageMs = Date.now() - trackedSinceMs;
+    if (ageMs > TASK_STALE_THRESHOLD_MS) {
+      return { state: "dead", reason: `no .output file found ${Math.round(ageMs / 1000)}s after task_started` };
+    }
+    return { state: "unknown", reason: "no .output file yet (still warming up)" };
+  }
+  let stats;
+  try {
+    stats = statSync(file);
+  } catch {
+    return { state: "unknown", reason: "stat failed on .output file" };
+  }
+  const ageMs = Date.now() - stats.mtimeMs;
+  if (stats.size === 0 && ageMs > TASK_STALE_THRESHOLD_MS) {
+    return { state: "dead", reason: `.output is 0 bytes, untouched for ${Math.round(ageMs / 1000)}s` };
+  }
+  return { state: "alive", reason: stats.size > 0 ? `.output has ${stats.size} bytes` : `.output empty but mtime ${Math.round(ageMs / 1000)}s ago` };
+}
+
+function startTaskTimer(
+  taskId: string,
+  description: string,
+  sessionId: string,
+  sessionKey: string,
+): void {
+  if (taskWatchdogDisabled) return;
+  if (!taskId || !sessionId || !sessionKey) return;
+  clearTaskTimer(taskId);
+
+  const startedAt = Date.now();
+  const armTimer = (): ReturnType<typeof setTimeout> =>
+    setTimeout(() => {
+      // The timer fired without a matching task_notification — run the
+      // liveness check before doing anything destructive.
+      const tracked = activeTaskTimers.get(taskId);
+      if (!tracked) return; // already cleared (race)
+
+      const liveness = checkTaskFileLiveness(taskId, tracked.startedAt);
+
+      if (liveness.state !== "dead") {
+        logErr(
+          `Task watchdog: ${taskId} still tracked after ${Math.round((Date.now() - tracked.startedAt) / 1000)}s — ` +
+            `liveness=${liveness.state} (${liveness.reason}); re-arming`,
+        );
+        tracked.timer = armTimer();
+        return;
+      }
+
+      // Declared dead — same cleanup path as the (currently disabled) tool
+      // watchdog. Abort the in-flight query, notify the SDK to cancel,
+      // unregister the session so the next prompt forces a fresh session
+      // via priorContext replay, and emit a structured event so the UI can
+      // surface "task hung, turn canceled" instead of an opaque silence.
+      activeTaskTimers.delete(taskId);
+
+      const ctx = activeQueries.get(tracked.sessionKey);
+      if (!ctx) {
+        logErr(`Task watchdog: ${taskId} dead (${liveness.reason}) but no active query for ${tracked.sessionKey} — leaving alone`);
+        return;
+      }
+      if (ctx.interruptRequested) {
+        logErr(`Task watchdog: ${taskId} dead (${liveness.reason}) — session ${tracked.sessionKey} already interrupted, skipping`);
+        return;
+      }
+
+      const elapsedSec = (Date.now() - tracked.startedAt) / 1000;
+      logErr(
+        `Task watchdog auto-interrupting session ${tracked.sessionId} (key=${tracked.sessionKey}) ` +
+          `due to dead subagent task ${taskId} "${tracked.description}" (${liveness.reason}, ` +
+          `elapsed=${Math.round(elapsedSec)}s) — aborting query and forcing fresh session next prompt`,
+      );
+      ctx.interruptRequested = true;
+      ctx.abortController.abort();
+      acpNotify("session/cancel", { sessionId: ctx.sessionId });
+      interruptedSessions.add(ctx.sessionId);
+      unregisterSession(tracked.sessionKey);
+      imageTurnCounts.delete(tracked.sessionKey);
+
+      sendWithSession(tracked.sessionId, {
+        type: "task_hang_canceled",
+        taskId,
+        description: tracked.description,
+        durationSeconds: elapsedSec,
+        reason:
+          `The background task "${tracked.description}" appears to have died ` +
+          `silently (${liveness.reason}), so I canceled this turn. ` +
+          `You can retry — the next prompt will start a fresh session.`,
+        sessionKey: tracked.sessionKey,
+      });
+    }, getTaskLivenessCheckMs());
+
+  activeTaskTimers.set(taskId, {
+    taskId,
+    description,
+    sessionId,
+    sessionKey,
+    startedAt,
+    timer: armTimer(),
+  });
+}
+
+function clearTaskTimer(taskId: string): void {
+  const tracked = activeTaskTimers.get(taskId);
+  if (tracked) {
+    clearTimeout(tracked.timer);
+    activeTaskTimers.delete(taskId);
+  }
+}
+
+function clearTaskTimersForSession(sessionId: string | undefined): void {
+  if (!sessionId) return;
+  const toRemove: string[] = [];
+  for (const [id, tracked] of activeTaskTimers) {
+    if (tracked.sessionId === sessionId) {
+      clearTimeout(tracked.timer);
+      toRemove.push(id);
+    }
+  }
+  for (const id of toRemove) activeTaskTimers.delete(id);
 }
 
 // --- In-flight tool diagnostic tracking ---
@@ -4032,6 +4263,13 @@ function handleSessionUpdate(
       if (taskTracking) taskTracking.currentTurnTaskIds.add(taskId);
       sendWithSession(sid, { type: "task_started", taskId, description });
       logErr(`Task started: ${taskId} — ${description}`);
+      // Arm the subagent-liveness watchdog so a silently-dead subagent
+      // can't keep the SDK's `hasRunningDeferrableTasks` true forever.
+      // ctx.sessionKey + sid let us route the cancel later; without either
+      // we skip (watchdog can't recover the session without them).
+      if (sid && ctx?.sessionKey) {
+        startTaskTimer(taskId, description, sid, ctx.sessionKey);
+      }
       break;
     }
 
@@ -4048,6 +4286,8 @@ function handleSessionUpdate(
       }
       sendWithSession(sid, { type: "task_notification", taskId, status, summary });
       logErr(`Task notification: ${taskId} ${status}`);
+      // Real completion (not stale) — disarm the subagent watchdog.
+      clearTaskTimer(taskId);
       break;
     }
 
