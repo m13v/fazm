@@ -4486,7 +4486,24 @@ class ChatProvider: ObservableObject {
     /// Tradeoff: when the model finishes faster than the drip rate, the UI
     /// keeps trickling for a short tail after the stream closes.
     private func streamingSliceSize(for bufferLen: Int) -> Int {
-        return bufferLen > 0 ? 1 : 0
+        // Adaptive drain so the renderer keeps up with the model.
+        // At 67Hz tick rate:
+        //   1 char/tick =  67 chars/s  (slow typewriter, small buffer)
+        //   2 char/tick = 133 chars/s
+        //   4 char/tick = 267 chars/s  (typical Claude streaming speed)
+        //   8 char/tick = 533 chars/s  (catching up after a burst)
+        //  16 char/tick = 1067 chars/s (large backlog, dump faster)
+        // Goal: stay close to model output rate so the buffer doesn't balloon
+        // and force a big dump at finalize. Small buffers still get the 1-char
+        // visual feel; only big backlogs ramp up.
+        switch bufferLen {
+        case 0:           return 0
+        case 1...40:      return 1
+        case 41...120:    return 2
+        case 121...300:   return 4
+        case 301...800:   return 8
+        default:          return 16
+        }
     }
 
     /// Handle a text block boundary from the bridge. Flushes any buffered text
