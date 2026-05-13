@@ -119,6 +119,14 @@ async fn main() {
         .route(
             "/api/referral/send-download",
             axum::routing::post(routes::referral::send_download),
+        )
+        .route(
+            "/api/auth/magic-link/request",
+            axum::routing::post(routes::magic_link::request),
+        )
+        .route(
+            "/api/auth/magic-link/verify",
+            axum::routing::post(routes::magic_link::verify),
         );
 
     let cors = CorsLayer::new()
