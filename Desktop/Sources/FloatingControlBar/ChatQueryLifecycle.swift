@@ -295,7 +295,12 @@ enum ChatQueryLifecycle {
         let quickReplyHandler: (String, [String]) -> Void = { [weak state] question, options in
             Task { @MainActor in
                 state?.streaming.suggestedReplyQuestion = question
-                state?.streaming.suggestedReplies = options
+                // Animate the appearance so the chips slide + fade in smoothly
+                // instead of popping in abruptly. The .transition on the view
+                // itself only fires when the state change is animated.
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                    state?.streaming.suggestedReplies = options
+                }
             }
         }
 
