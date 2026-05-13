@@ -220,19 +220,30 @@ enum ChatQueryLifecycle {
                 }
         )
 
-        // Clear "Upgrade Plan" button when rate limit resets to "allowed"
+        // Clear "Upgrade Plan" button only after the rate-limit reset time has
+        // actually elapsed. A bare `status == "allowed"` is not enough: when
+        // the ACP subprocess restarts after a credit/rate-limit hit, the fresh
+        // session's warmup emits `rate_limit: allowed` for the new session even
+        // though the user-level 5h cap hasn't moved. Trusting that signal hides
+        // the banner ~2 minutes after the cap was hit (real reset is hours away).
         cancellables.append(
             provider.$rateLimitStatus
+                .combineLatest(provider.$rateLimitResetsAt)
                 .receive(on: DispatchQueue.main)
-                .sink { [weak state] status in
+                .sink { [weak state, weak provider] status, resetsAt in
                     guard let state else { return }
-                    if status == "allowed" || status == nil {
-                        if state.showUpgradeClaudeButton {
-                            log("ChatQueryLifecycle: rate limit reset to '\(status ?? "nil")' — clearing upgrade banner")
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                state.showUpgradeClaudeButton = false
-                            }
-                        }
+                    guard status == "allowed" || status == nil else { return }
+                    guard state.showUpgradeClaudeButton else { return }
+                    let now = Date().timeIntervalSince1970
+                    let resetElapsed = (resetsAt ?? 0) <= now
+                    if !resetElapsed {
+                        // Keep the banner up; reset hasn't actually arrived yet.
+                        return
+                    }
+                    let lastType = provider?.rateLimitType ?? "nil"
+                    log("ChatQueryLifecycle: rate limit cleared (status=\(status ?? "nil"), type=\(lastType), resetElapsed=true) — clearing upgrade banner")
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        state.showUpgradeClaudeButton = false
                     }
                 }
         )
