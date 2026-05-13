@@ -115,6 +115,11 @@ actor ACPBridge {
     let outputTokens: Int
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
+    /// True when the bridge ended the query because of a user-initiated
+    /// interrupt (Stop button or interrupt+send). `text` is the partial
+    /// streamed-so-far response; callers should stamp a marker so it
+    /// doesn't look like a phantom reply to the next user message.
+    let interrupted: Bool
   }
 
   /// Callback for streaming text deltas
@@ -192,7 +197,7 @@ actor ACPBridge {
     case toolResultDisplay(toolUseId: String, name: String, output: String)
     case result(
       text: String, sessionId: String, costUsd: Double?, inputTokens: Int, outputTokens: Int,
-      cacheReadTokens: Int, cacheWriteTokens: Int)
+      cacheReadTokens: Int, cacheWriteTokens: Int, interrupted: Bool)
     case error(message: String)
     case authRequired(methods: [[String: Any]], authUrl: String?)
     case authSuccess
@@ -1045,11 +1050,11 @@ actor ACPBridge {
             switch pending {
             case .result(
               let text, let sessionId, let costUsd, let inputTokens, let outputTokens,
-              let cacheReadTokens, let cacheWriteTokens):
+              let cacheReadTokens, let cacheWriteTokens, let interrupted):
               return QueryResult(
                 text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens,
                 outputTokens: outputTokens, cacheReadTokens: cacheReadTokens,
-                cacheWriteTokens: cacheWriteTokens)
+                cacheWriteTokens: cacheWriteTokens, interrupted: interrupted)
             case .error(let message):
               log("ACPBridge: agent error (raw): \(message)")
               throw BridgeError.agentError(message)
@@ -1067,11 +1072,11 @@ actor ACPBridge {
             switch msg {
             case .result(
               let text, let sessionId, let costUsd, let inputTokens, let outputTokens,
-              let cacheReadTokens, let cacheWriteTokens):
+              let cacheReadTokens, let cacheWriteTokens, let interrupted):
               return QueryResult(
                 text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens,
                 outputTokens: outputTokens, cacheReadTokens: cacheReadTokens,
-                cacheWriteTokens: cacheWriteTokens)
+                cacheWriteTokens: cacheWriteTokens, interrupted: interrupted)
             case .error(let message):
               log("ACPBridge: agent error (raw): \(message)")
               throw BridgeError.agentError(message)
@@ -1098,11 +1103,11 @@ actor ACPBridge {
 
       case .result(
         let text, let sessionId, let costUsd, let inputTokens, let outputTokens,
-        let cacheReadTokens, let cacheWriteTokens):
+        let cacheReadTokens, let cacheWriteTokens, let interrupted):
         return QueryResult(
           text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens,
           outputTokens: outputTokens, cacheReadTokens: cacheReadTokens,
-          cacheWriteTokens: cacheWriteTokens)
+          cacheWriteTokens: cacheWriteTokens, interrupted: interrupted)
 
       case .error(let message):
         log("ACPBridge: agent error (raw): \(message)")
@@ -1385,10 +1390,12 @@ actor ACPBridge {
       let outputTokens = dict["outputTokens"] as? Int ?? 0
       let cacheReadTokens = dict["cacheReadTokens"] as? Int ?? 0
       let cacheWriteTokens = dict["cacheWriteTokens"] as? Int ?? 0
+      let interrupted = dict["interrupted"] as? Bool ?? false
       return .result(
         text: text, sessionId: sessionId, costUsd: costUsd,
         inputTokens: inputTokens, outputTokens: outputTokens,
-        cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
+        cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens,
+        interrupted: interrupted)
 
     case "error":
       let message = dict["message"] as? String ?? "Unknown error"
@@ -1580,7 +1587,7 @@ actor ACPBridge {
     if effectiveSessionKey == nil {
       let sid: String? = {
         switch message {
-        case .result(_, let s, _, _, _, _, _): return s.isEmpty ? nil : s
+        case .result(_, let s, _, _, _, _, _, _): return s.isEmpty ? nil : s
         default: return nil
         }
       }()
@@ -1601,8 +1608,8 @@ actor ACPBridge {
       }
     case .toolUse(_, let name, _):
       log("ACPBridge: deliverMessage toolUse sessionKey=\(sessionKey ?? "nil") name=\(name)")
-    case .result(let text, let sid, _, _, _, _, _):
-      log("ACPBridge: deliverMessage result sessionKey=\(sessionKey ?? "nil") sessionId=\(sid) text='\(text.prefix(40))'")
+    case .result(let text, let sid, _, _, _, _, _, let interrupted):
+      log("ACPBridge: deliverMessage result sessionKey=\(sessionKey ?? "nil") sessionId=\(sid) text='\(text.prefix(40))' interrupted=\(interrupted)")
     default:
       break
     }
