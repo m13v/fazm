@@ -3499,6 +3499,91 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
 /** Whether the next text delta should be preceded by a boundary (e.g. after tool use) */
 let pendingBoundary = false;
 
+/**
+ * Fork the live session under `fromSessionKey` and register the new branch
+ * under `toSessionKey`. Calls upstream `session/fork` (unstable; provided by
+ * `@agentclientprotocol/claude-agent-acp` via `unstable_forkSession`). The
+ * branch starts at the end of the source session's conversation; the source
+ * remains intact and resumable.
+ */
+async function handleForkSession(msg: import("./protocol.js").ForkSessionMessage): Promise<void> {
+  const sourceEntry = sessions.get(msg.fromSessionKey);
+  if (!sourceEntry) {
+    logErr(`forkSession: source session not active (key=${msg.fromSessionKey}); cannot fork`);
+    send({
+      type: "error",
+      message: `Cannot fork: no active session under key ${msg.fromSessionKey}`,
+    });
+    return;
+  }
+
+  // Two valid modes:
+  //   1. In-place fork: `toSessionKey === fromSessionKey`. The new branch
+  //      replaces the source under the same key (the source sessionId is
+  //      still resumable on disk via Conversation History). This is the
+  //      "fork the current chat" button UX.
+  //   2. Side-by-side fork: a distinct `toSessionKey` (must not already be
+  //      registered). The source remains live under `fromSessionKey` and the
+  //      new branch is bound to `toSessionKey`. Reserved for a future
+  //      "open fork in new pop-out" UX.
+  const inPlace = msg.fromSessionKey === msg.toSessionKey;
+  if (!inPlace && sessions.has(msg.toSessionKey)) {
+    logErr(`forkSession: destination key already in use (${msg.toSessionKey}); aborting`);
+    send({
+      type: "error",
+      message: `Cannot fork: session key ${msg.toSessionKey} is already active`,
+    });
+    return;
+  }
+
+  const cwd = msg.cwd ?? sourceEntry.cwd;
+  const model = msg.model ?? sourceEntry.model;
+  // Fork inherits the source's mode by default. We don't carry the mode in the
+  // sessions Map, so fall back to "act" (most common) for MCP server selection
+  // on the new branch; Swift can re-issue a `setMode` later if needed.
+  const mode = "act";
+
+  try {
+    const result = (await acpRequest("session/fork", {
+      sessionId: sourceEntry.sessionId,
+      cwd,
+      mcpServers: buildMcpServers(mode, cwd, msg.toSessionKey),
+    })) as { sessionId: string };
+
+    // For in-place fork, unregister the source first so the same key cleanly
+    // points at the new sessionId. The source's sessionId is left on disk and
+    // is recoverable via the Conversation History list (which scans the SDK's
+    // JSONL store), so this is non-destructive.
+    if (inPlace) {
+      unregisterSession(msg.fromSessionKey);
+    }
+
+    registerSession(msg.toSessionKey, { sessionId: result.sessionId, cwd, model });
+    if (model) {
+      try {
+        await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: model });
+      } catch (setModelErr) {
+        logErr(`forkSession: set_model failed on new session ${result.sessionId}: ${setModelErr}`);
+      }
+    }
+    logErr(
+      `Session forked${inPlace ? " (in-place)" : ""}: ${sourceEntry.sessionId} -> ${result.sessionId} ` +
+        `(key ${msg.fromSessionKey} -> ${msg.toSessionKey}, model=${model || "default"}, cwd=${cwd})`
+    );
+    send({
+      type: "session_forked",
+      fromSessionId: sourceEntry.sessionId,
+      toSessionId: result.sessionId,
+      fromSessionKey: msg.fromSessionKey,
+      toSessionKey: msg.toSessionKey,
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logErr(`session/fork failed: ${errMsg}`);
+    send({ type: "error", message: `Fork failed: ${errMsg}` });
+  }
+}
+
 /** Translate ACP session/update notifications into our JSON-lines protocol.
  *
  * ACP uses `params.update.sessionUpdate` as the discriminator field:
@@ -3952,6 +4037,28 @@ function handleSessionUpdate(
       // Token usage / context window update from ACP v0.25+ — handled by patched entry point
       break;
 
+    case "available_commands_update": {
+      // Slash-command list advertised by the agent. Forward to Swift so the
+      // input-field popover can render the active set. Spec shape:
+      // { availableCommands: [{ name, description, input?: { hint } }] }
+      const rawCmds =
+        (update.availableCommands as unknown[] | undefined) ??
+        (update.available_commands as unknown[] | undefined) ??
+        [];
+      const commands = rawCmds
+        .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+        .map((c) => {
+          const name = typeof c.name === "string" ? c.name : "";
+          const description = typeof c.description === "string" ? c.description : "";
+          const inputObj = c.input as Record<string, unknown> | undefined;
+          const inputHint = inputObj && typeof inputObj.hint === "string" ? inputObj.hint : undefined;
+          return { name, description, inputHint };
+        })
+        .filter((c) => c.name.length > 0);
+      sendWithSession(sid, { type: "available_commands_update", commands });
+      break;
+    }
+
     default:
       logErr(
         `Unknown session update type: ${sessionUpdate} — ${JSON.stringify(update).slice(0, 200)}`
@@ -4247,6 +4354,14 @@ async function main(): Promise<void> {
           authResolve();
           authResolve = null;
         }
+        break;
+      }
+
+      case "forkSession": {
+        handleForkSession(msg as import("./protocol.js").ForkSessionMessage).catch((err) => {
+          logErr(`Unhandled forkSession error: ${err}`);
+          send({ type: "error", message: `Fork failed: ${err}` });
+        });
         break;
       }
 
