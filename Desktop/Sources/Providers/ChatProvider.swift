@@ -3741,8 +3741,11 @@ class ChatProvider: ObservableObject {
                     log("ChatProvider: stamping interrupted marker on AI message (session=\(sessionKey ?? "main"), partialLen=\(rawText.count))")
                 } else if rawText.isEmpty && toolNames.isEmpty {
                     // Empty result with no tool calls and no interrupt flag —
-                    // the model produced nothing (poisoned-session empty turn
-                    // the bridge couldn't recover, or app crash mid-stream).
+                    // the model produced nothing. Per ACP, end_turn with empty
+                    // content is a valid successful outcome, so the bridge no
+                    // longer auto-restarts the session for this case; we surface
+                    // a visible marker here instead of silently rendering a
+                    // blank bubble.
                     messageText = "⚠️ (no text returned; the response was interrupted, or the model produced an empty turn)"
                     log("ChatProvider: empty AI turn (no text, no tools) — saving marker so the failure is visible (session=\(sessionKey ?? "main"))")
                 } else {
