@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed pop-out chats getting permanently stuck (typing field disabled, messages queueing) after another pop-out hit a Claude usage limit. After a limit event, the ACP subprocess now restarts cleanly and each conversation resumes from the exact same point on the same session ID once your limit refreshes, instead of losing prompt cache and showing a Session restored banner"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.10",
+      "date": "2026-05-13",
+      "changes": [
+        "Fixed pop-out chats getting permanently stuck (typing field disabled, messages queueing) after another pop-out hit a Claude usage limit. After a limit event, the ACP subprocess now restarts cleanly and each conversation resumes from the exact same point on the same session ID once your limit refreshes, instead of losing prompt cache and showing a Session restored banner"
+      ]
+    },
     {
       "version": "2.9.9",
       "date": "2026-05-12",
