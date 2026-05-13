@@ -2446,6 +2446,16 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         logErr(`Cwd changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}), creating new session`);
         unregisterSession(sessionKey);
         imageTurnCounts.delete(sessionKey);
+        // Also discard any persisted resume id — the [CWD-RECOVERY] block
+        // below would otherwise look up the *old* cwd recorded for that id
+        // and silently resume the session under the old workspace, defeating
+        // the user's cwd change. Route through session/new with priorContext
+        // replay instead so the conversation history survives the workspace
+        // switch while the SDK actually operates in the requested cwd.
+        if (msg.resume) {
+          logErr(`Discarding resume id ${msg.resume.slice(0, 8)} for ${sessionKey} due to cwd change (would have restored old cwd)`);
+          msg.resume = undefined;
+        }
       } else {
         sessionId = existing.sessionId;
       }
@@ -3262,7 +3272,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
           logErr(
             `Query interrupted by user, sending partial result (${fullText.length} chars)`
           );
-          sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
+          sendWithSession(sessionId, { type: "result", text: fullText, sessionId, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, interrupted: true });
         } else {
           logErr("Query aborted (superseded by new query)");
         }
