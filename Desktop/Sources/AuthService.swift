@@ -16,6 +16,7 @@ enum AuthError: Error, LocalizedError {
     case invalidResponse
     case serverError(String)
     case cancelled
+    case oauthTimeout
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +26,7 @@ enum AuthError: Error, LocalizedError {
         case .invalidResponse: return "Invalid response from server"
         case .serverError(let msg): return "Server error: \(msg)"
         case .cancelled: return "Sign in was cancelled"
+        case .oauthTimeout: return "Sign-in timed out. Try again."
         }
     }
 }
@@ -99,6 +101,7 @@ class AuthService: NSObject {
     private var tokenRefreshTimer: Timer?
     private var appleSignInDelegate: AuthServiceAppleSignInDelegate?
     private var firebaseAuthStateListener: AuthStateDidChangeListenerHandle?
+    private var googleSignInSocketFD: Int32?
 
     // MARK: - Init
 
@@ -190,6 +193,8 @@ class AuthService: NSObject {
 
         // 2. Start temporary localhost HTTP server
         let (socketFD, port) = try createLocalhostListener()
+        self.googleSignInSocketFD = socketFD
+        defer { self.googleSignInSocketFD = nil }
         log("AuthService: Localhost server listening on port \(port)")
 
         // 3. Open Google OAuth URL in the browser
@@ -232,6 +237,17 @@ class AuthService: NSObject {
 
         AnalyticsManager.shared.signInCompleted(provider: "google")
         log("AuthService: Google Sign-In completed successfully")
+    }
+
+    /// Cancel an in-flight Google sign-in by shutting down the localhost listener.
+    /// Causes the blocked `poll()`/`accept()` to return so `waitForOAuthCallback`
+    /// throws `AuthError.cancelled`. Safe to call when no sign-in is in flight.
+    func cancelGoogleSignIn() {
+        guard let fd = googleSignInSocketFD else { return }
+        googleSignInSocketFD = nil
+        log("AuthService: Cancelling in-flight Google Sign-In")
+        // shutdown() wakes the blocked poll/accept; close() stays owned by waitForOAuthCallback's defer.
+        Darwin.shutdown(fd, SHUT_RDWR)
     }
 
     /// Exchange Google auth code for tokens.
@@ -314,6 +330,139 @@ class AuthService: NSObject {
                 log("AuthService: Firebase SDK sign-in failed (non-fatal): \(error.localizedDescription)")
             }
         }
+    }
+
+    // MARK: - Magic Link (Email OTP) Sign-In
+
+    /// Request a magic-link OTP for the given email address.
+    /// Backend generates a 6-digit code, stores it hashed in Firestore, and sends it via Resend.
+    func requestMagicLinkCode(email: String) async throws {
+        AnalyticsManager.shared.signInStarted(provider: "magic_link")
+        log("AuthService: Requesting magic-link code for email")
+
+        let backendUrl = Self.backendBaseURL()
+        guard !backendUrl.isEmpty else {
+            throw AuthError.serverError("Backend URL not configured")
+        }
+
+        let url = URL(string: "\(backendUrl)/api/auth/magic-link/request")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["email": email])
+        request.timeoutInterval = 20
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode != 200 {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            logError("AuthService: Magic-link request failed (status \(httpResponse.statusCode)): \(body)")
+            // Map backend message into the error so the UI can show it.
+            let friendly = !body.isEmpty ? body : "Failed to send code"
+            if httpResponse.statusCode == 429 {
+                throw AuthError.serverError(friendly)
+            }
+            throw AuthError.serverError(friendly)
+        }
+
+        log("AuthService: Magic-link code sent")
+    }
+
+    /// Verify a magic-link OTP and complete sign-in.
+    /// Exchanges the code with the backend for a Firebase custom token, then exchanges
+    /// that for an ID/refresh token via Firebase REST `signInWithCustomToken`.
+    func verifyMagicLinkCode(email: String, code: String) async throws {
+        log("AuthService: Verifying magic-link code")
+
+        let backendUrl = Self.backendBaseURL()
+        guard !backendUrl.isEmpty else {
+            throw AuthError.serverError("Backend URL not configured")
+        }
+
+        let url = URL(string: "\(backendUrl)/api/auth/magic-link/verify")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["email": email, "code": code])
+        request.timeoutInterval = 30
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        if httpResponse.statusCode != 200 {
+            let body = String(data: data, encoding: .utf8) ?? "Invalid code"
+            logError("AuthService: Magic-link verify failed (status \(httpResponse.statusCode)): \(body)")
+            AnalyticsManager.shared.signInFailed(provider: "magic_link", error: body)
+            throw AuthError.serverError(body)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let customToken = json["custom_token"] as? String else {
+            AnalyticsManager.shared.signInFailed(provider: "magic_link", error: "invalid_response")
+            throw AuthError.invalidResponse
+        }
+
+        try await signInWithCustomToken(customToken)
+
+        AnalyticsManager.shared.signInCompleted(provider: "magic_link")
+        log("AuthService: Magic-link sign-in completed successfully")
+    }
+
+    /// Exchange a Firebase custom token for an ID/refresh token pair via the
+    /// `accounts:signInWithCustomToken` REST endpoint, then run the standard
+    /// post-auth pipeline.
+    private func signInWithCustomToken(_ customToken: String) async throws {
+        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(Self.firebaseAPIKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "token": customToken,
+            "returnSecureToken": true,
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let responseBody = String(data: data, encoding: .utf8) ?? ""
+            logError("AuthService: signInWithCustomToken failed (status \(statusCode)): \(responseBody)")
+            throw AuthError.serverError("signInWithCustomToken failed (status \(statusCode))")
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw AuthError.invalidResponse
+        }
+
+        try processFirebaseAuthResponse(json, provider: "magic_link")
+
+        // Also sign in via Firebase SDK for the auth state listener.
+        do {
+            let result = try await Auth.auth().signIn(withCustomToken: customToken)
+            log("AuthService: Firebase SDK custom-token sign-in successful (uid: \(result.user.uid))")
+            if let creationDate = result.user.metadata.creationDate {
+                UserDefaults.standard.set(creationDate, forKey: "fazm_firebase_creation_date")
+            }
+        } catch {
+            // Non-fatal — the REST API tokens we just stored are enough for the backend.
+            log("AuthService: Firebase SDK signInWithCustomToken failed (non-fatal): \(error.localizedDescription)")
+        }
+    }
+
+    /// Resolve `FAZM_BACKEND_URL` from the runtime environment (trimming trailing slashes).
+    private static func backendBaseURL() -> String {
+        if let raw = ProcessInfo.processInfo.environment["FAZM_BACKEND_URL"], !raw.isEmpty {
+            return raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        if let cstr = getenv("FAZM_BACKEND_URL"), let s = String(cString: cstr, encoding: .utf8), !s.isEmpty {
+            return s.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        return ""
     }
 
     // MARK: - Apple Sign-In
@@ -800,11 +949,30 @@ class AuthService: NSObject {
         return (socketFD, port)
     }
 
-    /// Wait for an OAuth callback on the given listening socket. Blocks until a request arrives.
-    private func waitForOAuthCallback(socketFD: Int32) async throws -> String {
+    /// Wait for an OAuth callback on the given listening socket.
+    /// Waits up to `timeoutSeconds` (default 5 min) for an incoming connection.
+    /// Throws `AuthError.oauthTimeout` on timeout, `AuthError.cancelled` if the
+    /// socket is shut down externally (e.g. via `cancelGoogleSignIn()`).
+    private func waitForOAuthCallback(socketFD: Int32, timeoutSeconds: Int = 300) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             Task.detached {
                 defer { Darwin.close(socketFD) }
+
+                // Wait up to timeoutSeconds for the OAuth redirect to hit the listener.
+                // poll() is interruptible: shutdown(fd, SHUT_RDWR) from cancelGoogleSignIn
+                // returns POLLHUP/POLLNVAL so the user can abort without waiting the full timeout.
+                var pollFD = pollfd(fd: socketFD, events: Int16(POLLIN), revents: 0)
+                let pollResult = withUnsafeMutablePointer(to: &pollFD) { ptr in
+                    poll(ptr, 1, Int32(timeoutSeconds * 1000))
+                }
+                if pollResult == 0 {
+                    continuation.resume(throwing: AuthError.oauthTimeout)
+                    return
+                }
+                if pollResult < 0 || (pollFD.revents & Int16(POLLIN)) == 0 {
+                    continuation.resume(throwing: AuthError.cancelled)
+                    return
+                }
 
                 let clientFD = accept(socketFD, nil, nil)
                 guard clientFD >= 0 else {
