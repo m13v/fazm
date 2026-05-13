@@ -32,6 +32,8 @@ struct AIResponseView: View {
     @State private var bubbleInfos: [StackedBubbleInfo] = []
     /// Live scroll viewport bounds reported by ScrollBoundsObserver.
     @State private var scrollBounds = ScrollBoundsInfo(offsetY: 0, viewportHeight: 0)
+    /// When true, the stacked past-prompts overlay is collapsed to a single show button.
+    @State private var isStackHidden = false
 
     /// Named coordinate space for the chat content; user-bubble frames are reported here.
     static let chatScrollSpace = "fazmChatScrollContent"
@@ -39,7 +41,7 @@ struct AIResponseView: View {
     private let bubblePeekHeight: CGFloat = 22
 
     /// Bubbles whose top has scrolled above the current viewport, sorted oldest→newest.
-    /// Capped to fit within 50% of viewport height; overflow drops the oldest (FIFO).
+    /// Capped to fit within 20% of viewport height; overflow drops the oldest (FIFO).
     private var stackedBubbles: [StackedBubbleInfo] {
         guard scrollBounds.viewportHeight > 0 else { return [] }
         let viewportTop = scrollBounds.offsetY
@@ -47,7 +49,7 @@ struct AIResponseView: View {
             .filter { $0.height > 0 && $0.topY < viewportTop }
             .sorted { $0.topY < $1.topY }
         let peekUnit = bubblePeekHeight + 2 // matches VStack spacing in overlay
-        let cap = max(2, Int((scrollBounds.viewportHeight * 0.5) / peekUnit))
+        let cap = max(2, Int((scrollBounds.viewportHeight * 0.2) / peekUnit))
         return Array(scrolledPast.suffix(cap))
     }
 
@@ -168,6 +170,7 @@ struct AIResponseView: View {
                         StackedBubblesOverlay(
                             bubbles: stackedBubbles,
                             peekHeight: bubblePeekHeight,
+                            isHidden: $isStackHidden,
                             onTap: { id in
                                 isProgrammaticScroll = true
                                 withAnimation(.easeInOut(duration: 0.25)) {
@@ -1622,32 +1625,67 @@ struct StackedBubblePeek: View {
 }
 
 /// Top-aligned overlay that pins user-question bubbles as the user scrolls past them.
-/// Capped at 50% of the viewport height; on overflow, the oldest bubble drops (FIFO).
+/// Capped at 20% of the viewport height; on overflow, the oldest bubble drops (FIFO).
+/// A small toggle button in the top-right collapses the stack to a single chip so the
+/// user can hide past prompts entirely; tapping the chip restores the stack.
 /// The background is fully opaque so chat content scrolls cleanly underneath without
 /// bleeding through the peek pills; a soft fade just below the stack acts as a visual
 /// separator from the live scroll content.
 struct StackedBubblesOverlay: View {
     let bubbles: [StackedBubbleInfo]
     let peekHeight: CGFloat
+    @Binding var isHidden: Bool
     let onTap: (UUID) -> Void
 
     var body: some View {
         if bubbles.isEmpty {
             EmptyView()
-        } else {
-            VStack(spacing: 2) {
-                ForEach(bubbles, id: \.id) { bubble in
-                    StackedBubblePeek(
-                        question: bubble.question,
-                        height: peekHeight,
-                        onTap: { onTap(bubble.id) }
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
+        } else if isHidden {
+            // Collapsed: single chip in the top-right that restores the stack.
+            HStack {
+                Spacer()
+                StackToggleButton(
+                    isHidden: true,
+                    count: bubbles.count,
+                    action: {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isHidden = false
+                        }
+                    }
+                )
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 6)
             .padding(.top, 4)
-            .padding(.bottom, 4)
+            .transition(.opacity)
+        } else {
+            ZStack(alignment: .topTrailing) {
+                VStack(spacing: 2) {
+                    ForEach(bubbles, id: \.id) { bubble in
+                        StackedBubblePeek(
+                            question: bubble.question,
+                            height: peekHeight,
+                            onTap: { onTap(bubble.id) }
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .padding(.leading, 4)
+                .padding(.trailing, 28) // leave space for hide button
+                .padding(.top, 4)
+                .padding(.bottom, 4)
+
+                StackToggleButton(
+                    isHidden: false,
+                    count: bubbles.count,
+                    action: {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isHidden = true
+                        }
+                    }
+                )
+                .padding(.trailing, 6)
+                .padding(.top, 4)
+            }
             .background(FazmColors.backgroundPrimary)
             .overlay(alignment: .bottom) {
                 LinearGradient(
@@ -1663,6 +1701,39 @@ struct StackedBubblesOverlay: View {
             }
             .animation(.easeInOut(duration: 0.18), value: bubbles.map { $0.id })
         }
+    }
+}
+
+/// Compact toggle that collapses or restores the stacked past-prompts overlay.
+/// When hidden, shows a chevron-down + count; when shown, shows a chevron-up.
+private struct StackToggleButton: View {
+    let isHidden: Bool
+    let count: Int
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: isHidden ? "chevron.down" : "chevron.up")
+                    .font(.system(size: 9, weight: .semibold))
+                if isHidden {
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .medium))
+                }
+            }
+            .foregroundColor(FazmColors.overlayForeground.opacity(0.85))
+            .padding(.horizontal, 6)
+            .frame(height: 18)
+            .background(
+                FazmColors.overlayForeground.opacity(isHovered ? 0.22 : 0.14)
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(isHidden ? "Show past prompts (\(count))" : "Hide past prompts")
     }
 }
 
