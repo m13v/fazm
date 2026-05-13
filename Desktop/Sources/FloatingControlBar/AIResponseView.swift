@@ -1226,9 +1226,7 @@ struct ModelToggleButton: View {
             }
             Divider()
             Button {
-                if let url = URL(string: "fazm://settings/advanced.codex.models") {
-                    NSWorkspace.shared.open(url)
-                }
+                openCodexModelsSettings()
             } label: {
                 Label("Customize models…", systemImage: "slider.horizontal.3")
             }
@@ -1244,6 +1242,23 @@ struct ModelToggleButton: View {
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .fixedSize()
+    }
+
+    /// Open the main settings window (creating it if necessary) and scroll to
+    /// the Visible GPT Models card. Uses in-process notification posting so it
+    /// works even when a sibling Fazm build owns the `fazm://` URL scheme.
+    private func openCodexModelsSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        WindowOpener.shared.openWindow?(id: "main")
+        // Give the window a beat to attach the .onReceive listener if it just
+        // got created. If it was already open, the delay is harmless.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NotificationCenter.default.post(
+                name: NSNotification.Name("navigateToSetting"),
+                object: nil,
+                userInfo: ["settingId": "advanced.codex.models"]
+            )
+        }
     }
 }
 
