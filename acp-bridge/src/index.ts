@@ -2721,6 +2721,17 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // If cwd changed, invalidate this specific session
       if (existing.cwd !== requestedCwd) {
         logErr(`Cwd changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}), creating new session`);
+        // Tear down the old SDK subprocess before unregistering. Without this,
+        // each cwd change for a sessionKey leaves an orphaned claude SDK process
+        // running at 70-90% CPU forever. Observed 2026-05-13: pop-out session
+        // detached-447BA654 toggled cwd between `social-autoposter-website` and
+        // `/Users/matthewdi` three times, accumulating 3 zombie SDK subprocesses
+        // for one logical session. unregisterSession only drops the in-memory
+        // entry; it does NOT call teardownSession in claude-agent-acp.
+        // Fire-and-forget: don't block the new session/new on cleanup.
+        acpRequest("session/close", { sessionId: existing.sessionId }).catch((err) => {
+          logErr(`session/close on cwd-change cleanup failed for ${existing.sessionId.slice(0, 8)}: ${err}`);
+        });
         unregisterSession(sessionKey);
         imageTurnCounts.delete(sessionKey);
         // Also discard any persisted resume id — the [CWD-RECOVERY] block
