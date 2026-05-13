@@ -1542,6 +1542,43 @@ async function restartAcpProcess(): Promise<void> {
 }
 
 /**
+ * True when an error thrown from `startAuthFlow()` represents the user
+ * declining or letting the OAuth flow time out (vs. a real failure like a
+ * token-endpoint rejection or network error). Used by the query path to
+ * synthesise a helpful assistant reply instead of letting "OAuth flow
+ * cancelled" surface as a generic agent error in the chat bubble.
+ */
+function isUserAbortedAuth(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /OAuth flow cancelled|timed out/i.test(msg);
+}
+
+/**
+ * Send a friendly `result` event in place of a generic error when the user
+ * cancelled or timed out the Claude OAuth flow mid-query. Without this, the
+ * chat bubble shows a cryptic "OAuth flow cancelled" and the turn is
+ * recorded as a failed AI response (chat_agent_error in PostHog). Returning
+ * a result lets the turn complete coherently and gives the user a clear
+ * next step.
+ */
+function sendAuthCancelledResult(sessionId: string, err: unknown): void {
+  const isTimeout = err instanceof Error && /timed out/i.test(err.message);
+  const text = isTimeout
+    ? "Connecting to your Claude account timed out, so I couldn't run that. Open Settings → Claude Account to reconnect, then resend your message."
+    : "I couldn't run that because connecting to your Claude account was cancelled. Open Settings → Claude Account to reconnect, then resend your message.";
+  sendWithSession(sessionId, {
+    type: "result",
+    text,
+    sessionId,
+    costUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  });
+}
+
+/**
  * Start the OAuth flow: spin up a local callback server, send the auth URL
  * to Swift (so it can open the browser), wait for the user to complete auth,
  * store credentials in Keychain, and restart the ACP subprocess.
@@ -3296,7 +3333,16 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         imageTurnCounts.delete(sessionKey);
         activeSessionId = "";
         msg.resume = undefined;
-        await startAuthFlow();
+        try {
+          await startAuthFlow();
+        } catch (authErr) {
+          if (isUserAbortedAuth(authErr)) {
+            logErr(`session/prompt OAuth flow ${authErr instanceof Error ? authErr.message : String(authErr)} — surfacing as assistant result`);
+            sendAuthCancelledResult(sessionId, authErr);
+            return;
+          }
+          throw authErr;
+        }
         return handleQuery(msg, _retryDepth + 1);
       }
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -3471,7 +3517,16 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       }
       authRetryCount++;
       logErr(`Query failed with auth error (code=${(err as AcpError).code}), starting OAuth flow (attempt ${authRetryCount})`);
-      await startAuthFlow();
+      try {
+        await startAuthFlow();
+      } catch (authErr) {
+        if (isUserAbortedAuth(authErr)) {
+          logErr(`Query OAuth flow ${authErr instanceof Error ? authErr.message : String(authErr)} — surfacing as assistant result`);
+          sendAuthCancelledResult(sessionId, authErr);
+          return;
+        }
+        throw authErr;
+      }
       return handleQuery(msg, _retryDepth + 1);
     }
     const errMsg = err instanceof Error ? err.message : String(err);
