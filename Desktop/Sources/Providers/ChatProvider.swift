@@ -3721,6 +3721,14 @@ class ChatProvider: ObservableObject {
                 if rawText.isEmpty && toolNames.isEmpty {
                     messageText = "⚠️ (no text returned; the response was interrupted, or the model produced an empty turn)"
                     log("ChatProvider: empty AI turn (no text, no tools) — saving marker so the failure is visible (session=\(sessionKey ?? "main"))")
+                } else if queryResult.interrupted {
+                    // User-initiated interrupt (Stop or interrupt+send) returned the
+                    // streamed-so-far partial. Stamp a clear marker so this bubble
+                    // does not look like a phantom reply to whatever the user sends
+                    // next (the partial belongs to the prior query, not the new one).
+                    let suffix = "\n\n_⚠️ (interrupted — partial response)_"
+                    messageText = rawText.isEmpty ? "_⚠️ (interrupted before any text)_" : rawText + suffix
+                    log("ChatProvider: stamping interrupted marker on AI message (session=\(sessionKey ?? "main"), partialLen=\(rawText.count))")
                 } else {
                     messageText = rawText
                 }
