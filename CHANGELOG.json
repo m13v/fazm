@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added timeout and Cancel button to Google sign-in so the app no longer hangs when the OAuth browser tab is closed without completing"
+  ],
   "releases": [
     {
       "version": "2.9.10",
