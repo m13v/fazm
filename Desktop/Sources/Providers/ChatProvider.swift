@@ -4650,8 +4650,10 @@ class ChatProvider: ObservableObject {
         // Without this, text from before the tool call (e.g. "work!") and text from
         // after (e.g. "What are you working on?") get concatenated in the buffer
         // and rendered as one jammed block ("work!What are you working on?").
+        // forceAll=true so the drip-pacer doesn't leave a trailing slice stranded
+        // on the wrong side of the tool boundary.
         if let buf = streamingBuffers[messageId], !buf.textBuffer.isEmpty || !buf.thinkingBuffer.isEmpty {
-            flushStreamingBuffer(messageId: messageId)
+            flushStreamingBuffer(messageId: messageId, forceAll: true)
         }
         // Ensure text after the tool call starts a new content block, even if
         // the text_block_boundary message hasn't arrived yet.
