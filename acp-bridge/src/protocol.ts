@@ -410,6 +410,28 @@ export interface ToolHangCanceledMessage {
 }
 
 /**
+ * Emitted by the subagent-liveness watchdog when a `Task` subagent appears to
+ * have died silently — its `.output` file is 0 bytes and has not been touched
+ * for `TASK_STALE_THRESHOLD_MS`. The bridge has already aborted the in-flight
+ * query, sent `session/cancel`, and unregistered the session; this message
+ * exists so the UI can render a "subagent stalled, turn canceled" card.
+ *
+ * Why this is its own event (not `tool_hang_canceled`): the trigger is
+ * different (no per-tool timer; the watchdog runs on the SDK's
+ * `task_started`/`task_notification` pair) and the UX needs to explain
+ * subagents specifically, not generic tools.
+ */
+export interface TaskHangCanceledMessage {
+  type: "task_hang_canceled";
+  taskId: string;
+  description: string;
+  durationSeconds: number;
+  reason: string;
+  sessionId?: string;
+  sessionKey?: string;
+}
+
+/**
  * Emitted immediately after `session/new` or `session/resume` succeeds, BEFORE
  * the prompt is sent to the SDK. Lets the Swift client persist the resumable
  * sessionId early, so that any error path (rate limit, credit exhausted,
@@ -544,6 +566,7 @@ export type OutboundMessage =
   | McpServersAvailableMessage
   | SessionExpiredMessage
   | ToolHangCanceledMessage
+  | TaskHangCanceledMessage
   | SessionStartedMessage
   | CodexProbeResultMessage
   | CodexLoginUrlMessage
