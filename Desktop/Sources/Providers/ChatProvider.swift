@@ -4231,6 +4231,22 @@ class ChatProvider: ObservableObject {
                 let suffix = "\n\n⚠️ \(errText)"
                 if !messages[aiIndex].text.hasSuffix(suffix) {
                     messages[aiIndex].text += suffix
+                    // AIResponseView renders contentBlocks when non-empty and ignores .text,
+                    // so for messages that streamed tool calls or text blocks before the
+                    // error, the warning needs to be a content block too — otherwise the
+                    // user sees the tool calls and the message just ends with no warning.
+                    if !messages[aiIndex].contentBlocks.isEmpty {
+                        let warningBlockText = "⚠️ \(errText)"
+                        let alreadyShown = messages[aiIndex].contentBlocks.contains { block in
+                            if case .text(_, let t) = block { return t == warningBlockText }
+                            return false
+                        }
+                        if !alreadyShown {
+                            messages[aiIndex].contentBlocks.append(
+                                .text(id: "rate-limit-warning-\(UUID().uuidString)", text: warningBlockText)
+                            )
+                        }
+                    }
                     let updatedMessage = messages[aiIndex]
                     if effectiveKey == "floating" {
                         let sid = floatingChatSessionId
