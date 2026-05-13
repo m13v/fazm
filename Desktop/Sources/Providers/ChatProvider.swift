@@ -57,6 +57,7 @@ struct SystemEvent: Equatable, Codable {
         case sessionRecovered     // upstream session expired, fresh session created and history replayed
         case sessionRecoveryEmpty // upstream session expired, no local history available to replay
         case toolHangCanceled     // a tool call exceeded its timeout, ACP session was canceled
+        case taskHangCanceled     // a Task subagent appeared to die silently, ACP session was canceled
         case userInterrupted      // user manually interrupted, surfaced as a card so it's visible later
     }
 
@@ -3698,6 +3699,70 @@ class ChatProvider: ObservableObject {
                             }
                             // Floating bar uses the global bar state. Same guard:
                             // only touch it if the event applies to the floating session.
+                            if sessionKey == "floating" || sessionKey == nil,
+                               let barState = FloatingControlBarManager.shared.barState {
+                                if barState.streaming.currentAIMessage?.id == aiMessageId,
+                                   barState.streaming.currentAIMessage?.isStreaming == true {
+                                    barState.streaming.currentAIMessage?.isStreaming = false
+                                }
+                                barState.streaming.isAILoading = false
+                            }
+                        case .taskHangCanceled(let taskId, let description, let durationSeconds, let reason):
+                            log("ChatProvider: task_hang_canceled task=\(taskId) duration=\(durationSeconds)s — surfacing system card")
+                            // Subagent-liveness watchdog already canceled the ACP
+                            // session. Mirror the toolHangCanceled handler: insert a
+                            // visible system event card and force the streaming flag
+                            // off on the in-flight AI message + any pop-out / bar
+                            // that may still be referencing it.
+                            let event = SystemEvent(
+                                kind: .taskHangCanceled,
+                                title: "Subagent stalled — turn canceled",
+                                body: reason,
+                                details: [
+                                    "subagent": description,
+                                    "elapsed": String(format: "%.0fs", durationSeconds),
+                                    "scope": sessionKey ?? "main",
+                                ]
+                            )
+                            let cancelId = UUID().uuidString
+                            let cancelNotice = ChatMessage(
+                                id: cancelId,
+                                text: "",
+                                sender: .ai,
+                                isStreaming: false,
+                                isSynced: false,
+                                contentBlocks: [.systemEvent(id: cancelId, event: event)],
+                                sessionKey: sessionKey
+                            )
+                            if let liveIdx = self.messages.firstIndex(where: { $0.id == aiMessageId }) {
+                                self.messages.insert(cancelNotice, at: liveIdx)
+                            } else {
+                                self.messages.append(cancelNotice)
+                            }
+                            if let key = sessionKey, !key.isEmpty {
+                                let persistContext: String
+                                if key == "floating" {
+                                    persistContext = "__floating__"
+                                } else {
+                                    persistContext = "__\(key)__"
+                                }
+                                Task {
+                                    await ChatMessageStore.saveMessage(cancelNotice, context: persistContext, sessionId: nil)
+                                }
+                            }
+                            if let liveIdx = self.messages.firstIndex(where: { $0.id == aiMessageId }),
+                               self.messages[liveIdx].isStreaming {
+                                self.messages[liveIdx].isStreaming = false
+                            }
+                            for entry in DetachedChatWindowController.shared.entriesSnapshot()
+                                where entry.sessionKey == sessionKey {
+                                let popoutState = entry.window.state
+                                if popoutState.streaming.currentAIMessage?.id == aiMessageId,
+                                   popoutState.streaming.currentAIMessage?.isStreaming == true {
+                                    popoutState.streaming.currentAIMessage?.isStreaming = false
+                                }
+                                popoutState.streaming.isAILoading = false
+                            }
                             if sessionKey == "floating" || sessionKey == nil,
                                let barState = FloatingControlBarManager.shared.barState {
                                 if barState.streaming.currentAIMessage?.id == aiMessageId,
