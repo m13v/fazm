@@ -15,6 +15,7 @@ struct FloatingControlBarView: View {
     var onSendQuery: (String, [ChatAttachment]) -> Void
     var onCloseAI: () -> Void
     var onNewChat: () -> Void
+    var onFork: (() -> Void)?
     var onInterruptAndFollowUp: ((String) -> Void)?
     var onEnqueueMessage: ((String) -> Void)?
     var onSendNowQueued: ((QueuedMessage) -> Void)?
@@ -446,6 +447,7 @@ struct FloatingControlBarView: View {
             ),
             onClose: onCloseAI,
             onNewChat: onNewChat,
+            onFork: onFork,
             onSendFollowUp: { message, attachments in
                 // Optimistic UI (archive previous exchange, displayedQuery,
                 // isAILoading) lives in FloatingControlBarManager.sendAIQuery
