@@ -145,7 +145,12 @@ function startToolTimer(
   sessionId: string | undefined,
   pendingTools: string[],
 ): void {
-  // Clear any existing timer for this tool (shouldn't happen, but be safe)
+  // Auto-cancel disabled (May 12 2026): killed too many legitimate long-running
+  // Task subagents and Bash deploys, leaving a silent empty AI bubble. Re-enable
+  // by removing this early return.
+  void toolCallId; void title; void isInternal; void sessionId; void pendingTools;
+  return;
+  // eslint-disable-next-line no-unreachable
   clearToolTimer(toolCallId);
 
   const timeoutMs = getToolTimeoutMs(title, isInternal);
