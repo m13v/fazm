@@ -119,6 +119,31 @@ export interface CancelAuthMessage {
   type: "cancel_auth";
 }
 
+/**
+ * Fork the current ACP session. Creates a new session branched from the
+ * end-of-conversation state of `fromSessionKey`. The upstream SDK
+ * (`unstable_forkSession`) does not support mid-history anchors, so the
+ * branch always starts after the last turn of the source session.
+ *
+ * Bridge replies with a `session_forked` outbound message carrying the new
+ * sessionId so Swift can pivot the UI to the new conversation while keeping
+ * the original session intact (and resumable).
+ */
+export interface ForkSessionMessage {
+  type: "forkSession";
+  fromSessionKey: string;
+  toSessionKey: string;
+  cwd?: string;
+  /** Optional model override for the forked session. Defaults to the source session's model. */
+  model?: string;
+}
+
+// Note: ACP has no separate `session/run_command` RPC. Slash commands
+// surfaced via `available_commands_update` execute by sending the literal
+// slash text (e.g. `/compact`) as the prompt of a normal `session/prompt`
+// call. Swift therefore routes slash-command submissions through the
+// existing `QueryMessage` path — no dedicated bridge handler needed.
+
 export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
@@ -129,6 +154,7 @@ export type InboundMessage =
   | ResetSessionMessage
   | TransferSessionMessage
   | CancelAuthMessage
+  | ForkSessionMessage
   | CodexInitProbeMessage
   | CodexLoginMessage
   | CodexLoginCancelMessage
@@ -446,6 +472,43 @@ export interface WarmupCompleteMessage {
   error?: string;
 }
 
+/**
+ * A single slash command advertised by the agent via
+ * `available_commands_update`. Mirrors ACP's `AvailableCommand` schema.
+ */
+export interface AvailableCommandInfo {
+  name: string;              // e.g. "compact"
+  description: string;
+  /** Free-form input hint, e.g. "[focus]" or "<query>". Omitted when the command takes no args. */
+  inputHint?: string;
+}
+
+/**
+ * Updated list of slash commands the agent currently accepts. Emitted by the
+ * agent on session start and whenever the available command set changes
+ * (e.g. after MCP server hot-reload). The Swift input field renders this as
+ * a popover when the user types a leading `/`.
+ */
+export interface AvailableCommandsUpdateMessage {
+  type: "available_commands_update";
+  commands: AvailableCommandInfo[];
+  sessionId?: string;
+}
+
+/**
+ * Emitted after a successful `session/fork` upstream call. Swift uses this
+ * to pivot the UI: bank the new sessionId as the active conversation,
+ * preserve the source sessionId as resumable, and present the forked thread
+ * as a fresh chat that already has the parent's context.
+ */
+export interface SessionForkedMessage {
+  type: "session_forked";
+  fromSessionId: string;
+  toSessionId: string;
+  fromSessionKey: string;
+  toSessionKey: string;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -480,4 +543,6 @@ export type OutboundMessage =
   | CodexLoginUrlMessage
   | CodexLoginCompleteMessage
   | CodexLoginErrorMessage
-  | WarmupCompleteMessage;
+  | WarmupCompleteMessage
+  | AvailableCommandsUpdateMessage
+  | SessionForkedMessage;
