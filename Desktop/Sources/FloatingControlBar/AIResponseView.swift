@@ -1224,6 +1224,14 @@ struct ModelToggleButton: View {
                     }
                 }
             }
+            Divider()
+            Button {
+                if let url = URL(string: "fazm://settings/advanced.codex.models") {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Label("Customize models…", systemImage: "slider.horizontal.3")
+            }
         } label: {
             HStack(spacing: 2) {
                 Text(selectedModelShortLabel)
