@@ -27,6 +27,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
     var onReorderQueue: ((IndexSet, Int) -> Void)?
     var onStopAgent: (() -> Void)?
     var onNewChat: (() -> Void)?
+    var onFork: (() -> Void)?
     var onConnectClaude: (() -> Void)?
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
@@ -82,6 +83,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
         let chatView = DetachedChatView(
             onSendFollowUp: { [weak self] msg, attachments in self?.onSendFollowUp?(msg, attachments) },
             onNewChat: { [weak self] in self?.onNewChat?() },
+            onFork: { [weak self] in self?.onFork?() },
             onEnqueueMessage: { [weak self] msg in self?.onEnqueueMessage?(msg) },
             onSendNowQueued: { [weak self] item in self?.onSendNowQueued?(item) },
             onDeleteQueued: { [weak self] item in self?.onDeleteQueued?(item) },
@@ -191,6 +193,7 @@ struct DetachedChatView: View {
 
     var onSendFollowUp: (String, [ChatAttachment]) -> Void
     var onNewChat: () -> Void
+    var onFork: (() -> Void)?
     var onEnqueueMessage: (String) -> Void
     var onSendNowQueued: (QueuedMessage) -> Void
     var onDeleteQueued: (QueuedMessage) -> Void
@@ -233,6 +236,7 @@ struct DetachedChatView: View {
             ),
             onClose: nil,
             onNewChat: onNewChat,
+            onFork: onFork,
             onSendFollowUp: { message, attachments in
                 // Optimistic UI (archive previous exchange, set displayedQuery,
                 // flip isAILoading) lives in the controller's sendQuery so it
@@ -767,6 +771,26 @@ class DetachedChatWindowController {
                 if let oldKey {
                     await provider.resetSession(key: oldKey)
                 }
+            }
+        }
+
+        // Fork: branch the current detached session in place. The window keeps
+        // its sessionKey (the bridge swaps the underlying sessionId on the
+        // same key), so this pop-out becomes the live edge of the branch and
+        // the source sessionId stays resumable on disk.
+        win.onFork = { [weak win, weak detachedState, weak chatProvider] in
+            guard let win, let state = detachedState, let provider = chatProvider else { return }
+            state.streaming.chatHistory = []
+            state.streaming.displayedQuery = ""
+            state.streaming.currentAIMessage = nil
+            state.streaming.isAILoading = false
+            state.input.aiInputText = ""
+            state.streaming.suggestedReplies = []
+            state.streaming.suggestedReplyQuestion = ""
+            state.clearQueue()
+            let key = win.sessionKey
+            Task { @MainActor in
+                await provider.forkSession(key: key)
             }
         }
 
