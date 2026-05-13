@@ -982,6 +982,7 @@ struct AIResponseView: View {
                 .frame(height: followUpTextHeight)
                 .background(FazmColors.overlayForeground.opacity(0.1))
                 .cornerRadius(8)
+                .slashCommandPopover($followUpText)
 
                 PushToTalkButton(isListening: voice.isVoiceListening, iconSize: 16, frameSize: 24)
 
@@ -1356,6 +1357,107 @@ struct ForkChatButton: View {
         }
         .buttonStyle(.plain)
         .floatingHint("Fork chat")
+    }
+}
+
+// MARK: - Slash command popover
+
+/// Renders the agent's `available_commands_update` list as a popover when the
+/// user types a leading `/` in a chat input. Anchored to whatever view the
+/// `.slashCommandPopover($text)` modifier is applied to.
+private struct SlashCommandPopover: ViewModifier {
+    @Binding var text: String
+    @ObservedObject private var registry = SlashCommandRegistry.shared
+
+    /// Returns the query string after the leading `/` only when the input is
+    /// in slash-command position (first non-empty token, no whitespace yet).
+    /// Anything else (no slash, slash mid-message, slash followed by space)
+    /// resolves to nil and hides the popover.
+    private var slashQuery: String? {
+        guard text.hasPrefix("/") else { return nil }
+        let after = String(text.dropFirst())
+        if after.contains(" ") || after.contains("\n") { return nil }
+        return after
+    }
+
+    private var matchingCommands: [ACPBridge.AvailableCommand] {
+        guard let q = slashQuery?.lowercased() else { return [] }
+        if q.isEmpty { return registry.commands }
+        return registry.commands.filter { $0.name.lowercased().hasPrefix(q) }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .popover(
+                isPresented: Binding(
+                    get: { slashQuery != nil && !matchingCommands.isEmpty },
+                    set: { _ in }
+                ),
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                SlashCommandListView(commands: matchingCommands) { cmd in
+                    // Trailing space lets the user immediately type the
+                    // argument (when there's a hint); it also disqualifies
+                    // `slashQuery` so the popover dismisses itself.
+                    text = "/\(cmd.name) "
+                }
+            }
+    }
+}
+
+private struct SlashCommandListView: View {
+    let commands: [ACPBridge.AvailableCommand]
+    let onPick: (ACPBridge.AvailableCommand) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(commands) { cmd in
+                Button {
+                    onPick(cmd)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("/\(cmd.name)")
+                                .scaledFont(size: 13)
+                                .fontDesign(.monospaced)
+                                .foregroundColor(.primary)
+                            if let hint = cmd.inputHint, !hint.isEmpty {
+                                Text(hint)
+                                    .scaledFont(size: 11)
+                                    .fontDesign(.monospaced)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        if !cmd.description.isEmpty {
+                            Text(cmd.description)
+                                .scaledFont(size: 11)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if cmd.id != commands.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
+    }
+}
+
+extension View {
+    /// Attach the slash-command popover to a chat input. The binding is the
+    /// editor's current text; the popover shows whenever the text starts
+    /// with `/` and the agent has advertised matching commands.
+    func slashCommandPopover(_ text: Binding<String>) -> some View {
+        modifier(SlashCommandPopover(text: text))
     }
 }
 
