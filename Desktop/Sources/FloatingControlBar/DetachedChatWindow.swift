@@ -774,23 +774,42 @@ class DetachedChatWindowController {
             }
         }
 
-        // Fork: branch the current detached session in place. The window keeps
-        // its sessionKey (the bridge swaps the underlying sessionId on the
-        // same key), so this pop-out becomes the live edge of the branch and
-        // the source sessionId stays resumable on disk.
+        // Fork: branch the current detached session into a NEW pop-out window.
+        // The source pop-out stays exactly as it is (still bound to its
+        // sessionKey, conversation still rendered). A new detached window is
+        // opened bound to a fresh sessionKey, with the source's chat history
+        // copied in so the user can see the prior context that was forked
+        // from. The bridge fork registers the new branch under the new key
+        // while leaving the source key live.
         win.onFork = { [weak win, weak detachedState, weak chatProvider] in
             guard let win, let state = detachedState, let provider = chatProvider else { return }
-            state.streaming.chatHistory = []
-            state.streaming.displayedQuery = ""
-            state.streaming.currentAIMessage = nil
-            state.streaming.isAILoading = false
-            state.input.aiInputText = ""
-            state.streaming.suggestedReplies = []
-            state.streaming.suggestedReplyQuestion = ""
-            state.clearQueue()
-            let key = win.sessionKey
+
+            let sourceKey = win.sessionKey
+            let newKey = "detached-\(UUID().uuidString)"
+
+            // Snapshot the source pop-out's visible state for the new window.
+            let chatHistory = state.streaming.chatHistory
+            let displayedQuery = state.streaming.displayedQuery
+            let currentAIMessage = state.streaming.currentAIMessage
+            // In-flight messages belong to the source session; the new
+            // window starts idle.
+            let isAILoading = false
+            let messageCountBefore = provider.messages.count
+            let inheritState = state
+
             Task { @MainActor in
-                await provider.forkSession(key: key)
+                await provider.forkSession(fromKey: sourceKey, toKey: newKey)
+
+                DetachedChatWindowController.shared.show(
+                    chatHistory: chatHistory,
+                    displayedQuery: displayedQuery,
+                    currentAIMessage: currentAIMessage,
+                    isAILoading: isAILoading,
+                    chatProvider: provider,
+                    messageCountBefore: messageCountBefore,
+                    sessionKey: newKey,
+                    inheritWorkspaceFrom: inheritState
+                )
             }
         }
 
@@ -1225,45 +1244,15 @@ class DetachedChatWindowController {
 
     /// Reset the per-window safety watchdog.
     ///
-    /// While the AI message is streaming, any mutation fires the MessageObserver and
-    /// calls this with `isStreaming = true` — we cancel the prior timer and arm a
-    /// fresh one. As long as text keeps arriving the timer never fires. If the
-    /// stream goes silent (e.g. the bridge crashed mid-cancel after a Playwright
-    /// MCP hang and the `tool_hang_canceled` event never landed), the timer fires
-    /// and forces the spinner off so the window isn't stuck visually forever.
+    /// Disabled May 12 2026: the 130s timer interrupted healthy streams when
+    /// the bridge had been quiet for natural reasons (long tool calls, session
+    /// resumes), force-clearing the spinner and firing a bridge interrupt that
+    /// killed in-flight queries. Re-enable by restoring the timer body.
     fileprivate func scheduleSafetyWatchdog(winId: ObjectIdentifier, isStreaming: Bool, messageId: String) {
         entries[winId]?.safetyWatchdog?.cancel()
-        guard isStreaming else {
-            entries[winId]?.safetyWatchdog = nil
-            return
-        }
-        let intervalNs = UInt64(Self.safetyWatchdogIntervalSeconds) * NSEC_PER_SEC
-        let task = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: intervalNs)
-            guard let self else { return }
-            guard let entry = self.entries[winId] else { return }
-            // Re-check current state — by the time we wake up streaming may have
-            // already finished cleanly. Don't touch anything in that case.
-            let state = entry.window.state
-            guard state.streaming.isAILoading || (state.streaming.currentAIMessage?.isStreaming == true),
-                  state.streaming.currentAIMessage?.id == messageId else {
-                self.entries[winId]?.safetyWatchdog = nil
-                return
-            }
-            log("[DetachedChat] safety watchdog fired: no message activity for \(Self.safetyWatchdogIntervalSeconds)s on session=\(entry.sessionKey) msgId=\(messageId) — force-clearing spinner")
-            if state.streaming.currentAIMessage?.isStreaming == true {
-                state.streaming.currentAIMessage?.isStreaming = false
-            }
-            state.streaming.isAILoading = false
-            // Reconcile ChatProvider: if the bridge has gone silent for this
-            // session, the completion event will never arrive, so
-            // sendingSessionKeys would stay sticky and the next submit would be
-            // enqueued behind a zombie query — producing the displayedQuery +
-            // queue-chip duplication bug.
-            FloatingControlBarManager.shared.chatProvider?.forceClearSending(sessionKey: entry.sessionKey)
-            self.entries[winId]?.safetyWatchdog = nil
-        }
-        entries[winId]?.safetyWatchdog = task
+        entries[winId]?.safetyWatchdog = nil
+        _ = isStreaming
+        _ = messageId
     }
 
     /// Handle `chatProviderDidDequeue` for any detached session.
