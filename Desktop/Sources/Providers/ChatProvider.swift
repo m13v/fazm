@@ -1000,7 +1000,9 @@ class ChatProvider: ObservableObject {
         var forceNewTextBlock: Bool = false
     }
     private var streamingBuffers: [String: StreamingBuffer] = [:]
-    private let streamingFlushInterval: TimeInterval = 0.1
+    /// Tick interval for the streaming drip-flush. 25ms = 40 Hz, fast enough
+    /// for a smooth typewriter effect without flooding SwiftUI re-renders.
+    private let streamingFlushInterval: TimeInterval = 0.025
 
     // MARK: - Cached Context for Prompts
     private var cachedAIProfile: String = ""
@@ -3776,12 +3778,14 @@ class ChatProvider: ObservableObject {
                 }
             )
 
-            // Flush any remaining buffered streaming text before finalizing
+            // Flush any remaining buffered streaming text before finalizing.
+            // forceAll=true bypasses the drip-tick slicer so the entire buffer
+            // lands in the message immediately before the finalize logic reads it.
             if let buf = streamingBuffers[aiMessageId] {
                 buf.flushWorkItem?.cancel()
                 streamingBuffers[aiMessageId]?.flushWorkItem = nil
             }
-            flushStreamingBuffer(messageId: aiMessageId)
+            flushStreamingBuffer(messageId: aiMessageId, forceAll: true)
 
             // Determine the final text to display and save
             let messageText: String
@@ -4082,12 +4086,13 @@ class ChatProvider: ObservableObject {
                 }
             }
 
-            // Flush any remaining buffered streaming text before handling the error
+            // Flush any remaining buffered streaming text before handling the error.
+            // forceAll=true so partial text is fully visible before the error suffix appends.
             if let buf = streamingBuffers[aiMessageId] {
                 buf.flushWorkItem?.cancel()
                 streamingBuffers[aiMessageId]?.flushWorkItem = nil
             }
-            flushStreamingBuffer(messageId: aiMessageId)
+            flushStreamingBuffer(messageId: aiMessageId, forceAll: true)
 
             // Keep the AI message in the array (even if empty) so Combine subscribers
             // and handlePostQuery can find it. Removing it broke detached window error
@@ -4453,13 +4458,17 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append text to a streaming message via a per-message buffer that flushes at ~100ms intervals.
-    /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+    /// Append text to a streaming message via a per-message buffer that drips out
+    /// characters at ~40 Hz for a smooth typewriter effect (vs dumping whole chunks
+    /// at network arrival speed).
     /// Each message ID gets its own buffer to prevent cross-contamination between pop-out windows.
     private func appendToMessage(id: String, text: String) {
         streamingBuffers[id, default: StreamingBuffer()].textBuffer += text
+        scheduleStreamingFlush(id: id)
+    }
 
-        // Schedule a flush if one isn't already pending for this message
+    /// Schedule the next drip-flush tick for a message, if one isn't already pending.
+    private func scheduleStreamingFlush(id: String) {
         if streamingBuffers[id]?.flushWorkItem == nil {
             let workItem = DispatchWorkItem { [weak self] in
                 self?.flushStreamingBuffer(messageId: id)
@@ -4469,18 +4478,43 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Compute how many characters (grapheme clusters) to drip out this tick.
+    /// Adaptive so we never lag too far behind the network: drain a backlog
+    /// within ~0.5 seconds (~20 ticks at 40 Hz). Minimum 2 chars/tick for a
+    /// comfortable typewriter feel; cap so a huge burst doesn't dump 1000+
+    /// chars in one frame.
+    private func streamingSliceSize(for bufferLen: Int) -> Int {
+        if bufferLen <= 0 { return 0 }
+        let target = max(2, (bufferLen + 19) / 20)
+        return min(bufferLen, target, 12)
+    }
+
     /// Handle a text block boundary from the bridge. Flushes any buffered text
     /// so it lands in its own content block, then marks the next flush to create
     /// a new block rather than appending to the previous one.
     private func handleTextBlockBoundary(messageId: String) {
         if let buf = streamingBuffers[messageId], !buf.textBuffer.isEmpty {
-            flushStreamingBuffer(messageId: messageId)
+            // Force-flush remaining drip queue so the entire buffered text lands
+            // in the current block before we open a new one. Otherwise a chunk
+            // of text that should belong to "before-tool-call" gets stranded in
+            // the next block.
+            flushStreamingBuffer(messageId: messageId, forceAll: true)
         }
         streamingBuffers[messageId, default: StreamingBuffer()].forceNewTextBlock = true
     }
 
     /// Flush accumulated text and thinking deltas for a specific message to the published messages array.
-    private func flushStreamingBuffer(messageId id: String) {
+    ///
+    /// - Parameter forceAll: When `false` (the periodic drip-tick path), only a small
+    ///   slice of buffered chars is moved to the UI and the next tick is rescheduled.
+    ///   When `true` (end of stream, tool boundary, error path, session-recovery wipes),
+    ///   the entire buffer is flushed immediately so the UI catches up before any
+    ///   subsequent finalize logic runs.
+    ///
+    ///   `forceNewTextBlock == true` also forces a full flush regardless of `forceAll`,
+    ///   because the dedup logic for "model re-emits text after an internal tool call"
+    ///   needs to compare the complete re-emitted string against the prior block.
+    private func flushStreamingBuffer(messageId id: String, forceAll: Bool = false) {
         streamingBuffers[id]?.flushWorkItem = nil
 
         guard let index = messages.firstIndex(where: { $0.id == id }) else {
@@ -4503,10 +4537,23 @@ class ChatProvider: ObservableObject {
 
         let forceNewTextBlock = streamingBuffers[id]?.forceNewTextBlock ?? false
 
-        // Flush text buffer
-        let textBuffered = streamingBuffers[id]?.textBuffer ?? ""
-        if !textBuffered.isEmpty {
+        // Flush text buffer (drip a slice per tick unless forced).
+        // When we're about to create a brand-new text block (forceNewTextBlock=true),
+        // we MUST flush the entire buffer in one shot — the dedup logic compares the
+        // emitted string to existing blocks and dripping would defeat it (a 1-char
+        // slice never matches a multi-char prior block).
+        let fullTextBuffered = streamingBuffers[id]?.textBuffer ?? ""
+        let textBuffered: String
+        if !fullTextBuffered.isEmpty && !forceAll && !forceNewTextBlock {
+            let n = streamingSliceSize(for: fullTextBuffered.count)
+            let cutIdx = fullTextBuffered.index(fullTextBuffered.startIndex, offsetBy: n)
+            textBuffered = String(fullTextBuffered[..<cutIdx])
+            streamingBuffers[id]?.textBuffer = String(fullTextBuffered[cutIdx...])
+        } else {
+            textBuffered = fullTextBuffered
             streamingBuffers[id]?.textBuffer = ""
+        }
+        if !textBuffered.isEmpty {
 
             // Find the last text block, skipping over thinking/tool/etc. blocks.
             // Opus 4.7's interleaved thinking interrupts text mid-sentence with a
@@ -4555,11 +4602,19 @@ class ChatProvider: ObservableObject {
             streamingBuffers[id]?.forceNewTextBlock = false
         }
 
-        // Flush thinking buffer
-        let thinkingBuffered = streamingBuffers[id]?.thinkingBuffer ?? ""
-        if !thinkingBuffered.isEmpty {
+        // Flush thinking buffer (also drip-paced unless forced).
+        let fullThinkingBuffered = streamingBuffers[id]?.thinkingBuffer ?? ""
+        let thinkingBuffered: String
+        if !fullThinkingBuffered.isEmpty && !forceAll {
+            let n = streamingSliceSize(for: fullThinkingBuffered.count)
+            let cutIdx = fullThinkingBuffered.index(fullThinkingBuffered.startIndex, offsetBy: n)
+            thinkingBuffered = String(fullThinkingBuffered[..<cutIdx])
+            streamingBuffers[id]?.thinkingBuffer = String(fullThinkingBuffered[cutIdx...])
+        } else {
+            thinkingBuffered = fullThinkingBuffered
             streamingBuffers[id]?.thinkingBuffer = ""
-
+        }
+        if !thinkingBuffered.isEmpty {
             if let lastBlockIndex = messages[index].contentBlocks.indices.last,
                case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
                 messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + thinkingBuffered)
@@ -4568,8 +4623,12 @@ class ChatProvider: ObservableObject {
             }
         }
 
-        // Clean up buffer entry if fully drained
-        if let buf = streamingBuffers[id], buf.textBuffer.isEmpty && buf.thinkingBuffer.isEmpty && buf.flushWorkItem == nil {
+        // Reschedule the next drip-tick if there's still buffered data to reveal.
+        // Skip rescheduling when forceAll dumped everything in one shot.
+        if let buf = streamingBuffers[id], !buf.textBuffer.isEmpty || !buf.thinkingBuffer.isEmpty {
+            scheduleStreamingFlush(id: id)
+        } else if let buf = streamingBuffers[id], buf.flushWorkItem == nil {
+            // Fully drained — clean up the buffer entry.
             streamingBuffers.removeValue(forKey: id)
         }
     }
@@ -4960,17 +5019,10 @@ class ChatProvider: ObservableObject {
     }
 
     /// Append thinking text to the streaming message via a per-message buffer.
+    /// Drips out at the same ~40 Hz cadence as regular text for visual consistency.
     private func appendThinking(messageId: String, text: String) {
         streamingBuffers[messageId, default: StreamingBuffer()].thinkingBuffer += text
-
-        // Schedule a flush if one isn't already pending for this message
-        if streamingBuffers[messageId]?.flushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer(messageId: messageId)
-            }
-            streamingBuffers[messageId]?.flushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
-        }
+        scheduleStreamingFlush(id: messageId)
     }
 
     /// Mark any remaining `.running` tool call blocks as `.completed` in a message.
