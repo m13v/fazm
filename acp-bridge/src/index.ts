@@ -1043,6 +1043,35 @@ function startAcpProcess(): void {
           const u = p?.update as Record<string, unknown> | undefined;
           const su = u?.sessionUpdate as string | undefined;
           const toolCallId = u?.toolCallId as string | undefined;
+
+          // Session-agnostic notifications: forward to Swift even when no
+          // per-session handler is registered. `available_commands_update`
+          // fires from the agent right after `session/new`, which happens
+          // during warmup before any query loop has installed a handler, so
+          // it would otherwise be dropped on every cold start.
+          if (su === "available_commands_update") {
+            const rawCmds =
+              (u?.availableCommands as unknown[] | undefined) ??
+              (u?.available_commands as unknown[] | undefined) ??
+              [];
+            const commands = rawCmds
+              .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+              .map((c) => {
+                const name = typeof c.name === "string" ? c.name : "";
+                const description = typeof c.description === "string" ? c.description : "";
+                const inputObj = c.input as Record<string, unknown> | undefined;
+                const inputHint =
+                  inputObj && typeof inputObj.hint === "string" ? inputObj.hint : undefined;
+                return { name, description, inputHint };
+              })
+              .filter((c) => c.name.length > 0);
+            logErr(
+              `[ROUTE-DROP-RESCUED] available_commands_update sessionId=${notifSessionId} count=${commands.length}`,
+            );
+            sendWithSession(notifSessionId, { type: "available_commands_update", commands });
+            return;
+          }
+
           logErr(
             `[ROUTE-DROP] notification dropped: sessionId=${notifSessionId} method=${methodStr} ` +
               `update=${su ?? "?"}${toolCallId ? ` toolId=${toolCallId}` : ""} ` +
