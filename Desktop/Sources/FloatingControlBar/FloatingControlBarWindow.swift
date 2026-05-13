@@ -75,6 +75,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     var onStopAgent: (() -> Void)?
     var onPopOut: (() -> Void)?
     var onResetSession: (() -> Void)?
+    /// Fired when the user clicks the fork button in the chat header. The
+    /// handler (set externally, alongside `onResetSession`) is responsible for
+    /// calling `ACPBridge.forkSession(fromKey:, toKey:)` for the floating
+    /// session. The window controller then clears the local chat UI so the
+    /// user has a fresh prompt while the agent retains prior context.
+    var onForkChat: (() -> Void)?
     var onConnectClaude: (() -> Void)?
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
@@ -230,6 +236,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onSendQuery: { [weak self] message, attachments in self?.onSendQuery?(message, attachments) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
             onNewChat: { [weak self] in self?.startNewChat() },
+            onFork: { [weak self] in self?.forkChat() },
             onInterruptAndFollowUp: { [weak self] message in self?.onInterruptAndFollowUp?(message) },
             onEnqueueMessage: { [weak self] message in self?.onEnqueueMessage?(message) },
             onSendNowQueued: { [weak self] item in self?.onSendNowQueued?(item) },
@@ -629,6 +636,48 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         // Clear persisted messages and reset ACP session so restart doesn't reload old chat
         onResetSession?()
+        finishChatRefresh()
+    }
+
+    /// Branch the current chat: fire the bridge fork, then clear the local UI
+    /// like `startNewChat` but WITHOUT calling `onResetSession`. The forked
+    /// session is registered under the same key by the bridge (in-place fork),
+    /// so the next user message lands in the branched session with full prior
+    /// context. The source branch's sessionId is preserved on disk and remains
+    /// reachable via Conversation History.
+    func forkChat() {
+        guard let handler = onForkChat else {
+            // No bridge wireup: fall back to plain new-chat semantics so the
+            // button does *something* useful instead of going silent.
+            startNewChat()
+            return
+        }
+
+        if state.tutorial.isTutorialChatActive {
+            TutorialChatGuide.shared.finish(barState: state)
+        }
+
+        state.streaming.showingAIConversation = true
+        state.streaming.chatHistory = []
+        state.streaming.displayedQuery = ""
+        state.streaming.currentAIMessage = nil
+        state.streaming.isAILoading = false
+        state.streaming.showingAIResponse = false
+        state.input.aiInputText = ""
+        state.streaming.suggestedReplies = []
+        state.streaming.suggestedReplyQuestion = ""
+        state.clearQueue()
+
+        // Trigger the upstream fork. The bridge unregisters the source from
+        // the "floating" key and registers the new branch under the same key
+        // before the user's next message goes out.
+        handler()
+        finishChatRefresh()
+    }
+
+    /// Common tail of `startNewChat` and `forkChat`: resize to the input view,
+    /// re-install the height observer, and focus the input field.
+    private func finishChatRefresh() {
 
         let savedWidth = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
             .map(NSSizeFromString)?.width ?? 0
@@ -1227,6 +1276,13 @@ class FloatingControlBarManager {
             guard let provider = chatProvider else { return }
             Task { @MainActor in
                 await provider.resetSession(key: "floating")
+            }
+        }
+
+        barWindow.onForkChat = { [weak chatProvider] in
+            guard let provider = chatProvider else { return }
+            Task { @MainActor in
+                await provider.forkSession(key: "floating")
             }
         }
 
