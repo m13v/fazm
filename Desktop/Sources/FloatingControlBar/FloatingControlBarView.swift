@@ -113,10 +113,12 @@ struct FloatingControlBarView: View {
                                 .scaledFont(size: 9)
                                 .foregroundColor(.secondary)
                         }
+                        .padding(.leading, 8)
+                        .padding(.trailing, 6)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(.leading, 8)
-                    .padding(.top, 4)
                     .transition(.opacity)
                 }
                 .overlay(alignment: .topTrailing) {
