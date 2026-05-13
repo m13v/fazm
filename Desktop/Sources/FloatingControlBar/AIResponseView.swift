@@ -1388,19 +1388,33 @@ private struct SlashCommandPopover: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .popover(
-                isPresented: Binding(
-                    get: { slashQuery != nil && !matchingCommands.isEmpty },
-                    set: { _ in }
-                ),
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .top
-            ) {
-                SlashCommandListView(commands: matchingCommands) { cmd in
-                    // Trailing space lets the user immediately type the
-                    // argument (when there's a hint); it also disqualifies
-                    // `slashQuery` so the popover dismisses itself.
-                    text = "/\(cmd.name) "
+            // Use an in-window overlay rather than `.popover()` because the
+            // SwiftUI popover spawns a new key window that steals focus from
+            // the text editor on every keystroke (it would re-key whenever
+            // `matchingCommands` changes, breaking typing). An overlay stays
+            // in the same window so first responder stays on the editor.
+            .overlay(alignment: .topLeading) {
+                if slashQuery != nil && !matchingCommands.isEmpty {
+                    SlashCommandListView(commands: matchingCommands) { cmd in
+                        // Trailing space lets the user immediately type the
+                        // argument (when there's a hint); it also disqualifies
+                        // `slashQuery` so the overlay dismisses itself.
+                        text = "/\(cmd.name) "
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
+                    // Float the list ABOVE the input by aligning its bottom
+                    // edge 6pt above the anchor's top edge.
+                    .alignmentGuide(.top) { d in d[.bottom] + 6 }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .zIndex(1000)
                 }
             }
     }
