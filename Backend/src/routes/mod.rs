@@ -1,6 +1,7 @@
 pub mod appcast;
 pub mod keys;
 pub mod llm_usage;
+pub mod magic_link;
 pub mod referral;
 pub mod relay;
 pub mod releases;
