@@ -407,8 +407,10 @@ class AuthService: NSObject {
             AnalyticsManager.shared.signInFailed(provider: "magic_link", error: "invalid_response")
             throw AuthError.invalidResponse
         }
+        let backendUid = json["uid"] as? String
+        let backendEmail = (json["email"] as? String) ?? email
 
-        try await signInWithCustomToken(customToken)
+        try await signInWithCustomToken(customToken, expectedUid: backendUid, expectedEmail: backendEmail)
 
         AnalyticsManager.shared.signInCompleted(provider: "magic_link")
         log("AuthService: Magic-link sign-in completed successfully")
@@ -417,7 +419,12 @@ class AuthService: NSObject {
     /// Exchange a Firebase custom token for an ID/refresh token pair via the
     /// `accounts:signInWithCustomToken` REST endpoint, then run the standard
     /// post-auth pipeline.
-    private func signInWithCustomToken(_ customToken: String) async throws {
+    ///
+    /// Note: `accounts:signInWithCustomToken` does NOT include `localId` or
+    /// `email` in its response (unlike `signInWithIdp`). We inject the known
+    /// UID/email from the backend so `processFirebaseAuthResponse` can persist
+    /// them via the shared path used by Google/Apple sign-in.
+    private func signInWithCustomToken(_ customToken: String, expectedUid: String?, expectedEmail: String?) async throws {
         let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(Self.firebaseAPIKey)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -435,8 +442,34 @@ class AuthService: NSObject {
             throw AuthError.serverError("signInWithCustomToken failed (status \(statusCode))")
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw AuthError.invalidResponse
+        }
+
+        // Firebase's `accounts:signInWithCustomToken` REST endpoint returns
+        // only `idToken`, `refreshToken`, and `expiresIn` (no `localId`, no
+        // `email`). `processFirebaseAuthResponse` requires `localId`, so we
+        // inject it from one of three sources, in order of preference:
+        //   1. Backend response (we trust our own verify endpoint).
+        //   2. The idToken JWT's `user_id` / `sub` claim.
+        //   3. Nothing — and `processFirebaseAuthResponse` will throw.
+        if json["localId"] == nil {
+            if let uid = expectedUid, !uid.isEmpty {
+                json["localId"] = uid
+            } else if let idToken = json["idToken"] as? String,
+                      let claims = decodeJWT(idToken),
+                      let uid = (claims["user_id"] as? String) ?? (claims["sub"] as? String) {
+                json["localId"] = uid
+            }
+        }
+        if json["email"] == nil {
+            if let email = expectedEmail, !email.isEmpty {
+                json["email"] = email
+            } else if let idToken = json["idToken"] as? String,
+                      let claims = decodeJWT(idToken),
+                      let email = claims["email"] as? String {
+                json["email"] = email
+            }
         }
 
         try processFirebaseAuthResponse(json, provider: "magic_link")
