@@ -87,6 +87,18 @@ private final class ContinuationBox<T, E: Error>: @unchecked Sendable {
   }
 }
 
+/// Observable registry of slash commands the agent currently accepts. Driven
+/// off ACP `available_commands_update` notifications via ChatProvider; the
+/// chat-input popover (`AskAIInputView`, `AIResponseView.followUpInputView`)
+/// reads from this singleton without DI plumbing because the command set is
+/// effectively global across floating + detached sessions.
+@MainActor
+final class SlashCommandRegistry: ObservableObject {
+    static let shared = SlashCommandRegistry()
+    @Published var commands: [ACPBridge.AvailableCommand] = []
+    private init() {}
+}
+
 /// Manages a long-lived Node.js subprocess running the ACP (Agent Client Protocol) bridge.
 /// Supports two modes: bundled Anthropic API key or user's personal OAuth.
 /// Communication uses JSON lines over stdin/stdout pipes.
@@ -278,10 +290,12 @@ actor ACPBridge {
 
   /// A slash command advertised by the agent. Mirrors ACP's `AvailableCommand`
   /// schema. Rendered in the input-field popover when the user types `/`.
-  struct AvailableCommand: Equatable, Sendable {
+  struct AvailableCommand: Equatable, Sendable, Identifiable {
     let name: String          // e.g. "compact" (no leading slash)
     let description: String
     let inputHint: String?    // optional argument hint, e.g. "[focus]"
+
+    var id: String { name }
   }
 
   func setChatObserverPollHandler(_ handler: @escaping @Sendable () -> Void) {
@@ -316,6 +330,14 @@ actor ACPBridge {
 
   func setWarmupCompleteHandler(_ handler: @escaping @Sendable (_ durationMs: Double, _ sessionKeys: [String], _ ok: Bool, _ error: String?) -> Void) {
     self.onWarmupComplete = handler
+  }
+
+  func setAvailableCommandsUpdateHandler(_ handler: @escaping @Sendable (_ sessionKey: String?, _ commands: [AvailableCommand]) -> Void) {
+    self.onAvailableCommandsUpdate = handler
+  }
+
+  func setSessionForkedHandler(_ handler: @escaping @Sendable (_ fromSessionId: String, _ toSessionId: String, _ fromSessionKey: String, _ toSessionKey: String) -> Void) {
+    self.onSessionForked = handler
   }
 
   func setGlobalAuthHandlers(
@@ -1188,6 +1210,12 @@ actor ACPBridge {
       case .sessionStarted(let sid, let evtKey, let isResume):
         log("ACPBridge: session_started \(isResume ? "(resumed)" : "(new)") sessionId=\(sid) key=\(evtKey ?? "nil")")
         onStatusEvent(.sessionStarted(sessionId: sid, sessionKey: evtKey, isResume: isResume))
+
+      case .availableCommandsUpdate, .sessionForked:
+        // Handled by global callbacks in `deliverMessage`; these messages
+        // never reach the per-session continuation loop. Listed explicitly
+        // to keep the switch exhaustive.
+        break
       }
     }
   }
