@@ -190,6 +190,12 @@ export interface ResultMessage {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  // True when the query was cut short by a user-initiated interrupt
+  // (Stop button or interrupt+send). `text` is the streamed-so-far
+  // partial response, not a completed answer. Swift stamps a visible
+  // "(interrupted)" marker so it doesn't look like a phantom reply
+  // to whatever the user sends next.
+  interrupted?: boolean;
 }
 
 export interface ToolActivityMessage {
