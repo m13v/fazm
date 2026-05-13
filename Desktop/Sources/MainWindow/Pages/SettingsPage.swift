@@ -951,6 +951,10 @@ struct SettingsContentView: View {
             // Codex (ChatGPT) backend
             codexAccountCard
 
+            // Codex visible-models picker (lets the user surface older GPT generations
+            // if they want to conserve ChatGPT quota by defaulting to a cheaper tier).
+            codexModelsCard
+
             // Custom API Endpoint (advanced)
             settingsCard(settingId: "aichat.endpoint") {
                 VStack(alignment: .leading, spacing: 12) {
@@ -2168,6 +2172,74 @@ struct SettingsContentView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var codexModelsCard: some View {
+        settingsCard(settingId: "advanced.codex.models") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: "slider.horizontal.3")
+                        .scaledFont(size: 16)
+                        .foregroundColor(FazmColors.textTertiary)
+
+                    Text("Visible GPT Models")
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(FazmColors.textPrimary)
+
+                    Spacer()
+
+                    if codexBackend.hasCustomVisibility {
+                        Button("Reset to default") {
+                            codexBackend.resetVisibilityToDefault()
+                        }
+                        .buttonStyle(.plain)
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(FazmColors.purplePrimary)
+                    }
+                }
+
+                Text("Choose which GPT models appear in the floating-bar picker. Fazm shows GPT-5.5 by default. Enable older generations (5.4, 5.3-codex) if you'd rather conserve your ChatGPT quota on routine tasks and only reach for the newest model when you need it.")
+                    .scaledFont(size: 12)
+                    .foregroundColor(FazmColors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                if codexBackend.authMode == "none" {
+                    Text("Sign in to ChatGPT above to see the full model list.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(FazmColors.textTertiary)
+                        .padding(.vertical, 8)
+                } else if codexBackend.availableModels.isEmpty {
+                    Text(codexBackend.probing ? "Loading models…" : "No models reported yet. Try \"Check connection\" above.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(FazmColors.textTertiary)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(codexBackend.availableModels) { model in
+                        Toggle(isOn: Binding(
+                            get: {
+                                _ = codexBackend.visibleModelsRevision
+                                return codexBackend.isModelVisibleInPicker(modelId: model.modelId)
+                            },
+                            set: { codexBackend.setModelVisible(model.modelId, visible: $0) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.name)
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(FazmColors.textPrimary)
+                                Text(model.modelId)
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(FazmColors.textTertiary)
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .padding(.vertical, 2)
+                    }
                 }
             }
         }
