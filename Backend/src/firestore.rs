@@ -12,6 +12,8 @@ const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const METADATA_TOKEN_URL: &str =
     "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 const FIRESTORE_SCOPE: &str = "https://www.googleapis.com/auth/datastore";
+/// Identity Toolkit Admin API scope (user lookup/create + custom token mint).
+pub const FIREBASE_SCOPE: &str = "https://www.googleapis.com/auth/firebase";
 const COLLECTION: &str = "desktop_releases";
 
 // ─── Token exchange ───────────────────────────────────────────────────────────
@@ -38,13 +40,22 @@ struct TokenResponse {
 pub async fn get_access_token(
     config: &Arc<Config>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    get_access_token_with_scope(config, FIRESTORE_SCOPE).await
+}
+
+/// Same as `get_access_token`, but lets the caller specify the OAuth scope
+/// (e.g. the Identity Toolkit Admin API needs `firebase` scope, not `datastore`).
+pub async fn get_access_token_with_scope(
+    config: &Arc<Config>,
+    scope: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()?;
 
     // 1. Metadata server (preferred in Cloud Run)
     let meta_result = client
-        .get(format!("{METADATA_TOKEN_URL}?scopes={FIRESTORE_SCOPE}"))
+        .get(format!("{METADATA_TOKEN_URL}?scopes={scope}"))
         .header("Metadata-Flavor", "Google")
         .send()
         .await;
@@ -65,7 +76,7 @@ pub async fn get_access_token(
     let now = chrono::Utc::now().timestamp();
     let claims = GoogleJwtClaims {
         iss: sa_email.clone(),
-        scope: FIRESTORE_SCOPE.to_string(),
+        scope: scope.to_string(),
         aud: TOKEN_URL.to_string(),
         iat: now,
         exp: now + 3600,
