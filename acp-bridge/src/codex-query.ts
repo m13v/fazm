@@ -45,6 +45,12 @@ export interface CodexQueryDeps {
     cwd: string,
     sessionKey: string,
   ) => Array<Record<string, unknown>>;
+  /** Register sessionId → sessionKey in the bridge's main routing map so
+   *  streaming text deltas tag outbound messages with the right sessionKey.
+   *  Without this, sendWithSession() emits sessionKey=nil and Swift drops
+   *  the deltas — exactly the "first response works, follow-up freezes"
+   *  symptom we hit on 2026-05-13. */
+  registerSession: (sessionKey: string, entry: { sessionId: string; cwd: string; model?: string }) => void;
 }
 
 /** Per-sessionKey codex session pool, kept here so it doesn't leak into index.ts globals. */
@@ -88,7 +94,7 @@ function buildPreamble(
 
 /** Top-level entrypoint. Mirrors handleQuery's contract: never rejects, sends `error` on failure. */
 export async function handleCodexQuery(msg: QueryMessage, deps: CodexQueryDeps): Promise<void> {
-  const { logErr, send, sendWithSession, getProvider, buildMcpServers } = deps;
+  const { logErr, send, sendWithSession, getProvider, buildMcpServers, registerSession } = deps;
   const sessionKey = msg.sessionKey ?? msg.model ?? "codex-default";
   const cwd = msg.cwd ?? process.env.HOME ?? process.cwd();
   const modelId = msg.model ?? "gpt-5.4/high";
@@ -129,6 +135,7 @@ export async function handleCodexQuery(msg: QueryMessage, deps: CodexQueryDeps):
         entry = { sessionId: msg.resume, cwd, modelId, systemPromptDelivered: true };
         codexSessions.set(sessionKey, entry);
         codexSessionIdToKey.set(entry.sessionId, sessionKey);
+        registerSession(sessionKey, { sessionId: entry.sessionId, cwd, model: modelId });
         try {
           await provider.request("session/set_model", { sessionId: entry.sessionId, modelId });
         } catch (modelErr) {
@@ -156,6 +163,7 @@ export async function handleCodexQuery(msg: QueryMessage, deps: CodexQueryDeps):
         entry = { sessionId: result.sessionId, cwd, modelId, systemPromptDelivered: false };
         codexSessions.set(sessionKey, entry);
         codexSessionIdToKey.set(entry.sessionId, sessionKey);
+        registerSession(sessionKey, { sessionId: entry.sessionId, cwd, model: modelId });
         isNewSession = true;
         sendWithSession(entry.sessionId, { type: "session_started", sessionKey, isResume: false } as OutboundMessage);
         if (resumeAttemptedSessionId) {
