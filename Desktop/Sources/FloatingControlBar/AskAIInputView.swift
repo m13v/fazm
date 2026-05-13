@@ -101,6 +101,7 @@ struct AskAIInputView: View {
                 }
                 .padding(.horizontal, 4)
                 .frame(height: textHeight)
+                .slashCommandPopover($localInput)
 
                 micButton
                 sendButton
