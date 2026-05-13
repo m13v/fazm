@@ -1589,6 +1589,16 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Side-by-side fork: spawn a new branch under `toKey` while leaving the
+    /// source session under `fromKey` untouched. Both keys remain live; the
+    /// caller is responsible for opening a window bound to `toKey` and copying
+    /// the visible chat history into it (the agent's conversation context is
+    /// branched server-side at the source's last message). The bridge enforces
+    /// that `toKey` is not already registered.
+    func forkSession(fromKey: String, toKey: String) async {
+        await acpBridge.forkSession(fromKey: fromKey, toKey: toKey)
+    }
+
     /// Transfer the ACP session from one key to another without resetting it.
     /// Used when popping out the floating bar conversation to a detached window —
     /// the detached window continues the same ACP session under a new key,
