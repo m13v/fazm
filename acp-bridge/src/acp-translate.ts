@@ -128,8 +128,26 @@ export function translateCodexUpdate(
       return;
     }
 
+    case "available_commands_update": {
+      const rawCmds =
+        (update.availableCommands as unknown[] | undefined) ??
+        (update.available_commands as unknown[] | undefined) ??
+        [];
+      const commands = rawCmds
+        .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+        .map((c) => {
+          const name = typeof c.name === "string" ? c.name : "";
+          const description = typeof c.description === "string" ? c.description : "";
+          const inputObj = c.input as Record<string, unknown> | undefined;
+          const inputHint = inputObj && typeof inputObj.hint === "string" ? inputObj.hint : undefined;
+          return { name, description, inputHint };
+        })
+        .filter((c) => c.name.length > 0);
+      sendWithSession(sessionId, { type: "available_commands_update", commands });
+      return;
+    }
+
     case "usage_update":
-    case "available_commands_update":
     case "current_mode_update":
       // Phase 2.4: ignore. usage_update can drive cost tracking when codex-acp
       // surfaces a stable schema for it.
