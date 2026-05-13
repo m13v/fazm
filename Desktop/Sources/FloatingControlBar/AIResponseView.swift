@@ -713,7 +713,7 @@ struct AIResponseView: View {
             if !exchange.aiMessage.contentBlocks.isEmpty || !exchange.aiMessage.text.isEmpty {
                 MessageWithCopyButton(alignment: .topTrailing) {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(exchange.aiMessage.text, forType: .string)
+                    NSPasteboard.general.setString(exchange.aiMessage.copyableText, forType: .string)
                 } content: {
                     VStack(alignment: .leading, spacing: 4) {
                         contentBlocksView(for: exchange.aiMessage)
@@ -782,7 +782,7 @@ struct AIResponseView: View {
             if let message = currentMessage {
                 MessageWithCopyButton(alignment: .topTrailing) {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(message.text, forType: .string)
+                    NSPasteboard.general.setString(message.copyableText, forType: .string)
                 } content: {
                     VStack(alignment: .leading, spacing: 4) {
                         contentBlocksView(for: message)
