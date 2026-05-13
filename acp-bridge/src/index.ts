@@ -2645,8 +2645,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // Drop ALL trailing assistant turns. When recovery fires, the prior
       // assistant turn is by definition unreliable: it was either interrupted
       // mid-stream or replayed stale chunks from a previous turn. Even when
-      // its text looks
-      // plausible (normal prose, no toxic markers), replaying it primes the
+      // its text looks plausible (normal prose, no toxic markers), replaying
+      // it primes the
       // recovery model so heavily that a low-information new message like
       // "Hello" gets a continuation of the prior topic instead of a direct
       // answer (May 5 2026 incident: pop-out user typed "Hello" after a long
