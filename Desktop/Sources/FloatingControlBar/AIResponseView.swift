@@ -131,6 +131,16 @@ struct AIResponseView: View {
                                     .id("voiceFollowUp")
                             }
 
+                            // Suggested replies live INSIDE the ScrollView so when they appear
+                            // they extend the chat content downward; .defaultScrollAnchor(.bottom)
+                            // smoothly keeps the bottom pinned. Rendering them outside the ScrollView
+                            // would shrink the scroll viewport and make existing content visually
+                            // jump up by the height of the chips.
+                            if !isLoading && !suggestedReplies.isEmpty {
+                                suggestedRepliesView
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            }
+
                             // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
                             Color.clear.frame(height: 1).id("bottom")
                         }
@@ -227,10 +237,6 @@ struct AIResponseView: View {
                 .animation(.easeInOut(duration: 0.2), value: shouldFollowContent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            if !isLoading && !suggestedReplies.isEmpty {
-                suggestedRepliesView
-            }
 
             if !input.messageQueue.isEmpty {
                 MessageQueueView(
