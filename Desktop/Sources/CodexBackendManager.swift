@@ -34,6 +34,13 @@ final class CodexBackendManager: ObservableObject {
     /// OAuth completes, ChatProvider promotes this to the active model so the
     /// click-to-connect flow lands on the model the user wanted.
     @Published var pendingPickerModelId: String?
+    /// Bumped whenever the user's picker-visibility set changes so SwiftUI views
+    /// that read `isModelVisibleInPicker(_:)` re-render.
+    @Published private(set) var visibleModelsRevision: Int = 0
+
+    /// UserDefaults key storing the user-curated set of model ids that should
+    /// appear in the picker. Absent = use the default `isPickerEligible` rule.
+    private static let visibleModelsKey = "codexUserVisibleModelIds"
 
     struct CodexModel: Identifiable, Equatable {
         var id: String { modelId }
@@ -108,21 +115,62 @@ final class CodexBackendManager: ObservableObject {
 
     /// Convenience: only return models if the user has enabled the backend AND
     /// the last probe reported reachable. This is what the model picker reads.
-    /// Filters out older generations (< 5.5) so the picker stays focused on the
-    /// current frontier; the raw `availableModels` list remains available for
-    /// diagnostics.
+    /// Filters via `isModelVisibleInPicker(_:)` — the user can customize the
+    /// visible set in Settings > Advanced > AI Chat. By default (no custom
+    /// override) we hide older generations (< 5.5) so the picker stays focused
+    /// on the current frontier; the raw `availableModels` list remains
+    /// available for diagnostics and the Settings UI.
     ///
     /// codex-acp doesn't return a model list when unauthenticated, and the
     /// first probe right after OAuth often comes back with 0 models too while
     /// the adapter warms up. In either case we substitute a known fallback set
     /// so the picker stays populated; once a later probe brings real models,
-    /// they take over.
+    /// they take over. The fallback ignores user customization because we
+    /// don't know the real catalog yet.
     var modelsForPicker: [CodexModel] {
         guard lastProbe?.ok == true else { return [] }
         if availableModels.isEmpty {
             return Self.fallbackUnauthedGptModels
         }
-        return availableModels.filter { Self.isPickerEligible(modelId: $0.modelId) }
+        return availableModels.filter { isModelVisibleInPicker(modelId: $0.modelId) }
+    }
+
+    /// True if the user has saved an explicit picker-visibility selection.
+    /// When false, `isModelVisibleInPicker` falls back to the static rule.
+    var hasCustomVisibility: Bool {
+        UserDefaults.standard.object(forKey: Self.visibleModelsKey) != nil
+    }
+
+    /// The user's explicit visible-model set, or nil if they haven't customized.
+    private var userVisibleModelIds: Set<String>? {
+        guard let arr = UserDefaults.standard.array(forKey: Self.visibleModelsKey) as? [String] else { return nil }
+        return Set(arr)
+    }
+
+    /// Whether a given model id should appear in the picker. Honors the user's
+    /// override if present, otherwise applies the default frontier rule.
+    func isModelVisibleInPicker(modelId: String) -> Bool {
+        if let custom = userVisibleModelIds { return custom.contains(modelId) }
+        return Self.isPickerEligible(modelId: modelId)
+    }
+
+    /// Toggle a model's visibility in the picker. Seeds the user set from the
+    /// current eligible-by-default models on first use, so flipping one switch
+    /// doesn't accidentally hide everything else. Triggers a refresh of the
+    /// merged model list so the floating-bar picker updates immediately.
+    func setModelVisible(_ modelId: String, visible: Bool) {
+        var set = userVisibleModelIds ?? Set(availableModels.map(\.modelId).filter { Self.isPickerEligible(modelId: $0) })
+        if visible { set.insert(modelId) } else { set.remove(modelId) }
+        UserDefaults.standard.set(Array(set).sorted(), forKey: Self.visibleModelsKey)
+        visibleModelsRevision &+= 1
+        ShortcutSettings.shared.updateCodexModels(modelsForPicker)
+    }
+
+    /// Clear the user override so the default rule (gpt-5.5+) applies again.
+    func resetVisibilityToDefault() {
+        UserDefaults.standard.removeObject(forKey: Self.visibleModelsKey)
+        visibleModelsRevision &+= 1
+        ShortcutSettings.shared.updateCodexModels(modelsForPicker)
     }
 
     /// Stand-in GPT-5.5 list shown in the picker before the user connects their
