@@ -78,6 +78,7 @@ struct AIResponseView: View {
 
     var onClose: (() -> Void)?
     var onNewChat: (() -> Void)?
+    var onFork: (() -> Void)?
     var onSendFollowUp: ((String, [ChatAttachment]) -> Void)?
     var onEnqueueMessage: ((String) -> Void)?
     var onSendNow: ((QueuedMessage) -> Void)?
@@ -387,6 +388,10 @@ struct AIResponseView: View {
 
             if let onPopOut {
                 PopOutButton(action: onPopOut)
+            }
+
+            if let onFork, !chatHistory.isEmpty {
+                ForkChatButton(action: onFork)
             }
 
             if let onNewChat {
@@ -1332,6 +1337,25 @@ struct NewChatButton: View {
         }
         .buttonStyle(.plain)
         .floatingHint("New chat")
+    }
+}
+
+// MARK: - Fork Chat Button
+
+/// Branches the current chat into a new session. The agent retains the prior
+/// conversation as context; the source branch is preserved on disk and is
+/// reachable via Conversation History.
+struct ForkChatButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.triangle.branch")
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .floatingHint("Fork chat")
     }
 }
 
