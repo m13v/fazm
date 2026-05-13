@@ -250,11 +250,17 @@ struct SelectableMarkdown: View {
                 }
             }
             debounceWork = work
-            // If text grew by a small amount (streaming token), debounce.
-            // If it changed substantially (new message, edit), apply immediately.
+            // Parse on every change for smooth typewriter streaming.
+            // The drip in ChatProvider.flushStreamingBuffer reveals 1 char per
+            // 15ms; if we debounce the markdown reparse, the UI only refreshes
+            // every debounce-interval and shows chunky reveal instead of
+            // character-by-character. Parsing is cheap because segments and
+            // styled attrCache are content-keyed, so a 1-char-longer text just
+            // adds one styled segment to the cache and re-renders.
+            // Big jumps (new message, edit) still bypass the queue delay.
             let delta = abs(newText.count - parsedText.count)
             if delta < 200 {
-                Self.parseQueue.asyncAfter(deadline: .now() + 0.25, execute: work)
+                Self.parseQueue.async(execute: work)
             } else {
                 Self.parseQueue.async(execute: work)
             }
