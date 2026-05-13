@@ -138,12 +138,23 @@ struct AIResponseView: View {
                             // jump up by the height of the chips.
                             if !isLoading && !suggestedReplies.isEmpty {
                                 suggestedRepliesView
-                                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                        removal: .opacity
+                                    ))
                             }
 
                             // Anchor for explicit scroll-to-bottom calls (new exchanges, etc.)
                             Color.clear.frame(height: 1).id("bottom")
                         }
+                        // Smoothly animate the suggested-replies chip appearance.
+                        // Either dependency can flip (isLoading→false at end of stream,
+                        // or suggestedReplies populating); both must be in the value
+                        // list so SwiftUI knows to run the transition.
+                        .animation(.spring(response: 0.5, dampingFraction: 0.82),
+                                   value: suggestedReplies.isEmpty)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.82),
+                                   value: isLoading)
                         // Place detector inside the scroll content so its NSView
                         // is a descendant of NSScrollView.documentView and the
                         // superview walk finds the correct NSScrollView.
