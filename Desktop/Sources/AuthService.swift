@@ -818,6 +818,12 @@ class AuthService: NSObject {
         defaults.removeObject(forKey: Self.kFamilyName)
         defaults.removeObject(forKey: Self.kDisplayName)
 
+        // Clear cached subscription state so the next user doesn't inherit
+        // the previous user's `isActive` flag if refreshStatus() fails on
+        // sign-in. The sign-in task in DesktopHomeView calls refreshStatus()
+        // which repopulates from the backend.
+        SubscriptionService.shared.resetForSignOut()
+
         // Sign out of Firebase SDK
         do {
             try Auth.auth().signOut()
