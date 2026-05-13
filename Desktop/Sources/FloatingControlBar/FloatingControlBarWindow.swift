@@ -639,12 +639,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         finishChatRefresh()
     }
 
-    /// Branch the current chat: fire the bridge fork, then clear the local UI
-    /// like `startNewChat` but WITHOUT calling `onResetSession`. The forked
-    /// session is registered under the same key by the bridge (in-place fork),
-    /// so the next user message lands in the branched session with full prior
-    /// context. The source branch's sessionId is preserved on disk and remains
-    /// reachable via Conversation History.
+    /// Branch the current chat into a NEW pop-out window. Leaves the floating
+    /// bar conversation intact (source branch continues here), spawns a fresh
+    /// detached window bound to a new session key, copies the prior chat
+    /// history into the new window for visibility, and asks the bridge to
+    /// fork the agent session from "floating" into the new key. The two
+    /// branches then diverge on subsequent prompts.
     func forkChat() {
         guard let handler = onForkChat else {
             // No bridge wireup: fall back to plain new-chat semantics so the
@@ -652,27 +652,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             startNewChat()
             return
         }
-
-        if state.tutorial.isTutorialChatActive {
-            TutorialChatGuide.shared.finish(barState: state)
-        }
-
-        state.streaming.showingAIConversation = true
-        state.streaming.chatHistory = []
-        state.streaming.displayedQuery = ""
-        state.streaming.currentAIMessage = nil
-        state.streaming.isAILoading = false
-        state.streaming.showingAIResponse = false
-        state.input.aiInputText = ""
-        state.streaming.suggestedReplies = []
-        state.streaming.suggestedReplyQuestion = ""
-        state.clearQueue()
-
-        // Trigger the upstream fork. The bridge unregisters the source from
-        // the "floating" key and registers the new branch under the same key
-        // before the user's next message goes out.
+        // Everything is delegated to the manager-installed handler, which has
+        // access to ChatProvider and DetachedChatWindowController. The
+        // floating bar's own UI state is intentionally untouched so the
+        // source branch keeps rendering exactly as it was.
         handler()
-        finishChatRefresh()
     }
 
     /// Common tail of `startNewChat` and `forkChat`: resize to the input view,
@@ -1279,10 +1263,43 @@ class FloatingControlBarManager {
             }
         }
 
-        barWindow.onForkChat = { [weak chatProvider] in
-            guard let provider = chatProvider else { return }
+        barWindow.onForkChat = { [weak barWindow, weak chatProvider] in
+            guard let bar = barWindow, let provider = chatProvider else { return }
+
+            // Snapshot the floating bar's visible conversation. The new
+            // pop-out gets its own copy so the source branch stays rendered
+            // on the bar.
+            let chatHistory = bar.state.streaming.chatHistory
+            let displayedQuery = bar.state.streaming.displayedQuery
+            let currentAIMessage = bar.state.streaming.currentAIMessage
+            // Don't carry a "still streaming" state into the fork — the
+            // in-flight AI message belongs to the source session and will
+            // continue to arrive there. The forked window starts idle.
+            let isAILoading = false
+            // No back-fill: the new pop-out's subscriber should treat any
+            // existing global messages as "before its time" and only render
+            // its own future stream.
+            let messageCountBefore = provider.messages.count
+
+            let newKey = "detached-\(UUID().uuidString)"
+
             Task { @MainActor in
-                await provider.forkSession(key: "floating")
+                // Ask the bridge to branch the agent session: "floating"
+                // remains live, a new session is registered under `newKey`.
+                await provider.forkSession(fromKey: "floating", toKey: newKey)
+
+                // Open the new pop-out window pre-populated with the
+                // copied chat history so the user sees the conversation
+                // that was forked from.
+                DetachedChatWindowController.shared.show(
+                    chatHistory: chatHistory,
+                    displayedQuery: displayedQuery,
+                    currentAIMessage: currentAIMessage,
+                    isAILoading: isAILoading,
+                    chatProvider: provider,
+                    messageCountBefore: messageCountBefore,
+                    sessionKey: newKey
+                )
             }
         }
 
