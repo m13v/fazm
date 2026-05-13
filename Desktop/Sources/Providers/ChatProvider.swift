@@ -1000,9 +1000,10 @@ class ChatProvider: ObservableObject {
         var forceNewTextBlock: Bool = false
     }
     private var streamingBuffers: [String: StreamingBuffer] = [:]
-    /// Tick interval for the streaming drip-flush. 25ms = 40 Hz, fast enough
-    /// for a smooth typewriter effect without flooding SwiftUI re-renders.
-    private let streamingFlushInterval: TimeInterval = 0.025
+    /// Tick interval for the streaming drip-flush. 15ms ≈ 67 Hz; combined with
+    /// 1 char per tick (see `streamingSliceSize`), this gives a true typewriter
+    /// cadence of ~67 chars/sec regardless of how big a chunk the bridge delivered.
+    private let streamingFlushInterval: TimeInterval = 0.015
 
     // MARK: - Cached Context for Prompts
     private var cachedAIProfile: String = ""
@@ -4478,15 +4479,14 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Compute how many characters (grapheme clusters) to drip out this tick.
-    /// Adaptive so we never lag too far behind the network: drain a backlog
-    /// within ~0.5 seconds (~20 ticks at 40 Hz). Minimum 2 chars/tick for a
-    /// comfortable typewriter feel; cap so a huge burst doesn't dump 1000+
-    /// chars in one frame.
+    /// Strict 1 char (grapheme cluster) per tick.
+    /// Whatever shape the bridge delivers — single tokens, paragraph dumps,
+    /// burst-and-pause cadence — the UI always reveals one character at a
+    /// time, paced by `streamingFlushInterval`.
+    /// Tradeoff: when the model finishes faster than the drip rate, the UI
+    /// keeps trickling for a short tail after the stream closes.
     private func streamingSliceSize(for bufferLen: Int) -> Int {
-        if bufferLen <= 0 { return 0 }
-        let target = max(2, (bufferLen + 19) / 20)
-        return min(bufferLen, target, 12)
+        return bufferLen > 0 ? 1 : 0
     }
 
     /// Handle a text block boundary from the bridge. Flushes any buffered text
