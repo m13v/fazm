@@ -27,7 +27,7 @@ struct FloatingControlBarView: View {
     var onConnectClaude: (() -> Void)?
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
-    var onChangeWorkspace: (() -> Void)?
+    var onChangeWorkspace: ((String?) -> Void)?
 
     @State private var isHovering = false
     @State private var updatePulse = false
