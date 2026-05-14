@@ -1,7 +1,9 @@
 {
   "unreleased": [
     "Fixed chat scroll jumping when follow-up suggestions appear after an AI response",
-    "Fixed significant input lag during AI streaming by coalescing markdown reparse and reducing main-thread mutation rate; the typewriter effect is preserved but the UI no longer drops frames or stutters while text streams in"
+    "Fixed significant input lag during AI streaming by coalescing markdown reparse and reducing main-thread mutation rate; the typewriter effect is preserved but the UI no longer drops frames or stutters while text streams in",
+    "Fixed AI responses hanging at \"working on the response\" by routing streaming deltas through the correct session",
+    "Fixed a rare crash at the tail of a streaming response when the drip buffer drained to a single character"
   ],
   "releases": [
     {

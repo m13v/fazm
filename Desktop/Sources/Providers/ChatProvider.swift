@@ -4563,7 +4563,7 @@ class ChatProvider: ObservableObject {
         let textBuffered: String
         if !fullTextBuffered.isEmpty && !forceAll && !forceNewTextBlock {
             let n = streamingSliceSize(for: fullTextBuffered.count)
-            let cutIdx = fullTextBuffered.index(fullTextBuffered.startIndex, offsetBy: n)
+            let cutIdx = fullTextBuffered.index(fullTextBuffered.startIndex, offsetBy: n, limitedBy: fullTextBuffered.endIndex) ?? fullTextBuffered.endIndex
             textBuffered = String(fullTextBuffered[..<cutIdx])
             streamingBuffers[id]?.textBuffer = String(fullTextBuffered[cutIdx...])
         } else {
@@ -4624,7 +4624,7 @@ class ChatProvider: ObservableObject {
         let thinkingBuffered: String
         if !fullThinkingBuffered.isEmpty && !forceAll {
             let n = streamingSliceSize(for: fullThinkingBuffered.count)
-            let cutIdx = fullThinkingBuffered.index(fullThinkingBuffered.startIndex, offsetBy: n)
+            let cutIdx = fullThinkingBuffered.index(fullThinkingBuffered.startIndex, offsetBy: n, limitedBy: fullThinkingBuffered.endIndex) ?? fullThinkingBuffered.endIndex
             thinkingBuffered = String(fullThinkingBuffered[..<cutIdx])
             streamingBuffers[id]?.thinkingBuffer = String(fullThinkingBuffered[cutIdx...])
         } else {
