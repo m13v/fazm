@@ -84,7 +84,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     var onConnectClaude: (() -> Void)?
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
-    var onChangeWorkspace: (() -> Void)?
+    /// Workspace selection callback. Pass `nil` to open the directory picker
+    /// (NSOpenPanel). Pass a path to switch directly to that workspace.
+    var onChangeWorkspace: ((String?) -> Void)?
 
     override init(
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
@@ -154,7 +156,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private func isInteractiveView(_ view: NSView?) -> Bool {
         var current = view
         while let v = current {
-            if v is NSTextView || v is NSTextField || v is ResizeHandleNSView { return true }
+            if v is NSTextView || v is NSTextField || v is ResizeHandleNSView || v is PushToTalkMouseView { return true }
             current = v.superview
         }
         return false
@@ -248,7 +250,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onConnectClaude: { [weak self] in self?.onConnectClaude?() },
             onCodexLogin: { [weak self] in self?.onCodexLogin?() },
             onChatObserverCardAction: { [weak self] activityId, action in self?.onChatObserverCardAction?(activityId, action) },
-            onChangeWorkspace: { [weak self] in self?.onChangeWorkspace?() }
+            onChangeWorkspace: { [weak self] path in self?.onChangeWorkspace?(path) }
         )
         .environmentObject(state)
         .environmentObject(state.streaming)
@@ -1316,19 +1318,31 @@ class FloatingControlBarManager {
             chatProvider?.handleChatObserverCardAction(activityId: activityId, action: action)
         }
 
-        barWindow.onChangeWorkspace = { [weak self, weak chatProvider] in
+        barWindow.onChangeWorkspace = { [weak self, weak chatProvider] requestedPath in
             guard let self, let provider = chatProvider else { return }
-            let panel = NSOpenPanel()
-            panel.canChooseFiles = false
-            panel.canChooseDirectories = true
-            panel.allowsMultipleSelection = false
-            panel.message = "Select a project directory"
-            panel.prompt = "Select"
-            guard panel.runModal() == .OK, let url = panel.url else { return }
 
-            let newPath = url.path
+            // Resolve the destination path. nil → open NSOpenPanel; non-nil →
+            // jump directly to the chosen recent workspace (no intermediate UI).
+            let newPath: String
+            if let requestedPath, !requestedPath.isEmpty {
+                newPath = requestedPath
+            } else {
+                let panel = NSOpenPanel()
+                panel.canChooseFiles = false
+                panel.canChooseDirectories = true
+                panel.allowsMultipleSelection = false
+                panel.message = "Select a project directory"
+                panel.prompt = "Select"
+                guard panel.runModal() == .OK, let url = panel.url else { return }
+                newPath = url.path
+            }
+
+            // No-op if the user picked the workspace we're already on.
+            guard newPath != provider.aiChatWorkingDirectory else { return }
+
             provider.aiChatWorkingDirectory = newPath
             provider.workingDirectory = newPath
+            RecentWorkspaces.add(newPath)
             Task { await provider.discoverClaudeConfig() }
 
             // Reset session
