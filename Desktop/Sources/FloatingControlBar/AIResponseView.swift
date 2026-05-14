@@ -1,5 +1,26 @@
 import SwiftUI
 
+/// Persisted list of recently-used workspace directory paths (max 5, MRU order).
+enum RecentWorkspaces {
+    private static let key = "recentWorkspacePaths"
+    private static let maxCount = 5
+
+    static func list() -> [String] {
+        UserDefaults.standard.stringArray(forKey: key) ?? []
+    }
+
+    /// Records `path` as the most recently used workspace, deduplicating and
+    /// capping the list to `maxCount`. No-op for empty paths or the home dir.
+    static func add(_ path: String) {
+        guard !path.isEmpty else { return }
+        guard path != NSHomeDirectory() else { return }
+        var current = list().filter { $0 != path }
+        current.insert(path, at: 0)
+        if current.count > maxCount { current = Array(current.prefix(maxCount)) }
+        UserDefaults.standard.set(current, forKey: key)
+    }
+}
+
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
     @EnvironmentObject var state: FloatingControlBarState
@@ -90,7 +111,9 @@ struct AIResponseView: View {
     var onConnectClaude: (() -> Void)?
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
-    var onChangeWorkspace: (() -> Void)?
+    /// Workspace selection callback. Pass `nil` to open the directory picker
+    /// (NSOpenPanel). Pass a path to switch directly to that workspace.
+    var onChangeWorkspace: ((String?) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -325,7 +348,6 @@ struct AIResponseView: View {
 
     @AppStorage("aiChatWorkingDirectory") private var globalWorkspaceDirectory: String = ""
     @State private var connectClaudePulse = false
-    @State private var showWorkspaceChangeConfirmation = false
     @State private var showWorkspaceInfo = false
 
     /// The effective workspace for this view: per-window state if set, otherwise global default.
@@ -417,44 +439,61 @@ struct AIResponseView: View {
         }
     }
 
+    /// Recents to surface in the workspace dropdown: most-recent-first, with
+    /// the current workspace filtered out and stale paths dropped.
+    private var availableRecentWorkspaces: [String] {
+        let current = aiChatWorkingDirectory
+        let home = NSHomeDirectory()
+        return RecentWorkspaces.list().filter { path in
+            guard !path.isEmpty, path != current, path != home else { return false }
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+        }
+    }
+
     @ViewBuilder
     private var workspaceLabel: some View {
         if onChangeWorkspace != nil {
             HStack(spacing: 6) {
-                if isHomeDirectory {
-                    Button(action: { onChangeWorkspace?() }) {
-                        HStack(spacing: 4) {
+                Menu {
+                    let recents = availableRecentWorkspaces
+                    if !recents.isEmpty {
+                        ForEach(recents, id: \.self) { path in
+                            Button {
+                                onChangeWorkspace?(path)
+                            } label: {
+                                Label((path as NSString).lastPathComponent, systemImage: "folder")
+                            }
+                        }
+                        Divider()
+                    }
+                    Button {
+                        onChangeWorkspace?(nil)
+                    } label: {
+                        Label("Browse…", systemImage: "folder.badge.plus")
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        if isHomeDirectory {
                             Image(systemName: "plus.rectangle.on.folder.fill")
                                 .scaledFont(size: 10)
                             Text("Create project")
                                 .scaledFont(size: 14)
                                 .lineLimit(1)
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Button(action: { showWorkspaceChangeConfirmation = true }) {
-                        HStack(spacing: 4) {
+                        } else {
                             Image(systemName: "folder.fill")
                                 .scaledFont(size: 10)
                             Text((aiChatWorkingDirectory as NSString).lastPathComponent)
                                 .scaledFont(size: 14)
                                 .lineLimit(1)
                         }
-                        .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .help(aiChatWorkingDirectory)
-                    .alert("Change Workspace?", isPresented: $showWorkspaceChangeConfirmation) {
-                        Button("Change", role: .destructive) {
-                            onChangeWorkspace?()
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("Changing the workspace will start a new session. Current conversation will be preserved in history.")
-                    }
+                    .foregroundColor(.secondary)
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(isHomeDirectory ? "Select a project folder" : aiChatWorkingDirectory)
 
                 Button(action: { showWorkspaceInfo = true }) {
                     Image(systemName: "info.circle")
