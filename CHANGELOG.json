@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed mic / push-to-talk button needing two clicks in unfocused pop-out windows"
+  ],
   "releases": [
     {
       "version": "2.9.15",
