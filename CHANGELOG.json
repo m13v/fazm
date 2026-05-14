@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed mic / push-to-talk button needing two clicks in unfocused pop-out windows"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.16",
+      "date": "2026-05-14",
+      "changes": [
+        "Fixed mic / push-to-talk button needing two clicks in unfocused pop-out windows"
+      ]
+    },
     {
       "version": "2.9.15",
       "date": "2026-05-14",
