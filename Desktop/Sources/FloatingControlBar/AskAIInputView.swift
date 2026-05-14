@@ -88,12 +88,10 @@ struct AskAIInputView: View {
                         userInput = newValue
                     }
                     .onAppear {
-                        log("[AskAIInputView] onAppear userInput.len=\(userInput.count) localInput.len=\(localInput.count)")
                         localInput = userInput
                     }
                     .onChange(of: userInput) { _, newValue in
                         // Sync external changes (e.g. PTT transcription) into local state
-                        log("[AskAIInputView] onChange(userInput) new.len=\(newValue.count) localInput.len=\(localInput.count) willSync=\(newValue != localInput)")
                         if newValue != localInput {
                             localInput = newValue
                         }
