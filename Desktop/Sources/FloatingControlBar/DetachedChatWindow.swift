@@ -31,7 +31,9 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
     var onConnectClaude: (() -> Void)?
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: ((Int64, String) -> Void)?
-    var onChangeWorkspace: (() -> Void)?
+    /// Workspace selection callback. Pass `nil` to open the directory picker
+    /// (NSOpenPanel). Pass a path to switch directly to that workspace.
+    var onChangeWorkspace: ((String?) -> Void)?
     var onWindowClose: (() -> Void)?
 
     init(state: FloatingControlBarState, sessionKey: String, savedFrame: NSRect? = nil) {
@@ -93,7 +95,7 @@ class DetachedChatWindow: NSWindow, NSWindowDelegate {
             onConnectClaude: { [weak self] in self?.onConnectClaude?() },
             onCodexLogin: { [weak self] in self?.onCodexLogin?() },
             onChatObserverCardAction: { [weak self] id, action in self?.onChatObserverCardAction?(id, action) },
-            onChangeWorkspace: onChangeWorkspace != nil ? { [weak self] in self?.onChangeWorkspace?() } : nil
+            onChangeWorkspace: onChangeWorkspace != nil ? { [weak self] path in self?.onChangeWorkspace?(path) } : nil
         )
         .environmentObject(state)
         .environmentObject(state.streaming)
@@ -203,7 +205,7 @@ struct DetachedChatView: View {
     var onConnectClaude: () -> Void
     var onCodexLogin: (() -> Void)?
     var onChatObserverCardAction: (Int64, String) -> Void
-    var onChangeWorkspace: (() -> Void)?
+    var onChangeWorkspace: ((String?) -> Void)?
 
     var body: some View {
         AIResponseView(
@@ -889,20 +891,31 @@ class DetachedChatWindowController {
             chatProvider?.handleChatObserverCardAction(activityId: activityId, action: action)
         }
 
-        win.onChangeWorkspace = { [weak self, weak win, weak detachedState, weak chatProvider] in
+        win.onChangeWorkspace = { [weak self, weak win, weak detachedState, weak chatProvider] requestedPath in
             guard let self, let win, let state = detachedState, let provider = chatProvider else { return }
-            let panel = NSOpenPanel()
-            panel.canChooseFiles = false
-            panel.canChooseDirectories = true
-            panel.allowsMultipleSelection = false
-            panel.message = "Select a project directory"
-            panel.prompt = "Select"
-            guard panel.runModal() == .OK, let url = panel.url else { return }
 
-            let newPath = url.path
+            // Resolve the destination path. nil → open NSOpenPanel; non-nil →
+            // jump directly to the chosen recent workspace (no intermediate UI).
+            let newPath: String
+            if let requestedPath, !requestedPath.isEmpty {
+                newPath = requestedPath
+            } else {
+                let panel = NSOpenPanel()
+                panel.canChooseFiles = false
+                panel.canChooseDirectories = true
+                panel.allowsMultipleSelection = false
+                panel.message = "Select a project directory"
+                panel.prompt = "Select"
+                guard panel.runModal() == .OK, let url = panel.url else { return }
+                newPath = url.path
+            }
+
+            // No-op if the user picked the workspace we're already on.
+            guard newPath != state.workspace.workspaceDirectory else { return }
 
             // Store workspace on per-window state (not the shared provider)
             state.workspace.workspaceDirectory = newPath
+            RecentWorkspaces.add(newPath)
 
             // Discover project CLAUDE.md for this window's workspace
             Task {
