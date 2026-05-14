@@ -180,8 +180,6 @@ struct SelectableMarkdown: View {
     @State private var attrCache: [String: NSAttributedString] = [:]
     // Font scale at time of caching — used to invalidate when scale changes.
     @State private var cachedFontScale: CGFloat = 0
-    // Debounce work item for streaming updates
-    @State private var debounceWork: DispatchWorkItem?
     // The text that has been parsed into segments (may lag behind `text` during streaming)
     @State private var parsedText: String
 
@@ -214,13 +212,15 @@ struct SelectableMarkdown: View {
             }
         }
         .onChange(of: text) { _, newText in
-            // Debounce rapid streaming updates — parse at most every 250ms.
-            // Pre-parse styled NSAttributedStrings on the background queue
-            // BEFORE publishing cachedSegments, so the first render of any
-            // new segment uses the styled version directly. This eliminates
-            // the unstyled-fallback → styled swap that caused intrinsic
-            // height changes (and thus visible chat jumping) on every cycle.
-            debounceWork?.cancel()
+            // Parse on every change for smooth typewriter streaming.
+            // The drip in ChatProvider.flushStreamingBuffer reveals chars every
+            // 25ms; any asyncAfter-with-cancel debounce here would re-arm faster
+            // than it fires (ticks 25ms < delay), so the parse never lands and
+            // text only appears when the drip pauses.
+            // parseQueue is serial, so parses naturally queue. splitSegments is
+            // cheap; styledNSAttributedString only runs for *new* segment
+            // content (knownContent skip below), so per-tick work shrinks to a
+            // segment scan + one tail-segment style pass.
             let scale = fontScale
             let senderCopy = sender
             let knownContent = Set(attrCache.keys)
@@ -249,18 +249,7 @@ struct SelectableMarkdown: View {
                     parsedText = newText
                 }
             }
-            debounceWork = work
-            // Coalesce streaming token deltas: splitSegments() re-scans the full
-            // message text on every change, so running it at 67Hz during drip
-            // saturates the parse queue and the main thread. A 50ms debounce
-            // caps reparse at ~20Hz — still smooth visually, ~3x less work.
-            // Big jumps (new message, edit) bypass the delay.
-            let delta = abs(newText.count - parsedText.count)
-            if delta < 200 {
-                Self.parseQueue.asyncAfter(deadline: .now() + 0.05, execute: work)
-            } else {
-                Self.parseQueue.async(execute: work)
-            }
+            Self.parseQueue.async(execute: work)
         }
         .onChange(of: fontScale) {
             // Font scale changed — cached attributed strings are stale;
