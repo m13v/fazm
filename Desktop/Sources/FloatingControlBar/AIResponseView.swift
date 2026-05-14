@@ -492,7 +492,12 @@ struct AIResponseView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
-                .fixedSize()
+                // horizontal: false lets the Text's lineLimit(1) truncate when the
+                // workspace folder name is long, instead of forcing the header to
+                // overflow the window edges. vertical: true keeps the menu from
+                // stretching tall.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 220, alignment: .leading)
                 .help(isHomeDirectory ? "Select a project folder" : aiChatWorkingDirectory)
                 .onAppear {
                     // Seed recents with the current workspace so it persists as
