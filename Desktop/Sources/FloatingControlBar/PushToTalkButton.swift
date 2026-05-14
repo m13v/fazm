@@ -69,6 +69,12 @@ final class PushToTalkMouseView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    /// Accept the first mouse-down even when the window isn't key/focused.
+    /// Without this, macOS swallows the first click to activate the window
+    /// and the user has to click twice to actually trigger push-to-talk —
+    /// especially noticeable in pop-out chat windows.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func mouseDown(with event: NSEvent) {
         let state = targetState
         Task { @MainActor in
