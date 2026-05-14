@@ -143,7 +143,6 @@ struct FazmTextEditor: NSViewRepresentable {
         context.coordinator.updateTextBinding($text)
 
         let textsDiffer = textView.string != text
-        log("[FazmTextEditor.updateNSView] called textLen=\(text.count) viewLen=\(textView.string.count) differ=\(textsDiffer) focusOnAppear=\(focusOnAppear) isFR=\(textView.window?.firstResponder === textView)")
 
         if textsDiffer {
             context.coordinator.isUpdating = true
@@ -167,11 +166,9 @@ struct FazmTextEditor: NSViewRepresentable {
                 let end = (text as NSString).length
                 textView.setSelectedRange(NSRange(location: end, length: 0))
                 textView.scrollRangeToVisible(NSRange(location: end, length: 0))
-                log("[FazmTextEditor] cursor→end sync len=\(end) sel=\(NSStringFromRange(textView.selectedRange()))")
                 DispatchQueue.main.async {
                     let endLen = (textView.string as NSString).length
                     textView.setSelectedRange(NSRange(location: endLen, length: 0))
-                    log("[FazmTextEditor] cursor→end async len=\(endLen) sel=\(NSStringFromRange(textView.selectedRange())) isFR=\(textView.window?.firstResponder === textView)")
                 }
             }
 
