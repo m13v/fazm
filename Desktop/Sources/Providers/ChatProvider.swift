@@ -1000,10 +1000,11 @@ class ChatProvider: ObservableObject {
         var forceNewTextBlock: Bool = false
     }
     private var streamingBuffers: [String: StreamingBuffer] = [:]
-    /// Tick interval for the streaming drip-flush. 15ms ≈ 67 Hz; combined with
-    /// 1 char per tick (see `streamingSliceSize`), this gives a true typewriter
-    /// cadence of ~67 chars/sec regardless of how big a chunk the bridge delivered.
-    private let streamingFlushInterval: TimeInterval = 0.015
+    /// Tick interval for the streaming drip-flush. 25ms = 40 Hz; combined with
+    /// the floor in `streamingSliceSize`, this gives a smooth typewriter cadence
+    /// while keeping main-thread mutation rate well under what the UI can
+    /// repaint without dropping frames.
+    private let streamingFlushInterval: TimeInterval = 0.025
 
     // MARK: - Cached Context for Prompts
     private var cachedAIProfile: String = ""
@@ -4487,22 +4488,21 @@ class ChatProvider: ObservableObject {
     /// keeps trickling for a short tail after the stream closes.
     private func streamingSliceSize(for bufferLen: Int) -> Int {
         // Adaptive drain so the renderer keeps up with the model.
-        // At 67Hz tick rate:
-        //   1 char/tick =  67 chars/s  (slow typewriter, small buffer)
-        //   2 char/tick = 133 chars/s
-        //   4 char/tick = 267 chars/s  (typical Claude streaming speed)
-        //   8 char/tick = 533 chars/s  (catching up after a burst)
-        //  16 char/tick = 1067 chars/s (large backlog, dump faster)
-        // Goal: stay close to model output rate so the buffer doesn't balloon
-        // and force a big dump at finalize. Small buffers still get the 1-char
-        // visual feel; only big backlogs ramp up.
+        // At 40Hz tick rate (25ms interval):
+        //   2 char/tick =  80 chars/s  (smooth typewriter, small buffer)
+        //   4 char/tick = 160 chars/s
+        //   8 char/tick = 320 chars/s  (typical Claude streaming speed)
+        //  16 char/tick = 640 chars/s  (catching up after a burst)
+        //  32 char/tick = 1280 chars/s (large backlog, dump faster)
+        // Floor of 2 keeps the visual feel of a typewriter without paying the
+        // per-char overhead of mutating messages[] + re-rendering at 40Hz.
         switch bufferLen {
         case 0:           return 0
-        case 1...40:      return 1
-        case 41...120:    return 2
-        case 121...300:   return 4
-        case 301...800:   return 8
-        default:          return 16
+        case 1...40:      return 2
+        case 41...120:    return 4
+        case 121...300:   return 8
+        case 301...800:   return 16
+        default:          return 32
         }
     }
 
