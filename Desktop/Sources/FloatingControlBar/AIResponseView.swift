@@ -494,6 +494,13 @@ struct AIResponseView: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help(isHomeDirectory ? "Select a project folder" : aiChatWorkingDirectory)
+                .onAppear {
+                    // Seed recents with the current workspace so it persists as
+                    // a "previous" entry the next time the user switches.
+                    if !isHomeDirectory {
+                        RecentWorkspaces.add(aiChatWorkingDirectory)
+                    }
+                }
 
                 Button(action: { showWorkspaceInfo = true }) {
                     Image(systemName: "info.circle")
