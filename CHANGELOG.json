@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed the streaming typewriter effect being invisible in 2.9.16: the markdown reparse debounce was cancelling itself on every drip tick, so text only appeared after the stream paused. Characters now reveal smoothly again as they stream.",
+    "Fixed laggy typing and paste in the chat input by removing debug log calls that were writing to disk and Sentry on every keystroke"
+  ],
   "releases": [
     {
       "version": "2.9.16",
