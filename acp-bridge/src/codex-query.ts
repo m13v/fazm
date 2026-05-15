@@ -243,8 +243,14 @@ export async function handleCodexQuery(msg: QueryMessage, deps: CodexQueryDeps):
       logErr(`[codex-query] new session ${sessionId.slice(0, 8)} stop=${promptResult.stopReason} chars=${translator.collectedText.length}`);
     }
   } catch (err) {
-    logErr(`[codex-query] session/prompt failed: ${err}`);
-    send({ type: "error", message: `Codex prompt failed: ${err instanceof Error ? err.message : String(err)}` });
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    // codex-acp replies to a failed session/prompt with a generic JSON-RPC
+    // "Internal error". The actionable reason (usage limit, auth, etc.) only
+    // lands on its stderr — give it a beat to flush, then surface it instead.
+    await new Promise((r) => setTimeout(r, 150));
+    const turnErr = provider.getRecentTurnError();
+    logErr(`[codex-query] session/prompt failed: ${rawMsg}${turnErr ? ` | turnError: ${turnErr}` : ""}`);
+    send({ type: "error", message: turnErr ?? `Codex prompt failed: ${rawMsg}` });
   } finally {
     // Don't unregister the handler — reuse for follow-up prompts on the same sessionKey.
     // Cleanup happens on resetSession, interrupt, or process shutdown.
