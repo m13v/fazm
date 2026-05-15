@@ -441,6 +441,108 @@ class DetachedChatWindowController {
         }
     }
 
+    // MARK: - Programmatic control (com.fazm.control)
+
+    /// One-row summary of an open pop-out, serializable to JSON. Mirrors the
+    /// `WindowEntry` storage but with only the fields a caller needs.
+    struct PopOutSummary {
+        let sessionKey: String
+        let title: String
+        let workspace: String
+        let selectedModel: String
+        let isVisible: Bool
+        let isMinimized: Bool
+        let isAILoading: Bool
+        let chatHistoryCount: Int
+        let frameX: Double
+        let frameY: Double
+        let frameWidth: Double
+        let frameHeight: Double
+
+        var asDictionary: [String: Any] {
+            return [
+                "sessionKey": sessionKey,
+                "title": title,
+                "workspace": workspace,
+                "selectedModel": selectedModel,
+                "isVisible": isVisible,
+                "isMinimized": isMinimized,
+                "isAILoading": isAILoading,
+                "chatHistoryCount": chatHistoryCount,
+                "frame": [
+                    "x": frameX, "y": frameY,
+                    "width": frameWidth, "height": frameHeight
+                ]
+            ]
+        }
+    }
+
+    /// Snapshot of every open pop-out, safe to serialize and emit to /tmp.
+    /// Used by the `listPopOuts` control command for external testing and
+    /// regression A/B harnesses.
+    func popOutsSummary() -> [PopOutSummary] {
+        return entries.values.map { entry in
+            let win = entry.window
+            let state = win.state
+            let f = win.frame
+            return PopOutSummary(
+                sessionKey: entry.sessionKey,
+                title: win.title,
+                workspace: state.workspace.workspaceDirectory,
+                selectedModel: state.workspace.selectedModel,
+                isVisible: win.isVisible,
+                isMinimized: win.isMiniaturized,
+                isAILoading: state.streaming.isAILoading,
+                chatHistoryCount: state.streaming.chatHistory.count,
+                frameX: f.origin.x, frameY: f.origin.y,
+                frameWidth: f.size.width, frameHeight: f.size.height
+            )
+        }
+    }
+
+    /// Close every open detached chat window. Used by the `closeAllPopOuts`
+    /// control command for automated test cleanup so the ACP bridge tears
+    /// down all per-session claude subprocesses.
+    /// - Returns: the number of windows actually closed.
+    @discardableResult
+    func closeAllWindows() -> Int {
+        // Snapshot first because `entries` mutates via `windowWillClose` as we close each.
+        let windowsToClose = entries.values.map { $0.window }
+        for win in windowsToClose {
+            win.close()
+        }
+        return windowsToClose.count
+    }
+
+    /// Close a single detached chat window matching the given session key.
+    /// - Returns: true if a window was found and closed, false otherwise.
+    @discardableResult
+    func closeWindow(sessionKey: String) -> Bool {
+        guard let entry = entries.values.first(where: { $0.sessionKey == sessionKey }) else {
+            return false
+        }
+        entry.window.close()
+        return true
+    }
+
+    /// Programmatically deliver a message to a specific pop-out by session key.
+    /// Drives the same code path as a user typing into that pop-out's input field.
+    /// Used by the `sendQueryToWindow` control command for per-session testing
+    /// (e.g. measuring per-subprocess CPU under controlled load).
+    /// - Returns: true if a matching pop-out was found and the query was dispatched.
+    @discardableResult
+    func sendQuery(toSessionKey sessionKey: String, message: String) -> Bool {
+        guard let entry = entries.values.first(where: { $0.sessionKey == sessionKey }) else {
+            return false
+        }
+        // Ensure the window is visible so its streaming UI is wired up before the message lands.
+        if !entry.window.isVisible {
+            entry.window.makeKeyAndOrderFront(nil)
+        }
+        sendQuery(message, for: entry.window)
+        return true
+    }
+
     /// Post a notification on the main queue so SwiftUI views can refresh their
     /// open-window count. Call this after every mutation of `entries`.
     private func notifyWindowsChanged() {
