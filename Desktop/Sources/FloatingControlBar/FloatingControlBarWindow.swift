@@ -1611,18 +1611,27 @@ class FloatingControlBarManager {
         // Trigger: xcrun swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(.init("com.fazm.control"), object: nil, userInfo: ["command": "getState"], deliverImmediately: true); RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))'
         //
         // Supported commands:
-        //   getState              — writes JSON state to /tmp/fazm-control-state.json
-        //   newChat               — starts a new chat session
-        //   popOut                — pops conversation out to a detached window
-        //   setModel:<id>         — sets AI model (e.g. "setModel:claude-sonnet-4-6")
-        //   toggleVoice           — toggles voice response (TTS) on/off
-        //   setVoice:on|off       — explicitly sets voice response
-        //   show                  — shows the floating bar
-        //   hide                  — hides the floating bar
-        //   toggle                — toggles floating bar visibility
-        //   openInput             — opens the AI input field
-        //   sendFollowUp:<text>   — sends a follow-up message in active conversation
-        //   setWorkspace:<path>   — sets the working directory
+        //   getState                            — writes JSON state to /tmp/fazm-control-state.json
+        //   newChat                             — starts a new chat session
+        //   popOut                              — pops conversation out to a detached window
+        //   newPopOutChat                       — opens a brand-new chat directly in a detached window
+        //   setModel:<id>                       — sets AI model (e.g. "setModel:claude-sonnet-4-6")
+        //   toggleVoice                         — toggles voice response (TTS) on/off
+        //   setVoice:on|off                     — explicitly sets voice response
+        //   show                                — shows the floating bar
+        //   hide                                — hides the floating bar
+        //   toggle                              — toggles floating bar visibility
+        //   openInput                           — opens the AI input field
+        //   sendFollowUp:<text>                 — sends a follow-up message in active conversation
+        //   setWorkspace:<path>                 — sets the working directory
+        //   stopAgent                           — interrupt the floating bar's in-flight query
+        // -- Test / diagnostics surface (added for CPU regression bisection) --
+        //   listPopOuts                         — writes /tmp/fazm-control-popouts.json with every detached window's sessionKey, workspace, model, frame, busy/visible state
+        //   closePopOut:<sessionKey>            — close a specific detached window by sessionKey (tears down its ACP subprocess)
+        //   closeAllPopOuts                     — close every detached window (full test cleanup)
+        //   sendQueryToWindow:<sessionKey>:<t>  — deliver text `<t>` to the pop-out matching `<sessionKey>` (drives the same path as a user typing into that window)
+        //   getBridgeState                      — signal SIGUSR2 to the bridge so it dumps sessions / activeQueries / PID to /tmp/fazm-bridge-state.json
+        //   restartBridge                       — terminate the running bridge subprocess and let ChatProvider relaunch it (clears leaked claude subprocesses)
         DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("com.fazm.control"),
             object: nil,
@@ -1681,6 +1690,32 @@ class FloatingControlBarManager {
                     UserDefaults.standard.set(path, forKey: "aiChatWorkingDirectory")
                     log("FloatingControlBarManager: Workspace set to \(path)")
                     self.writeControlState()
+                } else if command == "listPopOuts" {
+                    self.writePopOutsList()
+                } else if command == "closeAllPopOuts" {
+                    let n = DetachedChatWindowController.shared.closeAllWindows()
+                    log("FloatingControlBarManager: closeAllPopOuts closed \(n) windows")
+                    self.writePopOutsList()
+                } else if command.hasPrefix("closePopOut:") {
+                    let sessionKey = String(command.dropFirst("closePopOut:".count))
+                    let closed = DetachedChatWindowController.shared.closeWindow(sessionKey: sessionKey)
+                    log("FloatingControlBarManager: closePopOut sessionKey=\(sessionKey) closed=\(closed)")
+                    self.writePopOutsList()
+                } else if command.hasPrefix("sendQueryToWindow:") {
+                    // Format: sendQueryToWindow:<sessionKey>:<text>
+                    let rest = String(command.dropFirst("sendQueryToWindow:".count))
+                    if let colon = rest.firstIndex(of: ":") {
+                        let sessionKey = String(rest[..<colon])
+                        let text = String(rest[rest.index(after: colon)...])
+                        let sent = DetachedChatWindowController.shared.sendQuery(toSessionKey: sessionKey, message: text)
+                        log("FloatingControlBarManager: sendQueryToWindow sessionKey=\(sessionKey) sent=\(sent) text='\(text.prefix(40))'")
+                    } else {
+                        log("FloatingControlBarManager: sendQueryToWindow malformed — expected sessionKey:text, got '\(rest)'")
+                    }
+                } else if command == "getBridgeState" {
+                    self.dumpBridgeState()
+                } else if command == "restartBridge" {
+                    self.restartBridgeSubprocess()
                 } else {
                     log("FloatingControlBarManager: Unknown control command: \(command)")
                 }
@@ -1722,6 +1757,82 @@ class FloatingControlBarManager {
             try? json.write(toFile: "/tmp/fazm-control-state.json", atomically: true, encoding: .utf8)
             log("FloatingControlBarManager: State written to /tmp/fazm-control-state.json")
         }
+    }
+
+    /// Dump every open detached pop-out to /tmp/fazm-control-popouts.json so external
+    /// tools can enumerate sessions, target a specific one with sendQueryToWindow, or
+    /// confirm cleanup after closeAllPopOuts. Used by the CPU-regression A/B harness.
+    private func writePopOutsList() {
+        let summaries = DetachedChatWindowController.shared.popOutsSummary()
+        let payload: [String: Any] = [
+            "timestamp": Date().timeIntervalSince1970,
+            "openWindowCount": summaries.count,
+            "popouts": summaries.map { $0.asDictionary }
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+           let json = String(data: data, encoding: .utf8) {
+            try? json.write(toFile: "/tmp/fazm-control-popouts.json", atomically: true, encoding: .utf8)
+            log("FloatingControlBarManager: Pop-out list (\(summaries.count) windows) written to /tmp/fazm-control-popouts.json")
+        }
+    }
+
+    /// Send SIGUSR2 to the running acp-bridge process so it dumps its session map
+    /// to /tmp/fazm-bridge-state.json. The bridge handler at acp-bridge/src/index.ts
+    /// writes the JSON synchronously, so the file is on disk by the time the
+    /// caller checks it (about 50ms after the signal in practice).
+    /// Uses pgrep because ACPBridge.process is private; this avoids threading a
+    /// new public accessor through ChatProvider just for diagnostics.
+    private func dumpBridgeState() {
+        guard let bridgePid = findBridgePid() else {
+            log("FloatingControlBarManager: getBridgeState — no acp-bridge process found")
+            // Write a small marker so callers don't read stale data.
+            let payload = "{\"error\":\"no_bridge_process_found\",\"timestamp\":\(Date().timeIntervalSince1970)}\n"
+            try? payload.write(toFile: "/tmp/fazm-bridge-state.json", atomically: true, encoding: .utf8)
+            return
+        }
+        let signalResult = kill(bridgePid, SIGUSR2)
+        log("FloatingControlBarManager: getBridgeState — SIGUSR2 sent to bridge PID=\(bridgePid) (kill returned \(signalResult))")
+    }
+
+    /// Locate the running acp-bridge (dist/index.js) PID by scanning the process
+    /// table. Matches both the bundled bridge in /Applications/Fazm.app and the
+    /// dev tree at ~/fazm/acp-bridge so this works in run.sh-launched Fazm Dev.
+    private func findBridgePid() -> pid_t? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        task.arguments = ["-f", "acp-bridge/dist/index.js"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let str = String(data: data, encoding: .utf8) ?? ""
+            // Multiple matches can happen during a bridge restart; take the
+            // first that's still alive. pgrep prints newline-separated PIDs.
+            for line in str.split(separator: "\n") {
+                if let pid = pid_t(line.trimmingCharacters(in: .whitespaces)) {
+                    return pid
+                }
+            }
+        } catch {
+            log("FloatingControlBarManager: pgrep failed: \(error)")
+        }
+        return nil
+    }
+
+    /// Terminate the running bridge subprocess. ChatProvider/ACPBridge will detect
+    /// the exit on its next stdio read and relaunch the bridge automatically
+    /// (the same path the parent-death watchdog already exercises). Useful for
+    /// clearing leaked claude subprocesses or testing fixes without restarting Fazm.
+    private func restartBridgeSubprocess() {
+        guard let bridgePid = findBridgePid() else {
+            log("FloatingControlBarManager: restartBridge — no acp-bridge process found")
+            return
+        }
+        let result = kill(bridgePid, SIGTERM)
+        log("FloatingControlBarManager: restartBridge — SIGTERM sent to bridge PID=\(bridgePid) (kill returned \(result)). ChatProvider should relaunch on next query.")
     }
 
     /// Whether the floating bar window is currently visible.
