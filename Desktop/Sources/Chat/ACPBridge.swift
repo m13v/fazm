@@ -209,6 +209,11 @@ actor ACPBridge {
     case authTimeout(reason: String)
     case authFailed(reason: String, httpStatus: Int?)
     case creditExhausted(message: String)
+    /// Anthropic returned `overloaded_error` (HTTP 529) — their servers are
+    /// overloaded. Distinct from `creditExhausted` because the user did NOT hit
+    /// a usage limit; nothing about the account is wrong, the upstream is just
+    /// down. Surface as a transient retryable error, no mode switch.
+    case upstreamOverloaded(message: String)
     /// Built-in (bundled API key) mode failed authentication. Bridge is signaling
     /// that the key may have been rotated or revoked. ChatProvider should refetch
     /// from `/v1/keys`, restart the bridge, and silently retry — NOT trigger OAuth.
@@ -1137,6 +1142,10 @@ actor ACPBridge {
         log("ACPBridge: credit exhausted: \(message)")
         throw BridgeError.creditExhausted(message)
 
+      case .upstreamOverloaded(let message):
+        log("ACPBridge: upstream overloaded: \(message)")
+        throw BridgeError.upstreamOverloaded(message)
+
       case .builtinKeyInvalid(let message):
         log("ACPBridge: builtin key invalid: \(message)")
         throw BridgeError.builtinKeyInvalid(message)
@@ -1446,6 +1455,10 @@ actor ACPBridge {
     case "credit_exhausted":
       let message = dict["message"] as? String ?? "Credit balance exhausted"
       return .creditExhausted(message: message)
+
+    case "upstream_overloaded":
+      let message = dict["message"] as? String ?? "Claude is overloaded"
+      return .upstreamOverloaded(message: message)
 
     case "builtin_key_invalid":
       let message = dict["message"] as? String ?? "Built-in API key invalid"
@@ -2118,6 +2131,10 @@ enum BridgeError: LocalizedError {
   case outOfMemory
   case stopped
   case creditExhausted(String)
+  /// Anthropic's servers returned `overloaded_error` (HTTP 529). Transient —
+  /// the user's account is fine and no mode switch is appropriate; they just
+  /// need to retry in a few minutes.
+  case upstreamOverloaded(String)
   case agentError(String)
   /// Built-in (bundled API key) mode failed authentication. ChatProvider catches
   /// this specifically and refetches the key from the backend instead of pushing
@@ -2169,6 +2186,8 @@ enum BridgeError: LocalizedError {
         return "Your Claude account hit its usage limit. Try again later, or upgrade your plan at claude.ai/settings/billing."
       }
       return "Built-in credits are exhausted. Please switch to your personal Claude account in Settings."
+    case .upstreamOverloaded:
+      return "Claude's servers are overloaded. This is an Anthropic-side outage — your account is fine. Try again in a few minutes, or check status.claude.com."
     case .builtinKeyInvalid:
       // Fallback wording. ChatProvider intercepts this case before localizedDescription
       // is shown — it tries to refetch the key and silently retry. The string here is
