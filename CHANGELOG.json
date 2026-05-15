@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed a multi-second freeze when opening the Floating Bar tab in the main window"
+  ],
   "releases": [
     {
       "version": "2.9.20",
