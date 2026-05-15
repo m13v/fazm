@@ -2762,6 +2762,21 @@ class ChatProvider: ObservableObject {
         }
     }
 
+    /// Fully tear down a session's bridge state (so the underlying `claude`
+    /// subprocess dies). Called by `DetachedChatWindowController.onWindowClose`
+    /// to prevent the warm-session leak that kept claude subprocesses spinning
+    /// at 25-30% CPU each forever (CPU regression reported 2026-05-14).
+    func endSession(sessionKey: String) {
+        // Always send: the bridge keeps the session warm even when no query
+        // is in-flight (that's the leak), so we can't gate on sendingSessionKeys.
+        log("ChatProvider: ending session=\(sessionKey) (bridge teardown)")
+        sendingSessionKeys.remove(sessionKey)
+        isSending = !sendingSessionKeys.isEmpty
+        Task {
+            await acpBridge.closeSession(sessionKey: sessionKey)
+        }
+    }
+
     /// Returns true if a query is currently in flight for the given session key.
     func isSending(sessionKey: String) -> Bool {
         return sendingSessionKeys.contains(sessionKey)
