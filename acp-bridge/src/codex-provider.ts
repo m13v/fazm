@@ -263,7 +263,7 @@ export class CodexProvider {
    *  (e.g. " Some(UsageLimitExceeded)"). Returns null if the line isn't one. */
   static extractTurnError(line: string): string | null {
     // eslint-disable-next-line no-control-regex
-    const clean = line.replace(/\[[0-9;]*m/g, "");
+    const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
     const marker = "Unhandled error during turn:";
     const idx = clean.indexOf(marker);
     if (idx === -1) return null;
