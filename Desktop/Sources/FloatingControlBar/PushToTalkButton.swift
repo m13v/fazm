@@ -13,6 +13,7 @@ struct PushToTalkButton: View {
 
     /// Spins continuously while finalizing transcription.
     @State private var isSpinning = false
+    @Environment(\.fazmWindowIsVisible) private var windowIsVisible
 
     var body: some View {
         ZStack {
@@ -23,10 +24,19 @@ struct PushToTalkButton: View {
                     .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .frame(width: frameSize - 4, height: frameSize - 4)
                     .rotationEffect(.degrees(isSpinning ? 360 : 0))
-                    .onAppear { isSpinning = true }
+                    .onAppear { isSpinning = windowIsVisible }
                     .onDisappear { isSpinning = false }
+                    .onChange(of: windowIsVisible) { _, visible in
+                        // Halt the repeatForever rotation when the window is
+                        // occluded — a stuck isVoiceFinalizing state plus an
+                        // unbounded rotation was the prime suspect for the
+                        // 32-min 100% CPU render storm.
+                        isSpinning = visible
+                    }
                     .animation(
-                        .linear(duration: 0.8).repeatForever(autoreverses: false),
+                        windowIsVisible
+                            ? .linear(duration: 0.8).repeatForever(autoreverses: false)
+                            : .default,
                         value: isSpinning
                     )
 
