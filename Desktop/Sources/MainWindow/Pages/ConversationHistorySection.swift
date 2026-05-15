@@ -191,7 +191,8 @@ struct ConversationHistorySection: View {
 
     private func startNewChat() {
         if let provider = chatProvider ?? FloatingControlBarManager.shared.chatProvider {
-            let sessionKey = "detached-\(UUID().uuidString)"
+            // Claim the always-ready pre-warmed session so the first query is instant.
+            let sessionKey = provider.claimWarmDetachedSession()
             DetachedChatWindowController.shared.show(
                 chatHistory: [],
                 displayedQuery: "",
