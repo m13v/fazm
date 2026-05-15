@@ -1069,6 +1069,14 @@ class DetachedChatWindowController {
                let provider = FloatingControlBarManager.shared.chatProvider {
                 provider.endSession(sessionKey: sessionKey)
             }
+            // Drop this pop-out's persisted ACP session IDs so user-closed
+            // windows don't leave dead `acpSessionId_detached-*` keys in
+            // UserDefaults forever. Skipped during termination — windows closed
+            // on quit are restored from the registry and still need their
+            // resume session IDs.
+            if !self.isTerminating, sessionKey != "unknown" {
+                ChatProvider.purgeDetachedSession(sessionKey: sessionKey)
+            }
             // Clean up per-session tool executor callbacks to prevent stale references
             ChatToolExecutor.unregisterCallbacks(sessionKey: sessionKey)
             self.entries[id]?.chatCancellable?.cancel()
