@@ -4453,7 +4453,9 @@ process.on("SIGUSR2", () => {
       memoryHeapUsed: process.memoryUsage().heapUsed,
     };
     const path = "/tmp/fazm-bridge-state.json";
-    require("fs").writeFileSync(path, JSON.stringify(payload, null, 2));
+    // `writeFileSync` is the ESM-imported top-of-file binding (line ~34).
+    // Don't use `require("fs")` — this is an ES module so `require` is undefined.
+    writeFileSync(path, JSON.stringify(payload, null, 2));
     logErr(`[CONTROL] SIGUSR2: bridge state dumped to ${path} (sessions=${sessions.size}, activeQueries=${activeQueries.size})`);
   } catch (err) {
     logErr(`[CONTROL] SIGUSR2 dump failed: ${(err as Error).message}`);
