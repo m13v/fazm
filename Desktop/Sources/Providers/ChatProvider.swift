@@ -4164,6 +4164,7 @@ class ChatProvider: ObservableObject {
                 case .outOfMemory: return "out_of_memory"
                 case .stopped: return "stopped"
                 case .creditExhausted: return "credit_exhausted"
+                case .upstreamOverloaded: return "upstream_overloaded"
                 case .agentError: return "agent_error"
                 case .builtinKeyInvalid: return "builtin_key_invalid"
                 }
@@ -4195,6 +4196,14 @@ class ChatProvider: ObservableObject {
             // Show error to user (unless they intentionally stopped)
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
                 // User stopped — no error to show
+            } else if let bridgeError = error as? BridgeError, case .upstreamOverloaded(let rawMessage) = bridgeError {
+                // Anthropic 529 — their servers are overloaded. NOT a credit issue.
+                // Don't switch modes, don't show the credit alert, just surface a
+                // clear retry message. Clear pendingRetryMessage so handlePostQuery
+                // doesn't suppress this thinking a retry is queued.
+                pendingRetryMessage = nil
+                log("ChatProvider: upstream overloaded in \(bridgeMode) mode: \(rawMessage)")
+                errorMessage = bridgeError.errorDescription
             } else if let bridgeError = error as? BridgeError, case .creditExhausted(let rawMessage) = bridgeError {
                 // Credits or rate limit exhausted — no retry possible, clear pending message
                 // so handlePostQuery doesn't suppress the error thinking a retry is pending
