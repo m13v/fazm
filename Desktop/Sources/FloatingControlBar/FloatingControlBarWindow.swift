@@ -2247,7 +2247,8 @@ class FloatingControlBarManager {
         log("FloatingControlBarManager: Creating new pop-out chat window via global shortcut")
         AnalyticsManager.shared.floatingBarChatPoppedOut(historyCount: 0)
 
-        let detachedSessionKey = "detached-\(UUID().uuidString)"
+        // Claim the always-ready pre-warmed session so the first query is instant.
+        let detachedSessionKey = provider.claimWarmDetachedSession()
 
         // If the user is currently focused on an existing pop-out, inherit its workspace
         // so the new window opens in the same project context. Falls back to the shared
