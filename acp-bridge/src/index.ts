@@ -4402,6 +4402,64 @@ function logCrash(msg: string): void {
   }
 }
 
+// SIGUSR2: dump bridge state to /tmp/fazm-bridge-state.json. Triggered by the
+// Swift `getBridgeState` control command so the app and external tools can
+// inspect the live session→PID map, in-flight queries, and per-session metadata
+// without depending on stdio JSON-RPC. Used for CPU-regression A/B testing,
+// orphan-subprocess audits, and customer-support diagnostics. We use SIGUSR2
+// rather than SIGUSR1 because Node.js reserves SIGUSR1 for the inspector.
+process.on("SIGUSR2", () => {
+  try {
+    const now = Date.now();
+    const sessionRows: Array<Record<string, unknown>> = [];
+    for (const [key, entry] of sessions) {
+      const active = activeQueries.get(key);
+      sessionRows.push({
+        sessionKey: key,
+        sessionId: entry.sessionId,
+        sessionIdShort: entry.sessionId.slice(0, 8),
+        cwd: entry.cwd,
+        model: entry.model ?? null,
+        hasActiveQuery: !!active,
+        activeQueryMode: active?.mode ?? null,
+        activeQueryInterruptRequested: active?.interruptRequested ?? null,
+        activeQueryAborted: active?.abortController?.signal?.aborted ?? null,
+      });
+    }
+    const orphanQueries: Array<Record<string, unknown>> = [];
+    for (const [key, ctx] of activeQueries) {
+      if (!sessions.has(key)) {
+        orphanQueries.push({
+          sessionKey: key,
+          sessionId: ctx.sessionId,
+          mode: ctx.mode,
+          interruptRequested: ctx.interruptRequested,
+          aborted: ctx.abortController?.signal?.aborted ?? null,
+        });
+      }
+    }
+    const payload = {
+      timestamp: now,
+      timestampIso: new Date(now).toISOString(),
+      bridgePid: process.pid,
+      bridgePpid: process.ppid,
+      uptimeSec: Math.round(process.uptime()),
+      sessionCount: sessions.size,
+      activeQueryCount: activeQueries.size,
+      sessionIdToKeyCount: sessionIdToKey.size,
+      sessions: sessionRows,
+      orphanQueries,
+      memoryRss: process.memoryUsage().rss,
+      memoryHeapUsed: process.memoryUsage().heapUsed,
+    };
+    const path = "/tmp/fazm-bridge-state.json";
+    require("fs").writeFileSync(path, JSON.stringify(payload, null, 2));
+    logErr(`[CONTROL] SIGUSR2: bridge state dumped to ${path} (sessions=${sessions.size}, activeQueries=${activeQueries.size})`);
+  } catch (err) {
+    logErr(`[CONTROL] SIGUSR2 dump failed: ${(err as Error).message}`);
+  }
+});
+
 process.on("unhandledRejection", (reason) => {
   logErr(`Unhandled rejection: ${reason}`);
   logCrash(`Unhandled rejection: ${reason}`);
