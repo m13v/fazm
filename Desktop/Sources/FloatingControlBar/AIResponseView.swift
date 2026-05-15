@@ -910,7 +910,7 @@ struct AIResponseView: View {
                 .fill(Color.red)
                 .frame(width: 10, height: 10)
                 .scaleEffect(1.2)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isVoiceFollowUp)
+                .animation(windowIsVisible ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true) : .default, value: isVoiceFollowUp)
 
             Image(systemName: "mic.fill")
                 .scaledFont(size: 14, weight: .semibold)
