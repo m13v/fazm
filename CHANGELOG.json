@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed CPU spike from voice-follow-up mic indicator animating while the window is hidden",
+    "Pop-out windows no longer leave stale session data behind when closed"
+  ],
   "releases": [
     {
       "version": "2.9.19",
