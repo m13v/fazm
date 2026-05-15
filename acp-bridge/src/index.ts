@@ -2488,9 +2488,19 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
   const warmCwd = cwd || DEFAULT_CWD;
   try { mkdirSync(warmCwd, { recursive: true }); } catch {}
 
-  // Save config so it can be replayed after an OAuth-triggered subprocess restart
+  // Save config so it can be replayed after an OAuth-triggered subprocess restart.
+  // Merge by key (don't replace) so a single-session re-warm — e.g. the
+  // post-resetSession re-warm below — doesn't drop the other warmed sessions.
+  // Ephemeral `detached-*` keys are never persisted: a closed pop-out window
+  // must not be re-warmed on a post-OAuth restart.
   if (sessionConfigs && sessionConfigs.length > 0) {
-    lastWarmupConfig = { cwd, sessions: sessionConfigs };
+    const merged = new Map<string, WarmupSessionConfig>(
+      (lastWarmupConfig?.sessions ?? []).map((s) => [s.key, s])
+    );
+    for (const s of sessionConfigs) {
+      if (!s.key.startsWith("detached-")) merged.set(s.key, s);
+    }
+    lastWarmupConfig = { cwd: cwd ?? lastWarmupConfig?.cwd, sessions: [...merged.values()] };
   }
 
   // Build the list of sessions to warm: new format (sessionConfigs) takes priority over legacy (models array)
@@ -4839,8 +4849,12 @@ async function main(): Promise<void> {
           unregisterSession(key);
           imageTurnCounts.delete(key);
           logErr(`Session reset: ${key}`);
-
-          // Immediately pre-warm a new session so the first query doesn't wait
+        }
+        // Immediately pre-warm a fresh session so the first query doesn't wait.
+        // This runs even when the key is no longer registered: `transferSession`
+        // removes the key from `sessions`, so a transfer-then-reset (the pop-out
+        // path) would otherwise silently skip the re-warm the caller asked for.
+        if (key && !sessions.has(key)) {
           const savedCfg = lastWarmupConfig?.sessions?.find((s) => s.key === key);
           if (savedCfg) {
             // Strip resume — we want a fresh session, not the old one.
