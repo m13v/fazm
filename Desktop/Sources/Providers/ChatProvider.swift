@@ -1512,7 +1512,11 @@ class ChatProvider: ObservableObject {
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
                 .init(key: "main", model: "claude-sonnet-4-6", systemPrompt: mainSystemPrompt, resume: savedMainSessionId),
                 .init(key: "floating", model: "claude-sonnet-4-6", systemPrompt: floatingSystemPrompt, resume: savedFloatingSessionId),
-                .init(key: "observer", model: "claude-sonnet-4-6", systemPrompt: chatObserverSystemPrompt)
+                .init(key: "observer", model: "claude-sonnet-4-6", systemPrompt: chatObserverSystemPrompt),
+                // Always-ready clean session handed to the next new detached pop-out
+                // (claimWarmDetachedSession). Uses the floating system prompt because
+                // detached windows query with the floating system-prompt prefix.
+                .init(key: "spare", model: "claude-sonnet-4-6", systemPrompt: floatingSystemPrompt)
             ])
             // Resume is now handled at warmup — clear pendingFloatingResume so query() doesn't try again
             pendingFloatingResume = nil
@@ -1654,6 +1658,27 @@ class ChatProvider: ObservableObject {
                 await bridge.resetSession(key: "floating")
             }
         }
+    }
+
+    /// Hand the next new detached pop-out window a pre-warmed clean ACP session.
+    ///
+    /// The app keeps one always-ready "spare" session warmed at startup. This
+    /// transfers it to a unique detached key so the pop-out's first query skips
+    /// the cold `session/new`, then resets "spare" — which the bridge re-warms —
+    /// so the following pop-out is also instant.
+    ///
+    /// If the spare hasn't finished re-warming yet (rapid successive pop-outs),
+    /// the bridge transfer is a no-op and that one window's first query falls
+    /// back to a cold `session/new`. Returns the detached session key the
+    /// caller should bind the new window to.
+    func claimWarmDetachedSession() -> String {
+        let detachedKey = "detached-\(UUID().uuidString)"
+        let bridge = acpBridge
+        Task {
+            await bridge.transferSession(fromKey: "spare", toKey: detachedKey)
+            await bridge.resetSession(key: "spare")
+        }
+        return detachedKey
     }
 
     /// Whether the floating chat was cleared (e.g. by pop-out or explicit new chat)
