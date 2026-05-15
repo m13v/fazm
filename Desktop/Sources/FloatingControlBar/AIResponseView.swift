@@ -30,6 +30,7 @@ struct AIResponseView: View {
     @EnvironmentObject var workspace: WorkspaceSettingsState
     @EnvironmentObject var tutorial: TutorialState
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+    @Environment(\.fazmWindowIsVisible) private var windowIsVisible
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
@@ -553,12 +554,24 @@ struct AIResponseView: View {
             )
         }
         .buttonStyle(.plain)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                connectClaudePulse = true
+        .onAppear { startConnectClaudePulseIfVisible() }
+        .onChange(of: windowIsVisible) { _, visible in
+            if visible {
+                startConnectClaudePulseIfVisible()
+            } else {
+                // Snap to the static value without an animation so the
+                // repeatForever loop releases the display cycle.
+                withAnimation(.default) { connectClaudePulse = false }
             }
         }
         .transition(.scale.combined(with: .opacity))
+    }
+
+    private func startConnectClaudePulseIfVisible() {
+        guard windowIsVisible else { return }
+        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+            connectClaudePulse = true
+        }
     }
 
     @State private var upgradePulse = false
@@ -586,12 +599,22 @@ struct AIResponseView: View {
             )
         }
         .buttonStyle(.plain)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                upgradePulse = true
+        .onAppear { startUpgradePulseIfVisible() }
+        .onChange(of: windowIsVisible) { _, visible in
+            if visible {
+                startUpgradePulseIfVisible()
+            } else {
+                withAnimation(.default) { upgradePulse = false }
             }
         }
         .transition(.scale.combined(with: .opacity))
+    }
+
+    private func startUpgradePulseIfVisible() {
+        guard windowIsVisible else { return }
+        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+            upgradePulse = true
+        }
     }
 
     // MARK: - Tutorial Banner
@@ -952,9 +975,14 @@ struct AIResponseView: View {
         HStack(spacing: 6) {
             Image(systemName: "eye.circle.fill")
                 .scaledFont(size: 11)
-                .foregroundColor(FazmColors.purplePrimary.opacity(chatObserverPulseOpacity))
-                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: chatObserverPulseOpacity)
-                .onAppear { chatObserverPulseOpacity = 0.3 }
+                .foregroundColor(FazmColors.purplePrimary.opacity(windowIsVisible ? chatObserverPulseOpacity : 0.7))
+                .animation(windowIsVisible ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default, value: chatObserverPulseOpacity)
+                .onAppear { chatObserverPulseOpacity = windowIsVisible ? 0.3 : 0.7 }
+                .onChange(of: windowIsVisible) { _, visible in
+                    // Toggling pulseOpacity with the now-non-repeating animation snaps
+                    // the in-flight repeatForever to a static value when occluded.
+                    chatObserverPulseOpacity = visible ? 0.3 : 0.7
+                }
 
             Text("Chat observer is thinking...")
                 .scaledFont(size: 11, weight: .medium)
@@ -1625,6 +1653,7 @@ struct ReportIssueButton: View {
     @State private var flashOpacity: Double = 1.0
     @State private var flashScale: Double = 1.0
     @State private var showSent = false
+    @Environment(\.fazmWindowIsVisible) private var windowIsVisible
 
     var body: some View {
         Button(action: sendReport) {
@@ -1637,17 +1666,23 @@ struct ReportIssueButton: View {
         }
         .buttonStyle(.plain)
         .floatingHint(showSent ? "Report sent!" : "Report an issue")
-        .onChange(of: isHanging) {
-            if isHanging {
-                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
-                    flashOpacity = 0.05
-                    flashScale = 1.15
-                }
-            } else {
-                withAnimation(.default) {
-                    flashOpacity = 1.0
-                    flashScale = 1.0
-                }
+        .onChange(of: isHanging) { _, _ in syncFlash() }
+        .onChange(of: windowIsVisible) { _, _ in syncFlash() }
+    }
+
+    /// Starts/stops the orange flash animation. Only runs the repeatForever
+    /// pulse while the host window is on screen — otherwise SwiftUI keeps the
+    /// display cycle alive every frame and burns CPU re-rendering the chat.
+    private func syncFlash() {
+        if isHanging && windowIsVisible {
+            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                flashOpacity = 0.05
+                flashScale = 1.15
+            }
+        } else {
+            withAnimation(.default) {
+                flashOpacity = 1.0
+                flashScale = 1.0
             }
         }
     }
