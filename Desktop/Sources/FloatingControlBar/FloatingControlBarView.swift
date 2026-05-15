@@ -33,6 +33,7 @@ struct FloatingControlBarView: View {
     @State private var updatePulse = false
     @State private var updateButtonPulse = false
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+    @Environment(\.fazmWindowIsVisible) private var windowIsVisible
 
     var body: some View {
         VStack(spacing: 0) {
@@ -236,23 +237,20 @@ struct FloatingControlBarView: View {
                     : .clear,
                 radius: updatePulse ? 8 : 3
             )
-            .onAppear {
-                if updaterViewModel.updateAvailable {
-                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                        updatePulse = true
-                    }
-                }
+            .onAppear { startUpdatePulseIfActive() }
+            .onChange(of: updaterViewModel.updateAvailable) { _, _ in startUpdatePulseIfActive() }
+            .onChange(of: windowIsVisible) { _, _ in startUpdatePulseIfActive() }
+    }
+
+    private func startUpdatePulseIfActive() {
+        if updaterViewModel.updateAvailable && windowIsVisible {
+            updatePulse = false
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                updatePulse = true
             }
-            .onChange(of: updaterViewModel.updateAvailable) { _, available in
-                if available {
-                    updatePulse = false
-                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                        updatePulse = true
-                    }
-                } else {
-                    updatePulse = false
-                }
-            }
+        } else {
+            withAnimation(.default) { updatePulse = false }
+        }
     }
 
     private var updateButton: some View {
@@ -275,11 +273,18 @@ struct FloatingControlBarView: View {
         .buttonStyle(.plain)
         .disabled(updaterViewModel.updateSessionInProgress)
         .help(updaterViewModel.updateSessionInProgress ? "Updating..." : "Update available — v\(updaterViewModel.availableVersion)")
-        .onAppear {
+        .onAppear { startUpdateButtonPulseIfVisible() }
+        .onChange(of: windowIsVisible) { _, _ in startUpdateButtonPulseIfVisible() }
+    }
+
+    private func startUpdateButtonPulseIfVisible() {
+        if windowIsVisible {
             updateButtonPulse = false
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 updateButtonPulse = true
             }
+        } else {
+            withAnimation(.default) { updateButtonPulse = false }
         }
     }
 
