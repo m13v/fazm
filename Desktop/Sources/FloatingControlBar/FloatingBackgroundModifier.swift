@@ -64,15 +64,23 @@ extension View {
 /// Simple spinning loader for the floating bar.
 struct FloatingLoadingSpinner: View {
     @State private var isSpinning = false
+    @Environment(\.fazmWindowIsVisible) private var windowIsVisible
 
     var body: some View {
         Circle()
             .trim(from: 0.1, to: 0.9)
             .stroke(FazmColors.overlayForeground, lineWidth: 2)
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
-            .onAppear { isSpinning = true }
+            .onAppear { isSpinning = windowIsVisible }
+            .onChange(of: windowIsVisible) { _, visible in
+                // Snap the rotation to a halt when occluded — otherwise the
+                // repeatForever rotation keeps the display cycle ticking.
+                isSpinning = visible
+            }
             .animation(
-                .linear(duration: 1).repeatForever(autoreverses: false),
+                windowIsVisible
+                    ? .linear(duration: 1).repeatForever(autoreverses: false)
+                    : .default,
                 value: isSpinning
             )
     }
