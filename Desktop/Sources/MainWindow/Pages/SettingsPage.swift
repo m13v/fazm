@@ -944,6 +944,25 @@ struct SettingsContentView: View {
                             .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(.red)
                         }
+                    } else if bridgeMode == "personal" {
+                        // Not connected yet — give the user an explicit sign-in
+                        // button. Previously sign-in only happened via an
+                        // auto-popping window, so users were stuck with no way to
+                        // start the OAuth flow if that window didn't appear.
+                        Button(action: {
+                            if let cp = chatProvider {
+                                ClaudeAuthWindowController.shared.show(chatProvider: cp)
+                            }
+                        }) {
+                            Text("Sign In with Claude")
+                                .scaledFont(size: 13, weight: .semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(Color.accentColor)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
