@@ -1060,6 +1060,15 @@ class DetachedChatWindowController {
                provider.isSending(sessionKey: sessionKey) {
                 provider.stopAgent(sessionKey: sessionKey)
             }
+            // Tear the session down in the bridge so its claude subprocess
+            // dies (otherwise the warm session leaks ~25-30% CPU per pop-out
+            // forever — root cause of the 2026-05-14 CPU regression). Skipped
+            // during app termination because the bridge is shutting down on
+            // its own and the session_close request would race with bridge exit.
+            if !self.isTerminating, sessionKey != "unknown",
+               let provider = FloatingControlBarManager.shared.chatProvider {
+                provider.endSession(sessionKey: sessionKey)
+            }
             // Clean up per-session tool executor callbacks to prevent stale references
             ChatToolExecutor.unregisterCallbacks(sessionKey: sessionKey)
             self.entries[id]?.chatCancellable?.cancel()
