@@ -1794,13 +1794,18 @@ class FloatingControlBarManager {
         log("FloatingControlBarManager: getBridgeState — SIGUSR2 sent to bridge PID=\(bridgePid) (kill returned \(signalResult))")
     }
 
-    /// Locate the running acp-bridge (dist/index.js) PID by scanning the process
-    /// table. Matches both the bundled bridge in /Applications/Fazm.app and the
-    /// dev tree at ~/fazm/acp-bridge so this works in run.sh-launched Fazm Dev.
+    /// Locate the running acp-bridge (dist/index.js) PID that belongs to THIS
+    /// running Fazm app. Scoped by `Bundle.main.bundlePath` so we never signal
+    /// a sibling install (e.g. prod Fazm.app from Fazm Dev.app or vice-versa)
+    /// when both are running side-by-side during development.
     private func findBridgePid() -> pid_t? {
+        // Scope to this bundle by including the bundle path in the pgrep pattern.
+        // Example: "/Applications/Fazm Dev.app/Contents/Resources/acp-bridge/dist/index.js"
+        let bundlePath = Bundle.main.bundlePath
+        let pattern = "\(bundlePath)/Contents/Resources/acp-bridge/dist/index.js"
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        task.arguments = ["-f", "acp-bridge/dist/index.js"]
+        task.arguments = ["-f", pattern]
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = Pipe()
@@ -1809,10 +1814,11 @@ class FloatingControlBarManager {
             task.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             let str = String(data: data, encoding: .utf8) ?? ""
-            // Multiple matches can happen during a bridge restart; take the
-            // first that's still alive. pgrep prints newline-separated PIDs.
+            // Validate each candidate is alive (kill -0). pgrep can return stale
+            // entries during a fast respawn cycle.
             for line in str.split(separator: "\n") {
-                if let pid = pid_t(line.trimmingCharacters(in: .whitespaces)) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if let pid = pid_t(trimmed), kill(pid, 0) == 0 {
                     return pid
                 }
             }
