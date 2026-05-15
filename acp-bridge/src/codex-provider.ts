@@ -78,6 +78,11 @@ export class CodexProvider {
   private isInitialized = false;
   private initPromise: Promise<CodexInitResult> | null = null;
   private cachedInit: CodexInitResult | null = null;
+  /** Most recent "Unhandled error during turn" message scraped from codex-acp
+   *  stderr. The JSON-RPC error for a failed session/prompt is just a generic
+   *  "Internal error"; the actionable reason (usage limit, auth, etc.) only
+   *  shows up on stderr, so we capture it here for codex-query to surface. */
+  private lastTurnError: { message: string; at: number } | null = null;
 
   private readonly binaryPath: string;
   private readonly env: NodeJS.ProcessEnv;
@@ -156,7 +161,12 @@ export class CodexProvider {
 
     proc.stderr.on("data", (data: Buffer) => {
       const text = data.toString().trim();
-      if (text) this.logErr(`(stderr) ${text}`);
+      if (!text) return;
+      this.logErr(`(stderr) ${text}`);
+      for (const line of text.split("\n")) {
+        const turnErr = CodexProvider.extractTurnError(line);
+        if (turnErr) this.lastTurnError = { message: turnErr, at: Date.now() };
+      }
     });
 
     proc.on("exit", (code) => {
@@ -237,6 +247,31 @@ export class CodexProvider {
   /** Get cached init result (or null if not yet initialized). */
   getInitResult(): CodexInitResult | null {
     return this.cachedInit;
+  }
+
+  /** Return the most recent codex-acp turn error if it was captured within
+   *  `maxAgeMs`. codex-query uses this to replace the generic JSON-RPC
+   *  "Internal error" with the real reason (e.g. "You've hit your usage limit"). */
+  getRecentTurnError(maxAgeMs = 8000): string | null {
+    if (!this.lastTurnError) return null;
+    if (Date.now() - this.lastTurnError.at > maxAgeMs) return null;
+    return this.lastTurnError.message;
+  }
+
+  /** Parse a codex-acp stderr line for an "Unhandled error during turn:"
+   *  message, stripping ANSI color codes and the trailing rust debug suffix
+   *  (e.g. " Some(UsageLimitExceeded)"). Returns null if the line isn't one. */
+  static extractTurnError(line: string): string | null {
+    // eslint-disable-next-line no-control-regex
+    const clean = line.replace(/\[[0-9;]*m/g, "");
+    const marker = "Unhandled error during turn:";
+    const idx = clean.indexOf(marker);
+    if (idx === -1) return null;
+    const msg = clean
+      .slice(idx + marker.length)
+      .replace(/\s+Some\([^)]*\)\s*$/, "")
+      .trim();
+    return msg || null;
   }
 
   private handleStdoutLine(line: string): void {
