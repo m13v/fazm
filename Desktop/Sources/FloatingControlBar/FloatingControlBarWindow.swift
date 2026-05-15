@@ -262,6 +262,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         hostingView = NSHostingView(rootView: AnyView(
             swiftUIView
                 .withFontScaling()
+                .trackWindowVisibility()
         ))
 
         // CRITICAL: Use a container view instead of making NSHostingView the contentView directly.
