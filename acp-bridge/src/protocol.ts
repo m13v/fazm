@@ -62,6 +62,19 @@ export interface InterruptMessage {
   sessionKey?: string;  // target a specific session; omit to interrupt all
 }
 
+/**
+ * Swift tells the bridge to fully tear down a specific session: send `session/close`
+ * upstream so the SDK kills its claude subprocess, then drop the entry from the
+ * `sessions` Map so a future warmup spawns a fresh one. Used when a pop-out window
+ * closes so its detached session doesn't leak (the prior behaviour where the bridge
+ * kept warm sessions forever was the structural cause of the CPU pile-up reported
+ * 2026-05-14).
+ */
+export interface CloseSessionMessage {
+  type: "close_session";
+  sessionKey: string;
+}
+
 /** Swift tells the bridge which auth method the user chose */
 export interface AuthenticateMessage {
   type: "authenticate";
@@ -149,6 +162,7 @@ export type InboundMessage =
   | ToolResultMessage
   | StopMessage
   | InterruptMessage
+  | CloseSessionMessage
   | AuthenticateMessage
   | WarmupMessage
   | ResetSessionMessage
