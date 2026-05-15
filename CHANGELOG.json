@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "New pop-out chat windows now open with a pre-warmed session so the first message responds instantly"
+  ],
   "releases": [
     {
       "version": "2.9.18",
