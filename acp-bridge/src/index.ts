@@ -1473,6 +1473,48 @@ function unregisterSession(sessionKey: string): void {
 let lastCreditExhaustedRestartAt: number | null = null;
 const CREDIT_EXHAUSTED_RESTART_COOLDOWN_MS = 30_000;
 
+/** Classify a thrown session/prompt error into one of three buckets so the
+ *  three catch sites (inner, inner-fallback, outer) all agree on what's a real
+ *  credit/billing exhaustion versus a transient Anthropic outage versus a
+ *  generic error.
+ *
+ *  529 is the killer case here. Anthropic returns 529 for `overloaded_error`
+ *  (upstream is down or under-provisioned), but the Claude Agent SDK tags its
+ *  `api_retry` events for 529 with `error: "rate_limit"`. If we only look at
+ *  errorType we'd treat a server outage as the user running out of credit,
+ *  emit `credit_exhausted`, restart the subprocess, and abort every other
+ *  in-flight pop-out with "Reconnecting after another session ran out of
+ *  credit" — which is exactly what happened in production on 2026-05-14.
+ *
+ *  We disambiguate by checking httpStatus first and falling back to a literal
+ *  "529 Overloaded" / "overloaded_error" check in the message text. Genuine
+ *  402/429 paths (real billing or rate-limit-with-resets) still classify as
+ *  credit so the existing reset-timestamp UX keeps working. */
+type ApiFailureKind = "overloaded" | "credit" | "other";
+function classifyApiFailure(
+  errMsg: string,
+  apiRetryInfo: { httpStatus: number | null; errorType: string } | null,
+): ApiFailureKind {
+  const httpStatus = apiRetryInfo?.httpStatus ?? null;
+  const errorType = apiRetryInfo?.errorType;
+
+  // Upstream overload — transient, do NOT classify as credit even though the
+  // SDK reports errorType="rate_limit" for these.
+  if (httpStatus === 529) return "overloaded";
+  if (/\b529\b[^.]*overloaded|overloaded_error/i.test(errMsg)) return "overloaded";
+
+  // Real credit / billing / rate-limit-with-resets exhaustion.
+  const structuredCredit =
+    errorType === "billing_error"
+    || httpStatus === 402
+    || httpStatus === 429
+    || errorType === "rate_limit";
+  const regexCredit = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
+  if (structuredCredit || regexCredit) return "credit";
+
+  return "other";
+}
+
 /** Recover from a credit_exhausted event by restarting the ACP subprocess
  *  rather than scrubbing in-memory state. The previous "scrub-all-sessions"
  *  approach (deleted 2026-05-12) flagged every sessionId with
@@ -1519,7 +1561,12 @@ function restartAfterCreditExhausted(triggerKey: string): void {
     if (entry) {
       sendWithSession(entry.sessionId, {
         type: "error",
-        message: "Reconnecting after another session ran out of credit. Send your message again to continue.",
+        // Stay cause-neutral: this branch fires for genuine billing exhaustion
+        // (built-in cap, Anthropic monthly spend) AND for Claude.ai subscription
+        // session windows (which reset on their own — no credit was spent). The
+        // old wording "ran out of credit" misled personal-mode users into
+        // thinking their OAuth account had a balance problem.
+        message: "Reconnecting after another window hit Claude's usage limit. Send your message again to continue.",
       });
     }
     ctx.abortController.abort();
@@ -3590,20 +3637,31 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       }
       const errMsg = err instanceof Error ? err.message : String(err);
 
-      // Credit/billing/rate limit exhausted — do NOT retry, surface immediately.
-      // Prefer structured detection from api_retry (HTTP status + error type),
-      // fall back to regex on error message text.
+      // Classify the failure (overloaded / credit / other). See classifyApiFailure
+      // for why 529 needs special-casing despite the SDK labelling it rate_limit.
       const apiRetryInfo = lastApiRetry as { httpStatus: number | null; errorType: string } | null;
       const apiRetryErrorType = apiRetryInfo?.errorType;
       const apiRetryHttpStatus = apiRetryInfo?.httpStatus;
-      const isStructuredCreditError = apiRetryErrorType === "billing_error" || apiRetryErrorType === "rate_limit"
-        || apiRetryHttpStatus === 402 || apiRetryHttpStatus === 429;
-      const isRegexCreditExhausted = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
-      if (isStructuredCreditError || isRegexCreditExhausted) {
-        const detectionMethod = isStructuredCreditError
-          ? `structured (httpStatus=${apiRetryHttpStatus}, errorType=${apiRetryErrorType})`
-          : "regex";
-        logErr(`Credit/rate limit exhausted (${detectionMethod}), not retrying: ${errMsg}`);
+      const failureKind = classifyApiFailure(errMsg, apiRetryInfo);
+
+      // Upstream overload: transient, surface to the trigger session ONLY, do
+      // NOT restart the subprocess or abort other in-flight pop-outs. Anthropic
+      // will recover on its own; killing collateral queries just costs the user
+      // their work for no reason (production incident 2026-05-14).
+      if (failureKind === "overloaded") {
+        logErr(`Upstream overload (httpStatus=${apiRetryHttpStatus}, errorType=${apiRetryErrorType}), not retrying: ${errMsg}`);
+        for (const name of pendingTools) {
+          sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
+        }
+        pendingTools.length = 0;
+        clearToolTimersForSession(sessionId);
+        sendWithSession(sessionId, { type: "upstream_overloaded", message: errMsg });
+        lastApiRetry = null;
+        return;
+      }
+
+      if (failureKind === "credit") {
+        logErr(`Credit/rate limit exhausted (structured httpStatus=${apiRetryHttpStatus}, errorType=${apiRetryErrorType}), not retrying: ${errMsg}`);
         for (const name of pendingTools) {
           sendWithSession(sessionId, { type: "tool_activity", name, status: "completed" });
         }
@@ -3705,8 +3763,8 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         return handleQuery(msg, _retryDepth + 1);
       }
       // Non-retryable errors: surface the raw message to the user.
-      // Only use credit_exhausted for actual billing/rate errors;
-      // everything else goes as a generic error so the user sees the real message.
+      // Reuse classifyApiFailure so an upstream 529 doesn't get bucketed into
+      // credit_exhausted here just because the message contains "limit".
       if (isNonRetryable) {
         logErr(`Non-retryable error, surfacing to user: ${errMsg}`);
         for (const name of pendingTools) {
@@ -3714,10 +3772,10 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         }
         pendingTools.length = 0;
         clearToolTimersForSession(sessionId);
-        const isBillingOrRate = isStructuredNonRetryable
-          && (apiRetryErrorType === "billing_error" || apiRetryErrorType === "rate_limit");
-        const isRegexBilling = /credit|balance|quota|exhausted|hit your.*limit|out of extra usage/i.test(errMsg);
-        if (isBillingOrRate || isRegexBilling) {
+        const fallbackKind = classifyApiFailure(errMsg, apiRetryInfo);
+        if (fallbackKind === "overloaded") {
+          sendWithSession(sessionId, { type: "upstream_overloaded", message: errMsg });
+        } else if (fallbackKind === "credit") {
           sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
           lastCreditExhaustedAt = Date.now();
           lastCreditExhaustedSessionKey = sessionKey;
@@ -3773,15 +3831,19 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       return handleQuery(msg, _retryDepth + 1);
     }
     const errMsg = err instanceof Error ? err.message : String(err);
-    // Credit balance or rate limit exhausted — surface as specific type (outer catch).
-    // Use structured api_retry info when available, regex as fallback.
+    // Classify the outer-catch failure (overloaded / credit / other) via the
+    // same helper used by the inner sites, so a 529 outage doesn't get bucketed
+    // as credit_exhausted just because the SDK labels its retry events as
+    // errorType="rate_limit".
     const outerApiRetryInfo = lastApiRetry as { httpStatus: number | null; errorType: string } | null;
-    const outerApiErrorType = outerApiRetryInfo?.errorType;
-    const outerApiHttpStatus = outerApiRetryInfo?.httpStatus;
-    const outerStructuredCredit = outerApiErrorType === "billing_error" || outerApiErrorType === "rate_limit"
-      || outerApiHttpStatus === 402 || outerApiHttpStatus === 429;
-    const outerRegexCredit = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
-    if (outerStructuredCredit || outerRegexCredit) {
+    const outerFailureKind = classifyApiFailure(errMsg, outerApiRetryInfo);
+    if (outerFailureKind === "overloaded") {
+      logErr(`Upstream overload (outer): ${errMsg}`);
+      sendWithSession(sessionId, { type: "upstream_overloaded", message: errMsg });
+      lastApiRetry = null;
+      return;
+    }
+    if (outerFailureKind === "credit") {
       logErr(`Credit/rate limit exhausted (outer): ${errMsg}`);
       sendWithSession(sessionId, { type: "credit_exhausted", message: errMsg });
       lastCreditExhaustedAt = Date.now();
@@ -4716,6 +4778,43 @@ async function main(): Promise<void> {
             const n = interruptAllCodexSessions(codexProvider);
             logErr(`Interrupted ${n} codex session(s)`);
           }
+        }
+        break;
+      }
+
+      case "close_session": {
+        // Swift's pop-out windowWillClose calls this so the bridge fully tears
+        // down the session: cancel any in-flight query, ask the SDK to close
+        // its session (which terminates the underlying `claude` subprocess via
+        // the agent-acp library), drop the in-memory entry. Without this, the
+        // pre-warmed session map kept warm subprocesses alive forever, which
+        // was the structural cause of the CPU regression reported 2026-05-14.
+        const closeKey = (msg as { sessionKey?: string }).sessionKey;
+        if (!closeKey) {
+          logErr("close_session: missing sessionKey");
+          break;
+        }
+        const entry = sessions.get(closeKey);
+        const ctx = activeQueries.get(closeKey);
+        if (ctx && !ctx.abortController.signal.aborted) {
+          logErr(`close_session: aborting in-flight query for key=${closeKey} sessionId=${ctx.sessionId.slice(0, 8)}`);
+          ctx.interruptRequested = true;
+          ctx.abortController.abort();
+          acpNotify("session/cancel", { sessionId: ctx.sessionId });
+        }
+        if (entry) {
+          logErr(`close_session: closing key=${closeKey} sessionId=${entry.sessionId.slice(0, 8)}`);
+          // session/close instructs the SDK to terminate the claude subprocess
+          // tied to this session. Fire-and-forget — we don't gate the unregister
+          // on its completion because the bridge has authoritative session state
+          // and the subprocess will exit regardless.
+          acpRequest("session/close", { sessionId: entry.sessionId }).catch((err) => {
+            logErr(`close_session: session/close RPC failed for ${entry.sessionId.slice(0, 8)}: ${err}`);
+          });
+          unregisterSession(closeKey);
+          imageTurnCounts.delete(closeKey);
+        } else {
+          logErr(`close_session: no session found for key=${closeKey} (already closed?)`);
         }
         break;
       }
