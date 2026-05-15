@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed false \"out of credit\" errors during Anthropic outages \u2014 Claude 529 overload responses no longer trigger a mode switch or abort other open chat windows"
+  ],
   "releases": [
     {
       "version": "2.9.17",
