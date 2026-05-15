@@ -51,6 +51,7 @@ import {
   codexSessionCount,
   clearCodexSessions,
 } from "./codex-query.js";
+import { classifyApiFailure } from "./api-failure.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1472,48 +1473,6 @@ function unregisterSession(sessionKey: string): void {
  *  just need to surface to the offending pop-out, not thrash the bridge. */
 let lastCreditExhaustedRestartAt: number | null = null;
 const CREDIT_EXHAUSTED_RESTART_COOLDOWN_MS = 30_000;
-
-/** Classify a thrown session/prompt error into one of three buckets so the
- *  three catch sites (inner, inner-fallback, outer) all agree on what's a real
- *  credit/billing exhaustion versus a transient Anthropic outage versus a
- *  generic error.
- *
- *  529 is the killer case here. Anthropic returns 529 for `overloaded_error`
- *  (upstream is down or under-provisioned), but the Claude Agent SDK tags its
- *  `api_retry` events for 529 with `error: "rate_limit"`. If we only look at
- *  errorType we'd treat a server outage as the user running out of credit,
- *  emit `credit_exhausted`, restart the subprocess, and abort every other
- *  in-flight pop-out with "Reconnecting after another session ran out of
- *  credit" — which is exactly what happened in production on 2026-05-14.
- *
- *  We disambiguate by checking httpStatus first and falling back to a literal
- *  "529 Overloaded" / "overloaded_error" check in the message text. Genuine
- *  402/429 paths (real billing or rate-limit-with-resets) still classify as
- *  credit so the existing reset-timestamp UX keeps working. */
-type ApiFailureKind = "overloaded" | "credit" | "other";
-function classifyApiFailure(
-  errMsg: string,
-  apiRetryInfo: { httpStatus: number | null; errorType: string } | null,
-): ApiFailureKind {
-  const httpStatus = apiRetryInfo?.httpStatus ?? null;
-  const errorType = apiRetryInfo?.errorType;
-
-  // Upstream overload — transient, do NOT classify as credit even though the
-  // SDK reports errorType="rate_limit" for these.
-  if (httpStatus === 529) return "overloaded";
-  if (/\b529\b[^.]*overloaded|overloaded_error/i.test(errMsg)) return "overloaded";
-
-  // Real credit / billing / rate-limit-with-resets exhaustion.
-  const structuredCredit =
-    errorType === "billing_error"
-    || httpStatus === 402
-    || httpStatus === 429
-    || errorType === "rate_limit";
-  const regexCredit = /credit balance is too low|insufficient.*(credit|funds|balance)|you've hit your limit|you have hit your limit|hit your.*limit|rate.?limit.*rejected|out of extra usage|unable to verify.*membership/i.test(errMsg);
-  if (structuredCredit || regexCredit) return "credit";
-
-  return "other";
-}
 
 /** Recover from a credit_exhausted event by restarting the ACP subprocess
  *  rather than scrubbing in-memory state. The previous "scrub-all-sessions"
