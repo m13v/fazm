@@ -1,10 +1,15 @@
 {
-  "unreleased": [
-    "New pop-out chat windows now open with a pre-warmed session so the first message responds instantly",
-    "Codex backend now shows the real failure reason (e.g. ChatGPT usage limit reached) instead of a generic error",
-    "Added a Sign In button to the Claude Account settings card so you can connect your Claude account without waiting for the sign-in window to appear"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.19",
+      "date": "2026-05-15",
+      "changes": [
+        "New pop-out chat windows now open with a pre-warmed session so the first message responds instantly",
+        "Codex backend now shows the real failure reason (e.g. ChatGPT usage limit reached) instead of a generic error",
+        "Added a Sign In button to the Claude Account settings card so you can connect your Claude account without waiting for the sign-in window to appear"
+      ]
+    },
     {
       "version": "2.9.18",
       "date": "2026-05-15",
