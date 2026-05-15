@@ -1259,6 +1259,21 @@ actor ACPBridge {
     }
   }
 
+  /// Fully tear down a session in the bridge so its underlying `claude` subprocess
+  /// dies. Called by `DetachedChatWindowController.onWindowClose` to prevent the
+  /// session-leak that left warm subprocesses spinning at 25-30% CPU each forever
+  /// (root cause of the CPU regression reported 2026-05-14). Bridge handler at
+  /// `acp-bridge/src/index.ts` issues `session/close` upstream and clears its map.
+  func closeSession(sessionKey: String) {
+    guard isRunning else { return }
+    sessionInterrupted[sessionKey] = true
+    let dict: [String: Any] = ["type": "close_session", "sessionKey": sessionKey]
+    if let data = try? JSONSerialization.data(withJSONObject: dict),
+       let json = String(data: data, encoding: .utf8) {
+      sendLine(json)
+    }
+  }
+
   /// Cancel any active OAuth flow so the next attempt starts fresh.
   func cancelAuth() {
     guard isRunning else { return }
