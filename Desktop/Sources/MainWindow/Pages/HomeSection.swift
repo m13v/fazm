@@ -12,8 +12,9 @@ struct HomeSection: View {
     // Recent messages
     @State private var recentMessages: [(text: String, date: Date)] = []
 
-    // Timer to refresh data periodically
-    private let refreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+    // @State so the publisher is created once per view lifetime. A `let` is recreated
+    // on every parent invalidation, spawning overlapping autoconnect timers that storm loadData().
+    @State private var refreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 20) {
@@ -168,7 +169,7 @@ struct HomeSection: View {
                 .padding(.vertical, 20)
             } else {
                 ScrollView {
-                    VStack(spacing: 8) {
+                    LazyVStack(spacing: 8) {
                         ForEach(Array(recentMessages.enumerated()), id: \.offset) { _, message in
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: "person.fill")
@@ -179,6 +180,7 @@ struct HomeSection: View {
                                 Text(message.text)
                                     .scaledFont(size: 13, weight: .medium)
                                     .foregroundColor(FazmColors.textPrimary)
+                                    .lineLimit(3)
                                     .fixedSize(horizontal: false, vertical: true)
 
                                 Spacer()
@@ -252,7 +254,7 @@ struct HomeSection: View {
                             FROM chat_messages
                             WHERE sender = 'user'
                             ORDER BY createdAt DESC
-                            LIMIT 100
+                            LIMIT 30
                         """)
                         return rows.map { row in
                             (
