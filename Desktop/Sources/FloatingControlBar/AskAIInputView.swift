@@ -7,6 +7,7 @@ struct AskAIInputView: View {
     @EnvironmentObject var streaming: StreamingResponseState
     @EnvironmentObject var input: InputState
     @EnvironmentObject var voice: VoiceState
+    @Environment(\.fazmWindowIsVisible) private var windowIsVisible
     @Binding var userInput: String
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 34
@@ -160,7 +161,7 @@ struct AskAIInputView: View {
                         radius: sendPulse ? 10 : 4
                     )
                     .scaleEffect(state.showSendButtonHint && hasInput && sendPulse ? 1.15 : 1.0)
-                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: sendPulse)
+                    .animation(windowIsVisible ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: sendPulse)
             }
             .disabled(!hasInput || streaming.isAILoading)
             .buttonStyle(.plain)
@@ -176,10 +177,16 @@ struct AskAIInputView: View {
             }
         }
         .onChange(of: state.showSendButtonHint) { _, show in
-            if show {
-                sendPulse = true
-            } else {
+            sendPulse = show
+        }
+        .onChange(of: windowIsVisible) { _, visible in
+            // Flush the in-flight repeatForever when the window goes
+            // occluded — the .animation modifier above re-evaluates to
+            // .default and this value toggle snaps the loop to a halt.
+            if !visible && sendPulse {
                 sendPulse = false
+            } else if visible && state.showSendButtonHint {
+                sendPulse = true
             }
         }
     }
