@@ -287,6 +287,17 @@ export interface CreditExhaustedMessage {
   sessionId?: string;
 }
 
+/** Sent when Anthropic returns HTTP 529 `overloaded_error`. The user's account
+ *  is fine — Anthropic's servers are momentarily overwhelmed. Swift should
+ *  surface a retryable transient error and NOT auto-switch modes or restart
+ *  the bridge. Distinct from `credit_exhausted` because the SDK reports both
+ *  as errorType="rate_limit" but only one is the user's problem. */
+export interface UpstreamOverloadedMessage {
+  type: "upstream_overloaded";
+  message: string;
+  sessionId?: string;
+}
+
 /** Sent in built-in (bundled API key) mode when the key fails authentication.
  *  Indicates the backend may have rotated or revoked the key. Swift should
  *  refetch from /v1/keys, restart the bridge with the new key, and silently
@@ -566,6 +577,7 @@ export type OutboundMessage =
   | AuthTimeoutMessage
   | AuthFailedMessage
   | CreditExhaustedMessage
+  | UpstreamOverloadedMessage
   | BuiltinKeyInvalidMessage
   | StatusChangeMessage
   | CompactBoundaryMessage
