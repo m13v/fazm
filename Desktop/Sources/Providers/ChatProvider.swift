@@ -664,6 +664,18 @@ class ChatProvider: ObservableObject {
         UserDefaults.standard.removeObject(forKey: storageKey)
         resetSessionChain(storageKey: storageKey)
     }
+
+    /// Drop all persisted ACP session state for a detached pop-out across both
+    /// bridge modes. Call when a pop-out is closed by the user — without this,
+    /// every pop-out ever opened leaves `acpSessionId_detached-*` keys behind
+    /// forever (767 stale keys observed in prod, 2026-05). Must NOT be called on
+    /// app termination: windows closed on quit are restored from the registry
+    /// and still need their resume session IDs.
+    static func purgeDetachedSession(sessionKey: String) {
+        for mode in ["builtin", "personal"] {
+            clearSessionId(storageKey: "acpSessionId_\(sessionKey)_\(mode)")
+        }
+    }
     /// Maximum number of messages to restore from local DB on startup
     private static let floatingRestoreLimit = 50
     /// UserDefaults key: when true, the user started a new chat and restore should be skipped
