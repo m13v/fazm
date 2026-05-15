@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed a multi-second freeze when opening the Floating Bar tab in the main window"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.21",
+      "date": "2026-05-15",
+      "changes": [
+        "Fixed a multi-second freeze when opening the Floating Bar tab in the main window"
+      ]
+    },
     {
       "version": "2.9.20",
       "date": "2026-05-15",
