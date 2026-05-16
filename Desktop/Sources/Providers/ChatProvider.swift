@@ -2765,7 +2765,29 @@ class ChatProvider: ObservableObject {
 
     /// Queue of messages waiting to be sent after the current query finishes.
     /// Replaces the old single pendingFollowUpText. Checked at the end of `sendMessage`.
-    private var pendingMessages: [(text: String, sessionKey: String?, userMessageAdded: Bool)] = []
+    /// A queued chat message that captures everything `sendMessage` will need
+    /// at dequeue time, so per-window context (cwd, model, system prompt
+    /// prefix) doesn't get lost between enqueue and the actual send. Before
+    /// 2026-05-15 this was a `(text, sessionKey, userMessageAdded)` tuple and
+    /// dequeue called `sendMessage(text, isFollowUp:, sessionKey:)` with all
+    /// other args defaulted — so a pop-out's queued message was sent with the
+    /// floating bar's *current* global workspace, not the pop-out's. That
+    /// flipped the bridge's cwd between turns and tore down the ACP session
+    /// (see acp-bridge/src/index.ts cwd-change branch + log "Discarding
+    /// resume id ... due to cwd change").
+    private struct QueuedChatMessage {
+        let text: String
+        let sessionKey: String?
+        let userMessageAdded: Bool
+        /// Per-call cwd captured at enqueue time. nil = use sendMessage default
+        /// (which falls back to the global aiChatWorkingDirectory). Pop-outs
+        /// MUST pass their per-window workspace; floating-bar callers can pass
+        /// nil since the global IS their context.
+        let cwd: String?
+        let model: String?
+        let systemPromptPrefix: String?
+    }
+    private var pendingMessages: [QueuedChatMessage] = []
     /// Read-only accessor for pending message texts (used by UI to sync deletions).
     var pendingMessageTexts: [String] { pendingMessages.map(\.text) }
     /// Session key of the currently running sendMessage call, so follow-ups can be chained on the same session.
@@ -2878,11 +2900,23 @@ class ChatProvider: ObservableObject {
     /// Does NOT interrupt the current query — it will be picked up automatically.
     /// Pass the caller's `sessionKey` so the message runs on the correct session
     /// (not the currently-active one, which may belong to a different window).
-    func enqueueMessage(_ text: String, sessionKey: String? = nil) {
+    /// Pop-out callers MUST pass their per-window `cwd`, `model`, and
+    /// `systemPromptPrefix` so the queued message is dequeued with the same
+    /// context the user originally typed it in (otherwise the dequeue path
+    /// falls back to the global workspace and the bridge tears down the ACP
+    /// session on cwd change — see [QueuedChatMessage] doc).
+    func enqueueMessage(_ text: String, sessionKey: String? = nil, cwd: String? = nil, model: String? = nil, systemPromptPrefix: String? = nil) {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
-        pendingMessages.append((text: trimmedText, sessionKey: sessionKey ?? activeSessionKey, userMessageAdded: false))
-        log("ChatProvider: message enqueued (\(pendingMessages.count) pending), sessionKey=\(sessionKey ?? activeSessionKey ?? "nil")")
+        pendingMessages.append(QueuedChatMessage(
+            text: trimmedText,
+            sessionKey: sessionKey ?? activeSessionKey,
+            userMessageAdded: false,
+            cwd: cwd,
+            model: model,
+            systemPromptPrefix: systemPromptPrefix
+        ))
+        log("ChatProvider: message enqueued (\(pendingMessages.count) pending), sessionKey=\(sessionKey ?? activeSessionKey ?? "nil"), cwd=\(cwd ?? "default")")
     }
 
     /// Interrupt the current query and send a message immediately.
@@ -2894,7 +2928,7 @@ class ChatProvider: ObservableObject {
     /// to a different window) — that fallback is what caused the message to
     /// surface in the wrong pop-out and the bridge to interrupt all concurrent
     /// sessions instead of just the targeted one.
-    func interruptAndSend(_ text: String, sessionKey: String? = nil) async {
+    func interruptAndSend(_ text: String, sessionKey: String? = nil, cwd: String? = nil, model: String? = nil, systemPromptPrefix: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         let targetKey = sessionKey ?? activeSessionKey
@@ -2920,7 +2954,7 @@ class ChatProvider: ObservableObject {
         if !targetBusy {
             log("ChatProvider: send-now (session idle), sending directly to session=\(targetKey ?? "default")")
             NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": trimmedText, "sessionKey": targetKey ?? ""])
-            await sendMessage(trimmedText, isFollowUp: false, sessionKey: targetKey)
+            await sendMessage(trimmedText, model: model, isFollowUp: false, systemPromptPrefix: systemPromptPrefix, sessionKey: targetKey, cwd: cwd)
             return
         }
 
@@ -2962,7 +2996,14 @@ class ChatProvider: ObservableObject {
         // drain path picks the right entry and dispatches the chatProviderDidDequeue
         // notification with the correct sessionKey (which the matching pop-out
         // listens for to update displayedQuery and remove the queue chip).
-        pendingMessages.insert((text: trimmedText, sessionKey: targetKey, userMessageAdded: true), at: 0)
+        pendingMessages.insert(QueuedChatMessage(
+            text: trimmedText,
+            sessionKey: targetKey,
+            userMessageAdded: true,
+            cwd: cwd,
+            model: model,
+            systemPromptPrefix: systemPromptPrefix
+        ), at: 0)
         if let key = targetKey {
             await acpBridge.interrupt(sessionKey: key)
         } else {
@@ -4497,17 +4538,31 @@ class ChatProvider: ObservableObject {
                     pendingMessages.removeFirst(pendingCountAtStop)
                     if let idx = pendingMessages.indices.first(where: matches) {
                         let next = pendingMessages.remove(at: idx)
-                        log("ChatProvider: draining post-stop message for session=\(effectiveKey) (\(pendingMessages.count) remaining)")
+                        log("ChatProvider: draining post-stop message for session=\(effectiveKey) (\(pendingMessages.count) remaining), cwd=\(next.cwd ?? "default")")
                         NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text, "sessionKey": next.sessionKey ?? ""])
-                        await sendMessage(next.text, isFollowUp: next.userMessageAdded, sessionKey: next.sessionKey)
+                        await sendMessage(
+                            next.text,
+                            model: next.model,
+                            isFollowUp: next.userMessageAdded,
+                            systemPromptPrefix: next.systemPromptPrefix,
+                            sessionKey: next.sessionKey,
+                            cwd: next.cwd
+                        )
                     }
                 }
             } else {
                 if let idx = pendingMessages.indices.first(where: matches) {
                     let next = pendingMessages.remove(at: idx)
-                    log("ChatProvider: chaining queued message for session=\(effectiveKey) (\(pendingMessages.count) remaining)")
+                    log("ChatProvider: chaining queued message for session=\(effectiveKey) (\(pendingMessages.count) remaining), cwd=\(next.cwd ?? "default")")
                     NotificationCenter.default.post(name: .chatProviderDidDequeue, object: nil, userInfo: ["text": next.text, "sessionKey": next.sessionKey ?? ""])
-                    await sendMessage(next.text, isFollowUp: next.userMessageAdded, sessionKey: next.sessionKey)
+                    await sendMessage(
+                        next.text,
+                        model: next.model,
+                        isFollowUp: next.userMessageAdded,
+                        systemPromptPrefix: next.systemPromptPrefix,
+                        sessionKey: next.sessionKey,
+                        cwd: next.cwd
+                    )
                 }
             }
         }
