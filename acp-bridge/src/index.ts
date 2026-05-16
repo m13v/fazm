@@ -2733,6 +2733,15 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     await initializeAcp();
     const requestedCwd = msg.cwd || DEFAULT_CWD;
 
+    // Recovery state for the priorContext-replay block below. Hoisted above the
+    // existing-session check so the cwd-change branch can also signal recovery.
+    let resumeFailedFromId: string | null = null;
+    // Source of the recovery: how should the user-facing notice be phrased?
+    let recoveryCause: "stuck_session" | "resume_failed" | "workspace_changed" | null = null;
+    // The cwd recorded on the *old* session before we tore it down — used in
+    // the workspace_changed user notice so the UI can say "X → Y".
+    let priorCwdForRecovery: string | null = null;
+
     const existing = sessions.get(sessionKey);
     if (existing) {
       // If cwd changed, invalidate this specific session
@@ -2751,15 +2760,35 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         });
         unregisterSession(sessionKey);
         imageTurnCounts.delete(sessionKey);
-        // Also discard any persisted resume id — the [CWD-RECOVERY] block
-        // below would otherwise look up the *old* cwd recorded for that id
-        // and silently resume the session under the old workspace, defeating
-        // the user's cwd change. Route through session/new with priorContext
-        // replay instead so the conversation history survives the workspace
-        // switch while the SDK actually operates in the requested cwd.
+        // Discard any persisted resume id — the [CWD-RECOVERY] block below
+        // would otherwise look up the *old* cwd recorded for that id and
+        // silently resume the session under the old workspace, defeating the
+        // user's cwd change. Route through session/new + priorContext replay
+        // instead so the conversation history survives the workspace switch
+        // while the SDK actually operates in the requested cwd.
+        //
+        // Bug fix 2026-05-15: this branch USED to drop msg.resume without
+        // signaling recovery, so the priorContext-replay block below never
+        // fired and the new session started with no memory of the prior
+        // conversation. Pop-out users saw "I don't have context for what
+        // you're saying yes to" responses immediately after a cwd flap (the
+        // queued-message dequeue path was the trigger — see ChatProvider
+        // pendingMessages, which until 2026-05-15 stripped per-call cwd from
+        // queued sends and used the global aiChatWorkingDirectory at
+        // dequeue time). The Swift fix anchors cwd in queued messages; this
+        // bridge fix is the safety net for any other source of cwd flap.
+        priorCwdForRecovery = existing.cwd;
         if (msg.resume) {
-          logErr(`Discarding resume id ${msg.resume.slice(0, 8)} for ${sessionKey} due to cwd change (would have restored old cwd)`);
+          logErr(`Workspace changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}); replaying priorContext into fresh session (was resume=${msg.resume.slice(0, 8)})`);
+          resumeFailedFromId = msg.resume;
+          recoveryCause = "workspace_changed";
           msg.resume = undefined;
+        } else {
+          // Even with no resume id, signal workspace_changed so the user-facing
+          // notice still fires when the client supplied priorContext.
+          logErr(`Workspace changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}); creating fresh session (no resume id was set)`);
+          resumeFailedFromId = existing.sessionId;
+          recoveryCause = "workspace_changed";
         }
       } else {
         sessionId = existing.sessionId;
@@ -2767,9 +2796,6 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     }
 
     // Reuse existing session if alive, resume a persisted one, or create a new one
-    let resumeFailedFromId: string | null = null;
-    // Source of the recovery: how should the user-facing notice be phrased?
-    let recoveryCause: "stuck_session" | "resume_failed" | null = null;
     // Stuck-session recovery: if a prior turn detected the SDK session was
     // poisoned (empty text, stopReason=end_turn) and recursed with this field
     // set, skip the normal resume attempt entirely and treat it as if the
@@ -3023,10 +3049,19 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
       // that was interrupted mid-stream, or one that replayed stale chunks from
       // a previous turn. Empty end_turn no longer routes here — per ACP it is
       // a successful turn and is delivered to the UI as-is.
-      const reasonText =
-        recoveryCause === "stuck_session"
-          ? "The previous session's response was unreliable, so I restarted this chat."
-          : "The upstream chat session expired and was replaced.";
+      // `workspace_changed` is the cwd-flap recovery: the SDK can't run
+      // commands in two workspaces from one session, so a new session is
+      // unavoidable; the conversation continues via priorContext replay.
+      let reasonText: string;
+      if (recoveryCause === "stuck_session") {
+        reasonText = "The previous session's response was unreliable, so I restarted this chat.";
+      } else if (recoveryCause === "workspace_changed") {
+        const from = priorCwdForRecovery ? ` from ${priorCwdForRecovery.replace(/^\/Users\/[^/]+/, "~")}` : "";
+        const to = requestedCwd.replace(/^\/Users\/[^/]+/, "~");
+        reasonText = `Workspace changed${from} to ${to}; conversation continues with prior context.`;
+      } else {
+        reasonText = "The upstream chat session expired and was replaced.";
+      }
       sendWithSession(sessionId, {
         type: "session_expired",
         reason: reasonText,
