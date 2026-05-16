@@ -920,7 +920,18 @@ class DetachedChatWindowController {
         win.onEnqueueMessage = { [weak self, weak win, weak chatProvider] message in
             guard let win else { return }
             let key = self?.entries[ObjectIdentifier(win)]?.sessionKey
-            chatProvider?.enqueueMessage(message, sessionKey: key)
+            // Capture per-window context so the dequeue path doesn't fall
+            // back to the global aiChatWorkingDirectory / selectedModel and
+            // tear down the bridge's ACP session on cwd change. See
+            // ChatProvider.QueuedChatMessage doc.
+            let cwd = win.state.workspace.workspaceDirectory.isEmpty ? nil : win.state.workspace.workspaceDirectory
+            chatProvider?.enqueueMessage(
+                message,
+                sessionKey: key,
+                cwd: cwd,
+                model: win.state.workspace.selectedModel,
+                systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent
+            )
         }
 
         win.onSendNowQueued = { [weak self, weak win, weak chatProvider] item in
@@ -931,8 +942,16 @@ class DetachedChatWindowController {
             // both streaming, the message ends up in the wrong window and the
             // bare interrupt() call cancels both responses instead of just one.
             let key = self?.entries[ObjectIdentifier(win)]?.sessionKey
+            let cwd = win.state.workspace.workspaceDirectory.isEmpty ? nil : win.state.workspace.workspaceDirectory
+            let model = win.state.workspace.selectedModel
             Task { @MainActor in
-                await provider.interruptAndSend(item.text, sessionKey: key)
+                await provider.interruptAndSend(
+                    item.text,
+                    sessionKey: key,
+                    cwd: cwd,
+                    model: model,
+                    systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent
+                )
             }
         }
 
@@ -1112,7 +1131,18 @@ class DetachedChatWindowController {
             // functional queue holds it but no chip renders, so the user thinks
             // their submit was dropped.
             state.enqueue(message)
-            provider.enqueueMessage(message, sessionKey: sessionKey)
+            // Capture per-window context so the dequeue path doesn't fall back
+            // to globals (see ChatProvider.QueuedChatMessage doc + bug fix
+            // 2026-05-15: pop-out sessions were torn down on cwd flap because
+            // the queue stripped per-call cwd).
+            let queuedCwd = state.workspace.workspaceDirectory.isEmpty ? nil : state.workspace.workspaceDirectory
+            provider.enqueueMessage(
+                message,
+                sessionKey: sessionKey,
+                cwd: queuedCwd,
+                model: state.workspace.selectedModel,
+                systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefixCurrent
+            )
             // Cancel the old response subscription immediately so it doesn't keep
             // re-setting currentAIMessage to the previous (completed) response while
             // the follow-up is queued. It gets re-established in the dequeue handler below.
