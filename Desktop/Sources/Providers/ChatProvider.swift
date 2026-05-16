@@ -705,9 +705,16 @@ class ChatProvider: ObservableObject {
     /// Prevents `sendMessage` from clearing `pendingRetryMessage` on completion.
     private var stoppedForBrowserSetup = false
 
-    /// Working directory for Claude Agent SDK file-system tools (Read, Write, Bash, etc.)
     /// Working directory for Claude Agent SDK file-system tools (Read, Write, Bash, etc.).
-    var workingDirectory: String?
+    /// Computed over `aiChatWorkingDirectory` (the AppStorage source of truth) so
+    /// it can never drift. Was a stored cache until 2026-05-16; the cache went
+    /// stale whenever aiChatWorkingDirectory changed without the mirror being
+    /// updated (e.g. the setWorkspace control command), making sendMessage send a
+    /// wrong cwd and flap the ACP session.
+    var workingDirectory: String? {
+        get { aiChatWorkingDirectory.isEmpty ? nil : aiChatWorkingDirectory }
+        set { aiChatWorkingDirectory = newValue ?? "" }
+    }
 
     /// Override app ID for message routing (e.g. "task-chat" to isolate task messages).
     /// When set, messages are saved with this app_id so the backend routes them
@@ -2438,10 +2445,9 @@ class ChatProvider: ObservableObject {
         await loadRoutinesBriefingIfNeeded()
         await discoverClaudeConfig()
 
-        // Set working directory for Claude Agent SDK if workspace is configured
-        if workingDirectory == nil, !aiChatWorkingDirectory.isEmpty {
-            workingDirectory = aiChatWorkingDirectory
-        }
+        // (Removed the workingDirectory cache-population block 2026-05-16:
+        // workingDirectory is now a computed property over aiChatWorkingDirectory,
+        // so there is nothing to seed.)
 
         // Pre-load floating chat from DB so PTT doesn't block on first invocation
         await restoreFloatingChatIfNeeded()
