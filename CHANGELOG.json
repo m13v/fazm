@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed pop-out chat losing conversation history when the workspace changed between turns (queued messages now carry their per-window workspace, model, and prompt; bridge replays history into the new session on workspace switch)",
-    "Pop-out chats keep their workspace and conversation intact across turns: each pop-out anchors its own working directory, and a workspace change now carries the full session transcript instead of resetting the chat"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "2.9.22",
+      "date": "2026-05-16",
+      "changes": [
+        "Fixed pop-out chat losing conversation history when the workspace changed between turns (queued messages now carry their per-window workspace, model, and prompt; bridge replays history into the new session on workspace switch)",
+        "Pop-out chats keep their workspace and conversation intact across turns: each pop-out anchors its own working directory, and a workspace change now carries the full session transcript instead of resetting the chat"
+      ]
+    },
     {
       "version": "2.9.21",
       "date": "2026-05-15",
