@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed pop-out chat losing conversation history when the workspace changed between turns (queued messages now carry their per-window workspace, model, and prompt; bridge replays history into the new session on workspace switch)"
+  ],
   "releases": [
     {
       "version": "2.9.21",
