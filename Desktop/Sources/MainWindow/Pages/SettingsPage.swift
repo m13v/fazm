@@ -334,6 +334,10 @@ struct SettingsContentView: View {
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(FazmColors.purplePrimary.opacity(0.1))
                                 )
+                                // Without an explicit content shape, only the icon
+                                // and text glyphs are tappable; clicks on the padded
+                                // background area silently miss the button.
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }

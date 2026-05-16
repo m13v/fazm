@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed the 'Open in Browser' button on the Remote Control settings page not responding to clicks",
+    "Fixed a stale 'not responding' warning showing on a healthy query after the app recovered from an unclean shutdown"
+  ],
   "releases": [
     {
       "version": "2.9.22",

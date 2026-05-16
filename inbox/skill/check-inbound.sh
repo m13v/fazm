@@ -69,17 +69,36 @@ PROMPT_EOF
 # Run Claude Code with full permissions in the FAZM repo
 log "Spawning Claude Code session..."
 cd "$HOME/fazm"
+set +e
 gtimeout 1800 claude \
     -p "$(cat "$PROMPT_FILE")" \
     --dangerously-skip-permissions \
-    2>&1 | tee -a "$LOG_FILE" || log "WARNING: Claude exited with code $?"
+    2>&1 | tee -a "$LOG_FILE"
+CLAUDE_EXIT=${PIPESTATUS[0]}
+set -e
 
 rm -f "$PROMPT_FILE"
 
-# Mark all emails as processed regardless of Claude's outcome
-"$NODE_BIN" "$SCRIPTS_DIR/mark-processed.js" $EMAIL_IDS 2>>"$LOG_FILE" || log "WARNING: Failed to mark emails $EMAIL_IDS as processed"
+# Decide whether it is safe to mark these emails as processed.
+# Only mark on a clean exit AND no Anthropic usage-cap message in the run log.
+# Anything else means the agent didn't actually do the work; leave the rows
+# unprocessed so the next launchd tick retries instead of silently dropping them.
+SAFE_TO_MARK=1
+if [ "$CLAUDE_EXIT" -ne 0 ]; then
+    log "WARNING: Claude exited with code $CLAUDE_EXIT — leaving emails [#$EMAIL_IDS] unprocessed for retry"
+    SAFE_TO_MARK=0
+fi
+if grep -qE "^(You're out of extra usage|You've hit your org's monthly usage limit|Claude AI usage limit reached)" "$LOG_FILE"; then
+    log "WARNING: Anthropic usage-cap message in run log — leaving emails [#$EMAIL_IDS] unprocessed for retry"
+    SAFE_TO_MARK=0
+fi
 
-log "=== Done processing $EMAIL_COUNT email(s) [#$EMAIL_IDS] ==="
+if [ "$SAFE_TO_MARK" -eq 1 ]; then
+    "$NODE_BIN" "$SCRIPTS_DIR/mark-processed.js" $EMAIL_IDS 2>>"$LOG_FILE" || log "WARNING: Failed to mark emails $EMAIL_IDS as processed"
+    log "=== Done processing $EMAIL_COUNT email(s) [#$EMAIL_IDS] ==="
+else
+    log "=== Skipped marking $EMAIL_COUNT email(s) [#$EMAIL_IDS] — will retry on next tick ==="
+fi
 
 # Cleanup old logs (keep 14 days)
 find "$LOG_DIR" -name "check-inbound-*.log" -mtime +14 -delete 2>/dev/null || true

@@ -317,6 +317,12 @@ struct AIResponseView: View {
                 loadingHideTask?.cancel()
                 loadingHideTask = nil
                 debouncedIsLoading = true
+                // A new query is actively processing. isHanging is only ever set
+                // true by the crash detector in onAppear, so a value still set
+                // here is stale: it would falsely render "not responding" over a
+                // perfectly healthy query. Clear it the moment real work resumes.
+                isHanging = false
+                isHangingFromCrash = false
             } else {
                 loadingHideTask?.cancel()
                 loadingHideTask = Task {
