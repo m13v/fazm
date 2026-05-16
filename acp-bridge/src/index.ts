@@ -31,7 +31,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { tmpdir, homedir } from "os";
-import { unlinkSync, appendFileSync, existsSync, watch, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, renameSync } from "fs";
+import { unlinkSync, appendFileSync, existsSync, watch, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, renameSync, copyFileSync } from "fs";
 import type {
   InboundMessage,
   OutboundMessage,
@@ -1430,12 +1430,16 @@ function startScreenshotResizeWatcher(): void {
 // --- State ---
 
 /** Pre-warmed sessions keyed by sessionKey (e.g. "main", "floating", or model name for backward compat) */
-const sessions = new Map<string, { sessionId: string; cwd: string; model?: string }>();
+// `uncommitted` marks a session handed out from the spare pool that has not
+// yet served a real query. Its `cwd` is the spare's warm cwd (homedir), not
+// the pop-out's real workspace — so the pop-out's first query can switch cwd
+// silently (no recovery preamble) because there is no conversation to lose.
+const sessions = new Map<string, { sessionId: string; cwd: string; model?: string; uncommitted?: boolean }>();
 /** Reverse map: ACP sessionId → sessionKey, for tagging outbound messages with sessionKey */
 const sessionIdToKey = new Map<string, string>();
 
 /** Register a session, maintaining the reverse map */
-function registerSession(sessionKey: string, entry: { sessionId: string; cwd: string; model?: string }): void {
+function registerSession(sessionKey: string, entry: { sessionId: string; cwd: string; model?: string; uncommitted?: boolean }): void {
   // Clean up any stale reverse-map entries that pointed to this key from a
   // prior unregister. unregisterSession intentionally leaves them so that a
   // late result/cancellation message for the unregistered sessionId can still
@@ -2484,6 +2488,44 @@ function sessionJsonlExists(sessionId: string, cwd: string): boolean {
   return findSessionJsonlPath(sessionId, cwd) !== null;
 }
 
+/**
+ * Carry a Claude SDK transcript across a workspace (cwd) change so the session
+ * can be resumed with its FULL history instead of a capped priorContext
+ * summary.
+ *
+ * The Claude Agent SDK addresses transcripts by an encoded-cwd directory
+ * (`~/.claude/projects/<encoded-cwd>/<id>.jsonl`), so when a pop-out's cwd
+ * changes we physically relocate the JSONL into the new workspace's project
+ * dir; `session/resume` under the new cwd then finds it and replays everything.
+ *
+ * Best-effort: returns false (caller falls back to priorContext replay) when
+ * there is no transcript, the path is a Codex rollout (date-bucketed, not
+ * cwd-addressed), or the filesystem move fails. Copy-then-unlink rather than
+ * rename so a partial failure still leaves a usable transcript at the dest.
+ */
+function migrateJsonlForCwdChange(sessionId: string, oldCwd: string, newCwd: string): boolean {
+  if (!sessionId || !oldCwd || !newCwd || oldCwd === newCwd) return false;
+  try {
+    const src = findSessionJsonlPath(sessionId, oldCwd);
+    if (!src) return false;
+    const projectsRoot = join(homedir(), ".claude", "projects");
+    // Only Claude SDK transcripts are cwd-addressed under ~/.claude/projects.
+    // A Codex rollout path must never be touched.
+    if (!src.startsWith(projectsRoot + "/")) return false;
+    const destDir = join(projectsRoot, encodeCwdForClaudeProjects(newCwd));
+    const dest = join(destDir, `${sessionId}.jsonl`);
+    if (src === dest) return true;
+    mkdirSync(destDir, { recursive: true });
+    copyFileSync(src, dest);
+    try { unlinkSync(src); } catch { /* stale duplicate is harmless — lookup keys on requested cwd */ }
+    logErr(`[JSONL-MIGRATE] ${sessionId.slice(0, 8)}: ${src} -> ${dest}`);
+    return true;
+  } catch (err) {
+    logErr(`[JSONL-MIGRATE] ${sessionId.slice(0, 8)} (${oldCwd} -> ${newCwd}) failed: ${err}`);
+    return false;
+  }
+}
+
 async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig[], models?: string[], stagger?: boolean): Promise<void> {
   const warmCwd = cwd || DEFAULT_CWD;
   try { mkdirSync(warmCwd, { recursive: true }); } catch {}
@@ -2741,12 +2783,20 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     // The cwd recorded on the *old* session before we tore it down — used in
     // the workspace_changed user notice so the UI can say "X → Y".
     let priorCwdForRecovery: string | null = null;
+    // P2: when set, msg.resume points at a transcript we deliberately relocated
+    // into the new workspace dir (migrateJsonlForCwdChange). The two cwd-recovery
+    // overrides below must NOT second-guess it back to the old workspace.
+    let cwdMigrationResumeId: string | null = null;
 
     const existing = sessions.get(sessionKey);
+    // P4: a session handed out from the spare pool carries the spare's warm cwd
+    // (homedir), not the pop-out's real workspace. Its first query "changes"
+    // cwd, but there is no conversation to preserve — that switch is silent.
+    const existingWasUncommitted = existing?.uncommitted === true;
     if (existing) {
       // If cwd changed, invalidate this specific session
       if (existing.cwd !== requestedCwd) {
-        logErr(`Cwd changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}), creating new session`);
+        logErr(`Cwd changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd})`);
         // Tear down the old SDK subprocess before unregistering. Without this,
         // each cwd change for a sessionKey leaves an orphaned claude SDK process
         // running at 70-90% CPU forever. Observed 2026-05-13: pop-out session
@@ -2760,38 +2810,52 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         });
         unregisterSession(sessionKey);
         imageTurnCounts.delete(sessionKey);
-        // Discard any persisted resume id — the [CWD-RECOVERY] block below
-        // would otherwise look up the *old* cwd recorded for that id and
-        // silently resume the session under the old workspace, defeating the
-        // user's cwd change. Route through session/new + priorContext replay
-        // instead so the conversation history survives the workspace switch
-        // while the SDK actually operates in the requested cwd.
-        //
-        // Bug fix 2026-05-15: this branch USED to drop msg.resume without
-        // signaling recovery, so the priorContext-replay block below never
-        // fired and the new session started with no memory of the prior
-        // conversation. Pop-out users saw "I don't have context for what
-        // you're saying yes to" responses immediately after a cwd flap (the
-        // queued-message dequeue path was the trigger — see ChatProvider
-        // pendingMessages, which until 2026-05-15 stripped per-call cwd from
-        // queued sends and used the global aiChatWorkingDirectory at
-        // dequeue time). The Swift fix anchors cwd in queued messages; this
-        // bridge fix is the safety net for any other source of cwd flap.
-        priorCwdForRecovery = existing.cwd;
-        if (msg.resume) {
-          logErr(`Workspace changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}); replaying priorContext into fresh session (was resume=${msg.resume.slice(0, 8)})`);
-          resumeFailedFromId = msg.resume;
-          recoveryCause = "workspace_changed";
+
+        if (existingWasUncommitted) {
+          // P4: spare-pool session, no real conversation yet. Recreate silently
+          // in the requested cwd — nothing to recover, so no resume, no
+          // priorContext preamble, no session_expired notice.
+          logErr(`  (uncommitted spare session — silent recreate, nothing to preserve)`);
           msg.resume = undefined;
         } else {
-          // Even with no resume id, signal workspace_changed so the user-facing
-          // notice still fires when the client supplied priorContext.
-          logErr(`Workspace changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}); creating fresh session (no resume id was set)`);
-          resumeFailedFromId = existing.sessionId;
-          recoveryCause = "workspace_changed";
+          // Real cwd flap on a session that holds conversation history.
+          priorCwdForRecovery = existing.cwd;
+          // P2: carry the FULL transcript across the workspace switch. The SDK
+          // addresses transcripts by cwd-encoded dir, so relocating the JSONL
+          // into the new workspace's project dir lets us session/resume it
+          // intact instead of replaying a capped priorContext summary.
+          //
+          // The carry id is the live in-memory session (`existing.sessionId`),
+          // not Swift's `msg.resume`: when an in-memory session exists it is
+          // authoritative for "what conversation is in this pop-out", and a
+          // stale `msg.resume` from before a mid-chat rollover would migrate an
+          // older, shorter transcript. Best-effort — any failure falls through
+          // to priorContext replay.
+          const carryId = existing.sessionId;
+          if (migrateJsonlForCwdChange(carryId, existing.cwd, requestedCwd)) {
+            logErr(`  (migrated transcript ${carryId.slice(0, 8)} into ${requestedCwd} — will resume with full history)`);
+            msg.resume = carryId;
+            // Record the new cwd so [CWD-RECOVERY] resumes at requestedCwd, and
+            // flag the id so the JSONL-internal-cwd backstop below does not drag
+            // it back to the old workspace.
+            recordPersistedSession(sessionKey, carryId, requestedCwd, requestedModel);
+            cwdMigrationResumeId = carryId;
+          } else {
+            // No transcript to carry — discard the resume id (it would restore
+            // the old cwd) and route through session/new + priorContext replay
+            // so the conversation history still survives the workspace switch.
+            logErr(`  (no transcript to migrate — falling back to priorContext replay)`);
+            msg.resume = undefined;
+            resumeFailedFromId = existing.sessionId;
+            recoveryCause = "workspace_changed";
+          }
         }
       } else {
         sessionId = existing.sessionId;
+        // P4: the spare has now served a real query at its warm cwd — it is
+        // committed. Clear the flag so a later genuine cwd flap on this session
+        // goes through full recovery instead of a silent reset.
+        if (existing.uncommitted) existing.uncommitted = false;
       }
     }
 
@@ -2827,7 +2891,7 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
     // we pass a cwd that doesn't match the one used at session/new, the
     // resume call throws "Resource not found".
     let resolvedResumeCwd = requestedCwd;
-    if (msg.resume && !sessionId) {
+    if (msg.resume && !sessionId && msg.resume !== cwdMigrationResumeId) {
       const recordedCwd = lookupCwdForSessionId(msg.resume);
       if (recordedCwd && recordedCwd !== requestedCwd) {
         logErr(`[CWD-RECOVERY] resume ${msg.resume.slice(0, 8)}: using recorded cwd ${recordedCwd} (requestedCwd=${requestedCwd}, key=${sessionKey})`);
@@ -2854,7 +2918,12 @@ async function handleQuery(msg: QueryMessage, _retryDepth = 0): Promise<void> {
         // cwd map: extract the original cwd from the JSONL itself (the SDK
         // writes "cwd":"<path>" into nearly every line). This makes the
         // resume path lossless even after a bridge upgrade with no record.
-        if (resolvedResumeCwd === requestedCwd) {
+        //
+        // Skipped for a P2 cwd-migration: there the transcript was deliberately
+        // relocated into the NEW workspace, but its lines still carry the OLD
+        // cwd — honoring the extracted value would resume in the old workspace
+        // and (worse) fail to find the JSONL we just moved.
+        if (resolvedResumeCwd === requestedCwd && msg.resume !== cwdMigrationResumeId) {
           const extracted = extractCwdFromJsonlFile(resumeJsonlPath);
           if (extracted && extracted !== requestedCwd) {
             logErr(`[CWD-RECOVERY] resume ${msg.resume.slice(0, 8)}: extracted cwd ${extracted} from JSONL (requestedCwd=${requestedCwd}, key=${sessionKey})`);
@@ -4857,6 +4926,12 @@ async function main(): Promise<void> {
         if (fromKey && toKey && sessions.has(fromKey)) {
           const entry = sessions.get(fromKey)!;
           unregisterSession(fromKey);
+          // P4: a spare-pool session is warmed at homedir, not the pop-out's
+          // real workspace. Mark it uncommitted so the pop-out's first query
+          // can switch cwd silently — there is no conversation to preserve yet.
+          // A floating->detached transfer carries a real conversation, so it
+          // stays committed (a later cwd flap there must go through recovery).
+          if (fromKey === "spare") entry.uncommitted = true;
           registerSession(toKey, entry);
           // Transfer image turn count too
           const imgCount = imageTurnCounts.get(fromKey);
