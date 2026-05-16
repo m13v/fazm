@@ -616,6 +616,15 @@ class DetachedChatWindowController {
             detachedState.workspace.projectDiscoveredSkills = chatProvider.projectDiscoveredSkills
         }
 
+        // Anchor the pop-out's cwd at creation. An empty workspaceDirectory used
+        // to mean "follow the global aiChatWorkingDirectory", but that global
+        // fluctuates, so the cwd sent to the ACP bridge flapped between turns —
+        // each flap tore down the upstream session and lost conversation memory.
+        // Pop-outs now get an explicit, sticky cwd from the moment they exist.
+        if detachedState.workspace.workspaceDirectory.isEmpty {
+            detachedState.workspace.workspaceDirectory = NSHomeDirectory()
+        }
+
         let win = DetachedChatWindow(state: detachedState, sessionKey: sessionKey)
         let winId = ObjectIdentifier(win)
 
@@ -790,10 +799,17 @@ class DetachedChatWindowController {
                 detachedState.streaming.showingAIResponse = true
                 detachedState.streaming.isAILoading = false
 
-                // Restore per-window model selection and workspace
+                // Restore per-window model selection and workspace.
+                // Old snapshots (saved before per-window workspace existed) have an
+                // empty workspace; resolve those to $HOME so the pop-out has an
+                // explicit, sticky cwd instead of silently following the global
+                // (which flaps and tears down the ACP session between turns).
                 detachedState.workspace.selectedModel = snapshot.selectedModel
-                detachedState.workspace.workspaceDirectory = snapshot.workspace
-                if !snapshot.workspace.isEmpty {
+                let restoredWorkspace = snapshot.workspace.isEmpty ? NSHomeDirectory() : snapshot.workspace
+                detachedState.workspace.workspaceDirectory = restoredWorkspace
+                // Only discover project config for a real project dir. $HOME has no
+                // project CLAUDE.md, so discovery there is wasted work.
+                if !snapshot.workspace.isEmpty && snapshot.workspace != NSHomeDirectory() {
                     Task {
                         let config = await ChatProvider.discoverProjectConfig(workspace: snapshot.workspace)
                         await MainActor.run {
