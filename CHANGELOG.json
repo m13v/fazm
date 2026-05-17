@@ -8,7 +8,8 @@
     "Added per-shortcut on/off toggles in Settings \u2192 Shortcuts so you can disable Ask Fazm, New Pop-Out Chat, Push to Talk, or \u2318\\ when they conflict with other apps",
     "Stopped the AI from giving confusing Claude Code setup instructions (like editing config files or restarting Claude Code) when helping connect the browser extension",
     "Fixed push-to-talk transcription concatenating onto previously spoken text when a chat reply was already on screen, so each voice message starts fresh",
-    "Clarified Custom API Endpoint setting requires an Anthropic-API-compatible endpoint"
+    "Clarified Custom API Endpoint setting requires an Anthropic-API-compatible endpoint",
+    "Fixed push-to-talk inserting repeated gibberish (e.g. '\u092d\u093e\u0908 \u092d\u093e\u0908 \u092d\u093e\u0908') when transcription hallucinated on silent audio"
   ],
   "releases": [
     {
