@@ -110,7 +110,13 @@ struct DesktopHomeView: View {
                 BrowserExtensionSetupWindowController.shared.show(
                     chatProvider: viewModelContainer.chatProvider,
                     onComplete: {
-                        FloatingControlBarManager.shared.retryPendingQuery()
+                        // Route the continuation back to the chat surface the
+                        // user was actually using (floating bar, pop-out, main
+                        // chat, or onboarding) instead of always dumping it in
+                        // the floating bar. Fix for the "AI loses context after
+                        // extension install" bug reported by amabdig@gmail.com
+                        // 2026-05-13.
+                        viewModelContainer.chatProvider.retryAfterBrowserSetup()
                     },
                     source: "chat_interception"
                 )
