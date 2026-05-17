@@ -1015,7 +1015,7 @@ struct SettingsContentView: View {
                                 Task { await chatProvider?.restartBridgeForEndpointChange() }
                             }
 
-                        Text("Route API calls through a custom endpoint (e.g. local LLM bridge, corporate proxy, or GitHub Copilot bridge). Leave empty to use the default Anthropic API.")
+                        Text("Route API calls through an Anthropic-API-compatible endpoint (e.g. local LLM bridge, corporate proxy, or GitHub Copilot bridge). The endpoint must speak the Anthropic API format; a raw Gemini or OpenAI key will not work here. Leave empty to use the default Anthropic API.")
                             .scaledFont(size: 12)
                             .foregroundColor(FazmColors.textTertiary)
                     } else {
