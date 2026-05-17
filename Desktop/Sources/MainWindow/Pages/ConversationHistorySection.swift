@@ -58,15 +58,17 @@ struct ConversationHistorySection: View {
                 Spacer()
                 Button(action: startNewChat) {
                     HStack(spacing: 6) {
-                        Text(shortcutSettings.newPopOutChatKey.rawValue)
-                            .scaledFont(size: 11, weight: .semibold)
-                            .foregroundColor(.white.opacity(0.7))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.white.opacity(0.15))
-                            )
+                        if shortcutSettings.newPopOutChatShortcutEnabled {
+                            Text(shortcutSettings.newPopOutChatKey.rawValue)
+                                .scaledFont(size: 11, weight: .semibold)
+                                .foregroundColor(.white.opacity(0.7))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.white.opacity(0.15))
+                                )
+                        }
                         Text("New Chat Window")
                     }
                     .scaledFont(size: 13, weight: .medium)
