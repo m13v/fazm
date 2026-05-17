@@ -39,12 +39,18 @@ struct HomeSection: View {
                 .scaledFont(size: 15, weight: .semibold)
                 .foregroundColor(FazmColors.textPrimary)
 
-            HomeKeyboardView(pttKey: shortcutSettings.pttKey)
+            HomeKeyboardView(pttKey: shortcutSettings.pttEnabled ? shortcutSettings.pttKey : nil)
 
-            (Text("Hold ") + Text(shortcutSettings.pttKey.rawValue).bold() + Text(" to speak, release to send"))
-                .scaledFont(size: 13)
-                .foregroundColor(FazmColors.textSecondary)
-                .multilineTextAlignment(.center)
+            Group {
+                if shortcutSettings.pttEnabled {
+                    Text("Hold ") + Text(shortcutSettings.pttKey.rawValue).bold() + Text(" to speak, release to send")
+                } else {
+                    Text("Push-to-talk is off. Enable it in Settings → Shortcuts.")
+                }
+            }
+            .scaledFont(size: 13)
+            .foregroundColor(FazmColors.textSecondary)
+            .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(20)
@@ -160,9 +166,15 @@ struct HomeSection: View {
                         Text("No messages yet")
                             .scaledFont(size: 13)
                             .foregroundColor(FazmColors.textQuaternary)
-                        (Text("Hold ") + Text(shortcutSettings.pttKey.symbol).bold() + Text(" to ask Fazm something"))
-                            .scaledFont(size: 12)
-                            .foregroundColor(FazmColors.textTertiary)
+                        Group {
+                            if shortcutSettings.pttEnabled {
+                                Text("Hold ") + Text(shortcutSettings.pttKey.symbol).bold() + Text(" to ask Fazm something")
+                            } else {
+                                Text("Click the floating bar to ask Fazm something")
+                            }
+                        }
+                        .scaledFont(size: 12)
+                        .foregroundColor(FazmColors.textTertiary)
                     }
                     Spacer()
                 }
@@ -283,7 +295,8 @@ struct HomeSection: View {
 
 /// Full Mac keyboard visualization for the homepage, highlighting the active PTT key.
 struct HomeKeyboardView: View {
-    let pttKey: ShortcutSettings.PTTKey
+    /// The currently bound PTT key, or `nil` when push-to-talk is disabled.
+    let pttKey: ShortcutSettings.PTTKey?
 
     @State private var isPressed = false
 
@@ -374,7 +387,7 @@ struct HomeKeyboardView: View {
     }
 
     private func highlightableKey(_ label: String, w: CGFloat, for pttOption: ShortcutSettings.PTTKey) -> some View {
-        let isHighlighted = pttOption == pttKey
+        let isHighlighted = pttKey != nil && pttOption == pttKey
         return Text(label)
             .scaledFont(size: 12, weight: isHighlighted ? .semibold : .medium)
             .foregroundColor(isHighlighted ? .white : Color.white.opacity(0.4))
