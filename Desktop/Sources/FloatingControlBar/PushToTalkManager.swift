@@ -630,6 +630,13 @@ class PushToTalkManager: ObservableObject {
       let isShowingResponse = targetState?.streaming.showingAIResponse == true
       if !isShowingResponse {
         targetState?.input.aiInputText = preVoiceInputText.isEmpty ? query : preVoiceInputText + " " + query
+      } else {
+        // A response is showing — the query is routed to the follow-up field
+        // below via pendingFollowUpText. The live transcription sync wrote this
+        // utterance into aiInputText while listening; clear it now so the NEXT
+        // PTT session does not inherit it via preVoiceInputText and concatenate
+        // every prior utterance onto the new one.
+        targetState?.input.aiInputText = ""
       }
       pttOpenedChat = false
       // Detached-window button is the only case where override is non-nil AND
