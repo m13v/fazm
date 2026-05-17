@@ -59,6 +59,7 @@ struct SystemEvent: Equatable, Codable {
         case toolHangCanceled     // a tool call exceeded its timeout, ACP session was canceled
         case taskHangCanceled     // a Task subagent appeared to die silently, ACP session was canceled
         case userInterrupted      // user manually interrupted, surfaced as a card so it's visible later
+        case browserExtensionResumed // browser extension setup finished and the interrupted task is being resumed
     }
 
     let kind: Kind
@@ -700,6 +701,23 @@ class ChatProvider: ObservableObject {
     /// The user's message text that was interrupted by browser extension setup.
     /// After setup completes, the UI should call retryPendingMessage() to re-send it.
     var pendingRetryMessage: String?
+
+    /// The sessionKey of the chat surface that was interrupted by browser extension
+    /// setup. Used to route the continuation message back to the correct UI
+    /// (floating bar, detached pop-out, main chat, or onboarding) instead of
+    /// always dumping it into the floating bar.
+    ///
+    /// - `"floating"` → floating bar chat
+    /// - `"detached-<uuid>"` → a specific detached pop-out
+    /// - `nil` → main chat (DesktopHomeView's `provider.messages` surface) or onboarding
+    ///   (see `pendingRetryIsOnboarding` to disambiguate the two).
+    var pendingRetrySessionKey: String?
+
+    /// Snapshot of `isOnboarding` at the moment the browser extension setup
+    /// interrupted the query. Allows the retry path to disambiguate main chat
+    /// from onboarding chat — both use `sessionKey == nil`, but they live in
+    /// different UI screens and the onboarding chat has its own persistence.
+    var pendingRetryIsOnboarding: Bool = false
 
     /// Set when the agent is stopped due to browser extension setup.
     /// Prevents `sendMessage` from clearing `pendingRetryMessage` on completion.
@@ -2868,9 +2886,146 @@ class ChatProvider: ObservableObject {
     /// Re-send the message that was interrupted by browser extension setup.
     func retryPendingMessage() {
         guard let text = pendingRetryMessage else { return }
-        pendingRetryMessage = nil
+        clearPendingRetry()
         log("ChatProvider: Retrying pending message after browser extension setup")
         Task { await sendMessage(text) }
+    }
+
+    /// After browser extension setup completes, resume the interrupted task on
+    /// the SAME chat surface that triggered it (floating bar, detached pop-out,
+    /// onboarding chat, or main chat). Replaces the old hardcoded "always go
+    /// through the floating bar" path which dropped continuation messages into
+    /// a UI the user wasn't looking at.
+    ///
+    /// Behavior:
+    /// 1. Reads `pendingRetrySessionKey` + `pendingRetryIsOnboarding` captured by
+    ///    `sendMessage` at the moment of interruption.
+    /// 2. Drops a `.browserExtensionResumed` SystemEvent card into the correct
+    ///    surface so the user sees "Browser extension connected — resuming…"
+    ///    in whatever chat they were actually using.
+    /// 3. Sends a short continuation message via the right routing path so the
+    ///    AI picks up where it left off (the bridge was already restarted with
+    ///    session resume by `testPlaywrightConnection()`).
+    @MainActor
+    func retryAfterBrowserSetup() {
+        guard pendingRetryMessage != nil else {
+            log("ChatProvider: retryAfterBrowserSetup called with no pending message — nothing to do")
+            return
+        }
+
+        // Snapshot the surface info before any path clears the pendingRetry* fields.
+        let sessionKey = pendingRetrySessionKey
+        let wasOnboarding = pendingRetryIsOnboarding
+        log("ChatProvider: retryAfterBrowserSetup dispatching for sessionKey=\(sessionKey ?? "<nil>"), onboarding=\(wasOnboarding)")
+
+        let continuationMessage = "The browser extension is now connected and ready. Please continue with the task."
+        let notice = makeBrowserExtensionResumedNotice(sessionKey: sessionKey)
+
+        switch sessionKey {
+        case "floating":
+            // Inject the notice into the floating bar's visible state and
+            // delegate the rest (window activation, sendAIQuery routing) to
+            // the existing FloatingControlBarManager.retryPendingQuery() so
+            // we don't duplicate its window-management logic. Note: that
+            // method clears `pendingRetryMessage` on entry.
+            if let barState = FloatingControlBarManager.shared.barState {
+                injectSystemEventIntoFloatingState(notice, into: barState)
+            }
+            // Persist the notice to floating chat history so it survives reload.
+            let sid = floatingChatSessionId
+            Task { await ChatMessageStore.saveMessage(notice, context: "__floating__", sessionId: sid) }
+            FloatingControlBarManager.shared.retryPendingQuery()
+
+        case let key? where key.hasPrefix("detached-"):
+            // Push the notice into the matching pop-out window's state so the
+            // user sees the resume marker in the same chat they were typing in.
+            for entry in DetachedChatWindowController.shared.entriesSnapshot()
+                where entry.sessionKey == key {
+                injectSystemEventIntoFloatingState(notice, into: entry.window.state)
+                // Bring it forward so the user notices the resume.
+                if !entry.window.isVisible { entry.window.makeKeyAndOrderFront(nil) }
+            }
+            // Persist to the detached context so the notice survives reload.
+            let storedSessionId = UserDefaults.standard.string(forKey: "acpSessionId_\(key)_\(bridgeMode)")
+            Task { await ChatMessageStore.saveMessage(notice, context: "__\(key)__", sessionId: storedSessionId) }
+
+            // Clear before re-sending so sendMessage() doesn't see stale state
+            // (and so a failure here doesn't leave the retry pinned forever).
+            clearPendingRetry()
+            // Drive the same path the user typing into the pop-out would.
+            let dispatched = DetachedChatWindowController.shared.sendQuery(
+                toSessionKey: key,
+                message: continuationMessage
+            )
+            if !dispatched {
+                // Pop-out was closed mid-setup. Fall back to the floating bar
+                // so the continuation isn't silently dropped — at least the
+                // user has SOMETHING reachable to surface the resume.
+                log("ChatProvider: retryAfterBrowserSetup — detached window \(key) not found, falling back to floating bar")
+                FloatingControlBarManager.shared.show()
+                Task { await self.sendMessage(continuationMessage, sessionKey: "floating") }
+            }
+
+        case nil, "main"?:
+            // Main chat / onboarding (both use sessionKey=nil, history lives
+            // in self.messages). Show the notice inline and re-drive
+            // sendMessage on the same surface.
+            messages.append(notice)
+            clearPendingRetry()
+            // Preserve isOnboarding so the onboarding prompt prefix is reapplied
+            // (the agent's onboarding-specific behavior must stay on).
+            let previousIsOnboarding = isOnboarding
+            isOnboarding = wasOnboarding || previousIsOnboarding
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                await self.sendMessage(
+                    continuationMessage,
+                    model: wasOnboarding ? "claude-sonnet-4-6" : nil,
+                    sessionKey: nil
+                )
+                // Restore the prior onboarding flag in case nothing else flipped it.
+                self.isOnboarding = previousIsOnboarding
+            }
+
+        default:
+            // Unknown surface (future session-key namespace, custom override).
+            // Don't lose the message — surface it in the floating bar.
+            log("ChatProvider: retryAfterBrowserSetup — unknown sessionKey \(sessionKey ?? "<nil>"), falling back to floating bar")
+            clearPendingRetry()
+            FloatingControlBarManager.shared.show()
+            Task { await self.sendMessage(continuationMessage, sessionKey: "floating") }
+        }
+    }
+
+    /// Build the "extension connected, resuming" notice card. Pulled out so
+    /// every retry surface uses the same wording and styling.
+    private func makeBrowserExtensionResumedNotice(sessionKey: String?) -> ChatMessage {
+        let event = SystemEvent(
+            kind: .browserExtensionResumed,
+            title: "Browser extension connected",
+            body: "Resuming the task you started before setup."
+        )
+        let noticeId = UUID().uuidString
+        return ChatMessage(
+            id: noticeId,
+            text: "",
+            sender: .ai,
+            isStreaming: false,
+            isSynced: false,
+            contentBlocks: [.systemEvent(id: noticeId, event: event)],
+            sessionKey: sessionKey
+        )
+    }
+
+    /// Inject a system-event notice into a floating bar / pop-out state so it
+    /// renders in conversation order without depending on the
+    /// `self.messages` Combine subscription. Mirrors the pattern used by
+    /// `sessionRecovered` notices (see ChatProvider session_expired handler).
+    @MainActor
+    private func injectSystemEventIntoFloatingState(_ notice: ChatMessage, into state: FloatingControlBarState) {
+        state.streaming.chatHistory.append(
+            FloatingChatExchange(question: "", aiMessage: notice)
+        )
     }
 
     /// Stop the ACP bridge so it picks up the new Playwright extension token on next start.
@@ -3222,6 +3377,13 @@ class ChatProvider: ObservableObject {
         // handler below will repopulate it.
         sessionExpiredNotice = nil
         pendingRetryMessage = trimmedText
+        // Capture which surface this send belongs to so a browser-extension-setup
+        // interruption can route the continuation back to the same UI (not just
+        // the floating bar). Cleared on successful completion at the bottom of
+        // sendMessage; preserved on browser-setup interruption via
+        // `stoppedForBrowserSetup`.
+        pendingRetrySessionKey = sessionKey
+        pendingRetryIsOnboarding = isOnboarding
 
         // Track user message sent
         AnalyticsManager.shared.chatMessageSent(
@@ -4001,10 +4163,11 @@ class ChatProvider: ObservableObject {
             await applyPendingBridgeRestart()
             await applyPendingBridgeModeSwitch()
             if stoppedForBrowserSetup {
-                // Keep pendingRetryMessage so retryPendingQuery() can re-send it
+                // Keep pendingRetry* so retryAfterBrowserSetup() can dispatch
+                // the continuation back to the same chat surface.
                 stoppedForBrowserSetup = false
             } else {
-                pendingRetryMessage = nil  // Successful completion — no retry needed
+                clearPendingRetry()  // Successful completion — no retry needed
             }
 
             // Save AI response to backend. aiMessageId is captured above so we can
@@ -4285,13 +4448,13 @@ class ChatProvider: ObservableObject {
                 // Don't switch modes, don't show the credit alert, just surface a
                 // clear retry message. Clear pendingRetryMessage so handlePostQuery
                 // doesn't suppress this thinking a retry is queued.
-                pendingRetryMessage = nil
+                clearPendingRetry()
                 log("ChatProvider: upstream overloaded in \(bridgeMode) mode: \(rawMessage)")
                 errorMessage = bridgeError.errorDescription
             } else if let bridgeError = error as? BridgeError, case .creditExhausted(let rawMessage) = bridgeError {
                 // Credits or rate limit exhausted — no retry possible, clear pending message
                 // so handlePostQuery doesn't suppress the error thinking a retry is pending
-                pendingRetryMessage = nil
+                clearPendingRetry()
                 log("ChatProvider: credit/rate limit exhausted in \(bridgeMode) mode: \(rawMessage)")
                 let isRateLimit = bridgeError.isRateLimitExhaustion
                 if bridgeMode == "builtin" && !isRateLimit {
@@ -4313,7 +4476,7 @@ class ChatProvider: ObservableObject {
                       Self.isTermsAcceptanceRequired(msg) {
                 // Anthropic updated their T&S and the user hasn't accepted yet.
                 // Show the actionable message directly — do NOT trigger re-auth flow.
-                pendingRetryMessage = nil
+                clearPendingRetry()
                 log("ChatProvider: terms acceptance required in \(bridgeMode) mode: \(msg)")
                 errorMessage = bridgeError.errorDescription
             } else if let bridgeError = error as? BridgeError,
@@ -4353,14 +4516,14 @@ class ChatProvider: ObservableObject {
                         // Surface a clearer message than the OAuth-flavored one
                         // and DO NOT trigger Claude auth.
                         log("ChatProvider: built-in key refetch returned \(newKey.isEmpty ? "no key" : "same key") — surfacing transient error")
-                        pendingRetryMessage = nil
+                        clearPendingRetry()
                         errorMessage = "We couldn't verify your account. Please try again in a few seconds."
                     }
                 } else {
                     // Already refetched within the cooldown window — give up for
                     // this turn so we don't spin. The user can manually retry.
                     log("ChatProvider: built-in key still invalid within cooldown window — surfacing transient error")
-                    pendingRetryMessage = nil
+                    clearPendingRetry()
                     errorMessage = "We couldn't verify your account. Please try again in a few seconds."
                 }
             } else if bridgeMode == "builtin",
@@ -4393,7 +4556,7 @@ class ChatProvider: ObservableObject {
                 // pendingRetryMessage is already set from sendMessage() — keep it for auto-retry
                 errorMessage = nil
             } else {
-                pendingRetryMessage = nil
+                clearPendingRetry()
                 errorMessage = error.localizedDescription
             }
 
@@ -4506,7 +4669,7 @@ class ChatProvider: ObservableObject {
 
         // Auto-retry the failed query after a model access fallback (personal → builtin)
         if retryAfterModelFallback, let retryText = pendingRetryMessage {
-            pendingRetryMessage = nil
+            clearPendingRetry()
             log("ChatProvider: auto-retrying query after model access fallback to builtin")
             await sendMessage(retryText)
             return
@@ -4518,7 +4681,7 @@ class ChatProvider: ObservableObject {
         // key also fails — the second failure will fall through to the
         // "transient error" branch and surface a user-visible message instead.
         if retryAfterBuiltinKeyRefetch, let retryText = pendingRetryMessage {
-            pendingRetryMessage = nil
+            clearPendingRetry()
             log("ChatProvider: auto-retrying query after built-in key refetch")
             await sendMessage(retryText)
             return
