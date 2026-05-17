@@ -21,6 +21,7 @@ class GlobalShortcutManager {
 
     private var shortcutObserver: NSObjectProtocol?
     private var popOutChatObserver: NSObjectProtocol?
+    private var toggleBarObserver: NSObjectProtocol?
 
     private init() {
         var eventType = EventTypeSpec(
@@ -52,16 +53,35 @@ class GlobalShortcutManager {
         ) { [weak self] _ in
             self?.registerNewPopOutChat()
         }
+
+        // Re-register / unregister Toggle Floating Bar shortcut when toggled
+        toggleBarObserver = NotificationCenter.default.addObserver(
+            forName: ShortcutSettings.toggleBarShortcutChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.registerToggleBar()
+        }
     }
 
     func registerShortcuts() {
         unregisterShortcuts()
-        // Register Cmd+\ for toggle bar (keycode 42 = backslash)
-        registerHotKey(keyCode: 42, modifiers: Int(cmdKey), id: .toggleBar)
-        // Register Ask Fazm shortcut from user settings
+        registerToggleBar()
         registerAskFazm()
-        // Register New Pop-Out Chat shortcut from user settings
         registerNewPopOutChat()
+    }
+
+    private func registerToggleBar() {
+        if let ref = hotKeyRefs.removeValue(forKey: .toggleBar) {
+            UnregisterEventHotKey(ref)
+        }
+        let enabled = MainActor.assumeIsolated { ShortcutSettings.shared.toggleBarShortcutEnabled }
+        guard enabled else {
+            NSLog("GlobalShortcutManager: Toggle Floating Bar shortcut disabled")
+            return
+        }
+        // Cmd+\ (keycode 42 = backslash)
+        registerHotKey(keyCode: 42, modifiers: Int(cmdKey), id: .toggleBar)
     }
 
     private func registerAskFazm() {
@@ -69,7 +89,13 @@ class GlobalShortcutManager {
         if let ref = hotKeyRefs.removeValue(forKey: .askFazm) {
             UnregisterEventHotKey(ref)
         }
-        let askFazmKey = MainActor.assumeIsolated { ShortcutSettings.shared.askFazmKey }
+        let (enabled, askFazmKey) = MainActor.assumeIsolated {
+            (ShortcutSettings.shared.askFazmShortcutEnabled, ShortcutSettings.shared.askFazmKey)
+        }
+        guard enabled else {
+            NSLog("GlobalShortcutManager: Ask Fazm shortcut disabled")
+            return
+        }
         registerHotKey(keyCode: Int(askFazmKey.keyCode), modifiers: askFazmKey.carbonModifiers, id: .askFazm)
         NSLog("GlobalShortcutManager: Registered Ask Fazm shortcut: \(askFazmKey.rawValue)")
     }
@@ -78,7 +104,13 @@ class GlobalShortcutManager {
         if let ref = hotKeyRefs.removeValue(forKey: .newPopOutChat) {
             UnregisterEventHotKey(ref)
         }
-        let popOutKey = MainActor.assumeIsolated { ShortcutSettings.shared.newPopOutChatKey }
+        let (enabled, popOutKey) = MainActor.assumeIsolated {
+            (ShortcutSettings.shared.newPopOutChatShortcutEnabled, ShortcutSettings.shared.newPopOutChatKey)
+        }
+        guard enabled else {
+            NSLog("GlobalShortcutManager: New Pop-Out Chat shortcut disabled")
+            return
+        }
         registerHotKey(keyCode: Int(popOutKey.keyCode), modifiers: popOutKey.carbonModifiers, id: .newPopOutChat)
         NSLog("GlobalShortcutManager: Registered New Pop-Out Chat shortcut: \(popOutKey.rawValue)")
     }
