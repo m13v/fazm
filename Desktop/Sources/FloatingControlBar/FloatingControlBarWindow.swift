@@ -2283,7 +2283,7 @@ class FloatingControlBarManager {
     func retryPendingQuery() {
         guard let provider = chatProvider,
               let _ = provider.pendingRetryMessage else { return }
-        provider.pendingRetryMessage = nil
+        provider.clearPendingRetry()
         guard let window = window else { return }
 
         log("FloatingControlBarManager: Retrying pending query via floating bar (with session resume)")
