@@ -384,19 +384,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.input.draftInputText = state.input.aiInputText
         }
 
-        // Phase 1: Fade out SwiftUI content immediately
-        withAnimation(.easeOut(duration: 0.2)) {
-            state.streaming.showingAIConversation = false
-            state.streaming.showingAIResponse = false
-            state.input.aiInputText = ""
-            state.streaming.currentAIMessage = nil
-            state.streaming.chatHistory = []
-            state.voice.isVoiceFollowUp = false
-            state.voice.voiceFollowUpTranscript = ""
-        }
-        // Suppress hover resizes while the close animation plays, otherwise onHover
-        // fires mid-animation, reads an intermediate frame, and causes position drift.
-        suppressHoverResize = true
+        // Clear conversation state instantly — no fade.
+        // Previously this was wrapped in withAnimation(.easeOut(duration: 0.2))
+        // and the window shrink was deferred 0.06s then ran a 0.35s animation,
+        // which left an empty translucent (frosted) window visible for ~200ms
+        // before the frame collapsed to the pill. The user perceived that as
+        // "going gray, then closing." Snap straight to the pill instead.
+        state.streaming.showingAIConversation = false
+        state.streaming.showingAIResponse = false
+        state.input.aiInputText = ""
+        state.streaming.currentAIMessage = nil
+        state.streaming.chatHistory = []
+        state.voice.isVoiceFollowUp = false
+        state.voice.voiceFollowUpTranscript = ""
 
         // Always restore to pill — Smart TV only shows when dialog is open.
         let size = FloatingControlBarWindow.minBarSize
@@ -410,44 +410,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         resizeWorkItem = nil
         styleMask.remove(.resizable)
         isResizingProgrammatically = true
-        // Record the animation target so savePreChatCenterIfNeeded() can snap to it
-        // if a new PTT query fires while this restore animation is still running.
-        pendingRestoreOrigin = restoreOrigin
+        pendingRestoreOrigin = nil
 
-        // Phase 2: Start window shrink after content begins fading, creating
-        // a layered close effect instead of everything moving at once.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
-            guard let self = self else { return }
-            // Force-complete any in-flight window frame animation to prevent
-            // stale _NSWindowTransformAnimation objects from accumulating.
-            self.setFrame(self.frame, display: false, animate: false)
-            NSAnimationContext.beginGrouping()
-            NSAnimationContext.current.duration = 0.35
-            NSAnimationContext.current.allowsImplicitAnimation = false
-            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(
-                controlPoints: 0.4, 0.0, 0.2, 1.0  // ease-out for closing
-            )
-            self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
-            NSAnimationContext.endGrouping()
-        }
-        let targetFrame = NSRect(origin: restoreOrigin, size: size)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-            guard let self = self else { return }
-            self.isResizingProgrammatically = false
-            self.pendingRestoreOrigin = nil
-            // Safety net: only snap if no new AI session was opened while the animation ran.
-            // Without this guard, a rapid PTT query that fires within 0.35s gets collapsed
-            // back to the pill position by this stale completion block.
-            guard !self.state.streaming.showingAIConversation else { return }
-            if self.frame != targetFrame {
-                self.setFrame(targetFrame, display: true, animate: false)
-            }
-        }
+        setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: false)
 
-        // Allow hover resizes again after the animation settles.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-            self?.suppressHoverResize = false
-        }
+        isResizingProgrammatically = false
     }
 
     // MARK: - Click-Outside Monitor
@@ -1633,6 +1600,7 @@ class FloatingControlBarManager {
         //   sendQueryToWindow:<sessionKey>:<t>  — deliver text `<t>` to the pop-out matching `<sessionKey>` (drives the same path as a user typing into that window)
         //   getBridgeState                      — signal SIGUSR2 to the bridge so it dumps sessions / activeQueries / PID to /tmp/fazm-bridge-state.json
         //   restartBridge                       — terminate the running bridge subprocess and let ChatProvider relaunch it (clears leaked claude subprocesses)
+        //   testBrowserSetupRetry:<key>:<ob>:<text> — simulate the post-browser-extension-setup retry (key empty = main/nil, "floating", or "detached-<uuid>"; ob=0|1 = was onboarding; text = pending message)
         DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("com.fazm.control"),
             object: nil,
@@ -1717,6 +1685,29 @@ class FloatingControlBarManager {
                     self.dumpBridgeState()
                 } else if command == "restartBridge" {
                     self.restartBridgeSubprocess()
+                } else if command.hasPrefix("testBrowserSetupRetry:") {
+                    // Test hook for `ChatProvider.retryAfterBrowserSetup()` dispatch.
+                    // Format: testBrowserSetupRetry:<sessionKey>:<onboarding>:<text>
+                    //   <sessionKey>   empty | "floating" | "detached-<uuid>" | "main"
+                    //   <onboarding>   "1" | "0" — whether the interrupted send was onboarding
+                    //   <text>         the message text that was "interrupted"
+                    // Simulates the state that exists right after a Playwright tool
+                    // call hits an empty extension token: pendingRetry* fields are
+                    // populated, then we call the dispatch entrypoint.
+                    let rest = String(command.dropFirst("testBrowserSetupRetry:".count))
+                    let parts = rest.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+                    guard parts.count == 3, let provider = self.chatProvider else {
+                        log("FloatingControlBarManager: testBrowserSetupRetry malformed — expected sessionKey:onboarding:text, got '\(rest)'")
+                        return
+                    }
+                    let sessionKeyArg: String? = parts[0].isEmpty ? nil : parts[0]
+                    let wasOnboarding = parts[1] == "1"
+                    let text = parts[2]
+                    provider.pendingRetryMessage = text
+                    provider.pendingRetrySessionKey = sessionKeyArg
+                    provider.pendingRetryIsOnboarding = wasOnboarding
+                    log("FloatingControlBarManager: testBrowserSetupRetry seeded sessionKey=\(sessionKeyArg ?? "<nil>") onboarding=\(wasOnboarding) text='\(text.prefix(40))'")
+                    provider.retryAfterBrowserSetup()
                 } else {
                     log("FloatingControlBarManager: Unknown control command: \(command)")
                 }
@@ -2326,14 +2317,18 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, attachments: [ChatAttachment] = [], barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        // If a query is already in-flight, enqueue instead of silently dropping.
-        // The queue drains automatically after the current response finishes.
-        if provider.isSending {
+        // If a query is already in-flight FOR THIS SESSION, enqueue instead of silently
+        // dropping. The queue drains automatically after the current response finishes.
+        // Check the per-session flag (not the global `isSending`) so a busy sibling
+        // pop-out doesn't trap floating-bar submits in an undrainable queue while the
+        // pop-out is doing long-running work. Matches the per-session gating already
+        // used at line 1893 here and in DetachedChatWindow / interruptAndSend.
+        if provider.isSending(sessionKey: "floating") {
             provider.enqueueMessage(message, sessionKey: "floating")
             // The SwiftUI wrapper no longer does optimistic UI on submit, so we
-            // don't need to undo a stale displayedQuery here — the queue chip is
+            // don't need to undo a stale displayedQuery here, the queue chip is
             // the only thing the user sees, which is correct.
-            log("FloatingControlBarManager: Query enqueued (agent busy): \(message.prefix(80))")
+            log("FloatingControlBarManager: Query enqueued (floating session busy): \(message.prefix(80))")
             return
         }
 
