@@ -12,6 +12,9 @@ class ShortcutSettings: ObservableObject {
     /// Notification posted when the New Pop-Out Chat shortcut changes so hotkeys can be re-registered.
     nonisolated static let newPopOutChatShortcutChanged = Notification.Name("ShortcutSettings.newPopOutChatShortcutChanged")
 
+    /// Notification posted when the toggle-floating-bar shortcut is enabled/disabled.
+    nonisolated static let toggleBarShortcutChanged = Notification.Name("ShortcutSettings.toggleBarShortcutChanged")
+
     /// Available modifier keys for push-to-talk.
     enum PTTKey: String, CaseIterable {
         case leftControl = "Left Control (⌃)"
@@ -118,6 +121,35 @@ class ShortcutSettings: ObservableObject {
         didSet {
             UserDefaults.standard.set(newPopOutChatKey.rawValue, forKey: "shortcut_newPopOutChatKey")
             NotificationCenter.default.post(name: Self.newPopOutChatShortcutChanged, object: nil)
+        }
+    }
+
+    /// Whether the Ask Fazm global shortcut is registered. Toggle off to free the key combo for other apps.
+    @Published var askFazmShortcutEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(askFazmShortcutEnabled, forKey: "shortcut_askFazmShortcutEnabled")
+            NotificationCenter.default.post(name: Self.askFazmShortcutChanged, object: nil)
+        }
+    }
+
+    /// Whether the New Pop-Out Chat global shortcut is registered.
+    @Published var newPopOutChatShortcutEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(newPopOutChatShortcutEnabled, forKey: "shortcut_newPopOutChatShortcutEnabled")
+            NotificationCenter.default.post(name: Self.newPopOutChatShortcutChanged, object: nil)
+        }
+    }
+
+    /// Whether the Push-to-Talk modifier key listener is active.
+    @Published var pttEnabled: Bool {
+        didSet { UserDefaults.standard.set(pttEnabled, forKey: "shortcut_pttEnabled") }
+    }
+
+    /// Whether the toggle-floating-bar shortcut (⌘\) is registered.
+    @Published var toggleBarShortcutEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(toggleBarShortcutEnabled, forKey: "shortcut_toggleBarShortcutEnabled")
+            NotificationCenter.default.post(name: Self.toggleBarShortcutChanged, object: nil)
         }
     }
 
@@ -454,5 +486,9 @@ class ShortcutSettings: ObservableObject {
             self.proactivenessLevel = .proactive
         }
         self.screenObserverEnabled = UserDefaults.standard.object(forKey: "shortcut_screenObserverEnabled") as? Bool ?? true
+        self.askFazmShortcutEnabled = UserDefaults.standard.object(forKey: "shortcut_askFazmShortcutEnabled") as? Bool ?? true
+        self.newPopOutChatShortcutEnabled = UserDefaults.standard.object(forKey: "shortcut_newPopOutChatShortcutEnabled") as? Bool ?? true
+        self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
+        self.toggleBarShortcutEnabled = UserDefaults.standard.object(forKey: "shortcut_toggleBarShortcutEnabled") as? Bool ?? true
     }
 }
