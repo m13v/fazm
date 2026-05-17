@@ -1,7 +1,10 @@
 {
   "unreleased": [
     "Fixed the 'Open in Browser' button on the Remote Control settings page not responding to clicks",
-    "Fixed a stale 'not responding' warning showing on a healthy query after the app recovered from an unclean shutdown"
+    "Fixed a stale 'not responding' warning showing on a healthy query after the app recovered from an unclean shutdown",
+    "Fixed AI losing context after browser extension install when chatting in main chat or a pop-out \u2014 the resume message now routes back to your active chat instead of the floating bar",
+    "Floating bar close is now instant (removed the staged fade and shrink that briefly showed an empty translucent window before collapsing to the pill)",
+    "Fixed floating bar going silent when a pop-out chat was busy: messages now dispatch immediately instead of queueing behind the unrelated pop-out"
   ],
   "releases": [
     {
