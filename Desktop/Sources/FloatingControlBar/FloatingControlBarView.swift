@@ -209,10 +209,16 @@ struct FloatingControlBarView: View {
                             .padding(.leading, 4)
                     }
                     VStack(spacing: 4) {
-                        compactButton(title: "Push to talk", keys: [shortcutSettings.pttKey.symbol]) {
+                        compactButton(
+                            title: "Push to talk",
+                            keys: shortcutSettings.pttEnabled ? [shortcutSettings.pttKey.symbol] : []
+                        ) {
                             onAskAI()
                         }
-                        compactLabel("Open chat", keys: shortcutSettings.askFazmKey.hintKeys)
+                        compactLabel(
+                            "Open chat",
+                            keys: shortcutSettings.askFazmShortcutEnabled ? shortcutSettings.askFazmKey.hintKeys : []
+                        )
                     }
                     .frame(maxWidth: .infinity)
                 }
