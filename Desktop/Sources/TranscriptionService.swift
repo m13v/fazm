@@ -30,6 +30,23 @@ class TranscriptionService {
         ("dot html", ".html"),
     ]
 
+    /// Detects degenerate "repeated token" hallucinations that ASR models emit
+    /// when fed silent or low-energy audio. Deepgram Nova-3 in multi-language
+    /// (`language=multi`) mode is especially prone: the decoder latches onto a
+    /// language and loops on a single token, producing output like
+    /// "भाई भाई भाई भाई …" (reported via session replay). Real dictation is never
+    /// one word repeated four or more times with nothing else, so dropping these
+    /// is safe — the caller then falls back to the silence overlay.
+    static func isRepeatedTokenHallucination(_ text: String) -> Bool {
+        let tokens = text
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters) }
+            .filter { !$0.isEmpty }
+        guard tokens.count >= 4 else { return false }
+        return Set(tokens).count == 1
+    }
+
     // MARK: - Types
 
     /// Transcript segment from DeepGram
@@ -519,6 +536,13 @@ class TranscriptionService {
         let text = alternative.transcript
         guard !text.isEmpty else { return nil }
 
+        // Drop repeated-token hallucinations (e.g. "भाई भाई भाई …") that Deepgram
+        // emits on silent/low-energy audio, especially in multi-language mode.
+        if Self.isRepeatedTokenHallucination(text) {
+            log("TranscriptionService: dropping repeated-token hallucination: \(text.prefix(60))")
+            return nil
+        }
+
         let words = alternative.words?.map { word in
             TranscriptSegment.Word(
                 word: word.word,
@@ -605,6 +629,13 @@ extension TranscriptionService {
         let json = try JSONDecoder().decode(BatchResponse.self, from: data)
         let transcript = json.results?.channels.first?.alternatives.first?.transcript
         log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
+
+        // Drop repeated-token hallucinations (e.g. "भाई भाई भाई …") so the caller
+        // shows the silence overlay instead of inserting gibberish into the input.
+        if let transcript, isRepeatedTokenHallucination(transcript) {
+            log("TranscriptionService: dropping batch repeated-token hallucination")
+            return nil
+        }
         return transcript
     }
 
