@@ -2891,6 +2891,15 @@ class ChatProvider: ObservableObject {
         Task { await sendMessage(text) }
     }
 
+    /// Clear all `pendingRetry*` fields atomically. Use this instead of clearing
+    /// `pendingRetryMessage` alone so the session key + onboarding flag don't
+    /// leak into a future, unrelated retry.
+    func clearPendingRetry() {
+        pendingRetryMessage = nil
+        pendingRetrySessionKey = nil
+        pendingRetryIsOnboarding = false
+    }
+
     /// After browser extension setup completes, resume the interrupted task on
     /// the SAME chat surface that triggered it (floating bar, detached pop-out,
     /// onboarding chat, or main chat). Replaces the old hardcoded "always go
