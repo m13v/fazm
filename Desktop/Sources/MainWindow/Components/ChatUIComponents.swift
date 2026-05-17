@@ -394,21 +394,23 @@ struct SystemEventCardView: View {
 
     private var iconName: String {
         switch event.kind {
-        case .sessionRecovered:     return "arrow.triangle.2.circlepath"
-        case .sessionRecoveryEmpty: return "exclamationmark.triangle"
-        case .toolHangCanceled:     return "xmark.octagon"
-        case .taskHangCanceled:     return "person.crop.circle.badge.exclamationmark"
-        case .userInterrupted:      return "stop.circle"
+        case .sessionRecovered:        return "arrow.triangle.2.circlepath"
+        case .sessionRecoveryEmpty:    return "exclamationmark.triangle"
+        case .toolHangCanceled:        return "xmark.octagon"
+        case .taskHangCanceled:        return "person.crop.circle.badge.exclamationmark"
+        case .userInterrupted:         return "stop.circle"
+        case .browserExtensionResumed: return "puzzlepiece.extension.fill"
         }
     }
 
     private var accentColor: Color {
         switch event.kind {
-        case .sessionRecovered:     return .blue
-        case .sessionRecoveryEmpty: return .orange
-        case .toolHangCanceled:     return .orange
-        case .taskHangCanceled:     return .orange
-        case .userInterrupted:      return .gray
+        case .sessionRecovered:        return .blue
+        case .sessionRecoveryEmpty:    return .orange
+        case .toolHangCanceled:        return .orange
+        case .taskHangCanceled:        return .orange
+        case .userInterrupted:         return .gray
+        case .browserExtensionResumed: return .green
         }
     }
 
