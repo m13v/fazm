@@ -11,6 +11,7 @@ struct ShortcutsSettingsSection: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            toggleBarCard
             askFazmKeyCard
             newPopOutChatKeyCard
             pttKeyCard
@@ -21,15 +22,44 @@ struct ShortcutsSettingsSection: View {
         }
     }
 
-    private var askFazmKeyCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private var toggleBarCard: some View {
+        HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ask Fazm Shortcut")
+                Text("Toggle Floating Bar (⌘\\)")
                     .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(FazmColors.textPrimary)
-                Text("Global shortcut to open Ask Fazm from anywhere.")
+                Text("Global shortcut to show or hide the floating bar. Turn off if it conflicts with another app.")
                     .scaledFont(size: 13)
                     .foregroundColor(FazmColors.textSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: $settings.toggleBarShortcutEnabled)
+                .toggleStyle(.switch)
+                .tint(FazmColors.purplePrimary)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(FazmColors.backgroundTertiary.opacity(0.5))
+        )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askfazm.togglebar", highlightedSettingId: $highlightedSettingId))
+    }
+
+    private var askFazmKeyCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ask Fazm Shortcut")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(FazmColors.textPrimary)
+                    Text("Global shortcut to open Ask Fazm from anywhere.")
+                        .scaledFont(size: 13)
+                        .foregroundColor(FazmColors.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: $settings.askFazmShortcutEnabled)
+                    .toggleStyle(.switch)
+                    .tint(FazmColors.purplePrimary)
             }
 
             HStack(spacing: 12) {
@@ -38,6 +68,8 @@ struct ShortcutsSettingsSection: View {
                 }
                 Spacer()
             }
+            .opacity(settings.askFazmShortcutEnabled ? 1.0 : 0.4)
+            .disabled(!settings.askFazmShortcutEnabled)
         }
         .padding(20)
         .background(
@@ -73,13 +105,19 @@ struct ShortcutsSettingsSection: View {
 
     private var newPopOutChatKeyCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("New Pop-Out Chat")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(FazmColors.textPrimary)
-                Text("Global shortcut to open a new chat in its own window.")
-                    .scaledFont(size: 13)
-                    .foregroundColor(FazmColors.textSecondary)
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("New Pop-Out Chat")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(FazmColors.textPrimary)
+                    Text("Global shortcut to open a new chat in its own window.")
+                        .scaledFont(size: 13)
+                        .foregroundColor(FazmColors.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: $settings.newPopOutChatShortcutEnabled)
+                    .toggleStyle(.switch)
+                    .tint(FazmColors.purplePrimary)
             }
 
             HStack(spacing: 12) {
@@ -88,6 +126,8 @@ struct ShortcutsSettingsSection: View {
                 }
                 Spacer()
             }
+            .opacity(settings.newPopOutChatShortcutEnabled ? 1.0 : 0.4)
+            .disabled(!settings.newPopOutChatShortcutEnabled)
         }
         .padding(20)
         .background(
@@ -123,13 +163,19 @@ struct ShortcutsSettingsSection: View {
 
     private var pttKeyCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Push to Talk")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(FazmColors.textPrimary)
-                Text("Hold the key to speak, release to send your question to AI.")
-                    .scaledFont(size: 13)
-                    .foregroundColor(FazmColors.textSecondary)
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Push to Talk")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(FazmColors.textPrimary)
+                    Text("Hold the key to speak, release to send your question to AI.")
+                        .scaledFont(size: 13)
+                        .foregroundColor(FazmColors.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: $settings.pttEnabled)
+                    .toggleStyle(.switch)
+                    .tint(FazmColors.purplePrimary)
             }
 
             HStack(spacing: 12) {
@@ -138,6 +184,8 @@ struct ShortcutsSettingsSection: View {
                 }
                 Spacer()
             }
+            .opacity(settings.pttEnabled ? 1.0 : 0.4)
+            .disabled(!settings.pttEnabled)
         }
         .padding(20)
         .background(
@@ -277,11 +325,11 @@ struct ShortcutsSettingsSection: View {
                 .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(FazmColors.textPrimary)
 
-            shortcutRow(label: "Ask Fazm", keys: settings.askFazmKey.rawValue)
-            shortcutRow(label: "New pop-out chat", keys: settings.newPopOutChatKey.rawValue)
-            shortcutRow(label: "Toggle floating bar", keys: "\u{2318}\\")
-            shortcutRow(label: "Push to talk", keys: settings.pttKey.symbol + " hold")
-            if settings.doubleTapForLock {
+            shortcutRow(label: "Ask Fazm", keys: settings.askFazmShortcutEnabled ? settings.askFazmKey.rawValue : "Off")
+            shortcutRow(label: "New pop-out chat", keys: settings.newPopOutChatShortcutEnabled ? settings.newPopOutChatKey.rawValue : "Off")
+            shortcutRow(label: "Toggle floating bar", keys: settings.toggleBarShortcutEnabled ? "\u{2318}\\" : "Off")
+            shortcutRow(label: "Push to talk", keys: settings.pttEnabled ? settings.pttKey.symbol + " hold" : "Off")
+            if settings.pttEnabled && settings.doubleTapForLock {
                 shortcutRow(label: "Locked listening", keys: settings.pttKey.symbol + " \u{00D7}2")
             }
         }
