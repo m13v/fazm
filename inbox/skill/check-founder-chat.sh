@@ -27,6 +27,111 @@ mkdir -p "$LOG_DIR"
 
 log() { echo "[$(date +%H:%M:%S)] $*" >> "$LOG_DIR/founder-chat.log"; }
 
+# ---------------------------------------------------------------------------
+# Founder-chat instructions: Matt's email replies to "FAZM Chat:" reports.
+# When the founder-chat agent finishes a conversation it emails Matt a report.
+# If Matt replies to that report, his reply is an INSTRUCTION for the model
+# (what to do next with that user's chat) — not a message to relay verbatim.
+# check-founder-instructions.js surfaces those replies from fazm_emails; this
+# block spawns one Claude session per instruction.
+# ---------------------------------------------------------------------------
+INSTRUCTIONS=$("$NODE_BIN" "$SCRIPTS_DIR/check-founder-instructions.js" 2>>"$LOG_DIR/founder-chat.log" || echo "[]")
+
+if [ -n "$INSTRUCTIONS" ] && [ "$INSTRUCTIONS" != "[]" ]; then
+    NUM_INSTR=$(echo "$INSTRUCTIONS" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+
+    for j in $(seq 0 $((NUM_INSTR - 1))); do
+        INSTR_EMAIL_ID=$(echo "$INSTRUCTIONS" | python3 -c "import json,sys; print(json.load(sys.stdin)[$j]['email_id'])")
+        INSTR_TARGET=$(echo "$INSTRUCTIONS" | python3 -c "import json,sys; print(json.load(sys.stdin)[$j]['target_email'])")
+        INSTR_PID_FILE="/tmp/fazm-instruction-${INSTR_EMAIL_ID}.pid"
+
+        # Skip while rate limited (shared marker with chat sessions)
+        if [ -f "/tmp/fazm-chat-ratelimit" ]; then
+            RL_TS=$(awk '{print $2}' /tmp/fazm-chat-ratelimit 2>/dev/null || echo "0")
+            NOW_TS=$(date +%s)
+            if [ $((NOW_TS - RL_TS)) -lt 3600 ]; then
+                continue
+            else
+                rm -f /tmp/fazm-chat-ratelimit
+            fi
+        fi
+
+        # Skip if a session for this instruction is already running
+        if [ -f "$INSTR_PID_FILE" ]; then
+            EXISTING_PID=$(cat "$INSTR_PID_FILE" 2>/dev/null || echo "")
+            if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
+                log "Instruction session already active for email #$INSTR_EMAIL_ID (pid $EXISTING_PID), skipping"
+                continue
+            fi
+            rm -f "$INSTR_PID_FILE"
+        fi
+
+        # Give up after 3 consecutive failures so a bad row doesn't loop forever
+        INSTR_FAIL_FILE="/tmp/fazm-instruction-fail-${INSTR_EMAIL_ID}"
+        INSTR_FAILS=0
+        [ -f "$INSTR_FAIL_FILE" ] && INSTR_FAILS=$(cat "$INSTR_FAIL_FILE" 2>/dev/null || echo "0")
+        if [ "$INSTR_FAILS" -ge 3 ]; then
+            log "GIVING UP on instruction #$INSTR_EMAIL_ID after $INSTR_FAILS consecutive failures"
+            continue
+        fi
+
+        log "Spawning instruction session for email #$INSTR_EMAIL_ID (target $INSTR_TARGET)"
+
+        INSTR_DATA=$(echo "$INSTRUCTIONS" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)[$j], indent=2))")
+
+        INSTR_PROMPT_FILE=$(mktemp)
+        cat > "$INSTR_PROMPT_FILE" <<INSTR_EOF
+Read ~/fazm/inbox/skill/FOUNDER-CHAT-INSTRUCTION-SKILL.md for the full workflow.
+
+## Founder instruction to handle
+
+Matt replied to a founder-chat report email. Treat his reply as an instruction
+to you (the model), not a message to relay verbatim.
+
+Instruction email ID: $INSTR_EMAIL_ID
+Target user email: $INSTR_TARGET
+
+Full instruction data (JSON):
+$INSTR_DATA
+
+Process this instruction now. Follow FOUNDER-CHAT-INSTRUCTION-SKILL.md exactly.
+When done, mark the email processed and remove the PID file
+/tmp/fazm-instruction-${INSTR_EMAIL_ID}.pid
+INSTR_EOF
+
+        INSTR_LOG="$LOG_DIR/instruction-${INSTR_EMAIL_ID}-$(date +%Y%m%d_%H%M%S).log"
+        (
+            set +e  # Don't exit on error — cleanup must run
+            cd "$HOME/fazm"
+            echo "[$(date)] Starting instruction session for email #$INSTR_EMAIL_ID ($INSTR_TARGET)" >> "$INSTR_LOG"
+            gtimeout 1200 claude \
+                -p "$(cat "$INSTR_PROMPT_FILE")" \
+                --dangerously-skip-permissions \
+                >> "$INSTR_LOG" 2>&1
+            EXIT_CODE=$?
+            echo "[$(date)] Claude exited with code $EXIT_CODE" >> "$INSTR_LOG"
+            if [ $EXIT_CODE -ne 0 ]; then
+                echo "[$(date)] WARNING: instruction session #$INSTR_EMAIL_ID exited with code $EXIT_CODE" >> "$LOG_DIR/founder-chat.log"
+                if grep -qi "hit your limit\|rate limit\|too many requests" "$INSTR_LOG" 2>/dev/null; then
+                    echo "[$(date)] RATE LIMITED: not retrying instruction #$INSTR_EMAIL_ID until limit resets" >> "$LOG_DIR/founder-chat.log"
+                    echo "rate_limited $(date +%s)" > "/tmp/fazm-chat-ratelimit"
+                else
+                    NEW_FAILS=$((INSTR_FAILS + 1))
+                    echo "$NEW_FAILS" > "$INSTR_FAIL_FILE"
+                    echo "[$(date)] Instruction #$INSTR_EMAIL_ID failed (attempt $NEW_FAILS/3, will retry)" >> "$LOG_DIR/founder-chat.log"
+                fi
+            else
+                rm -f "$INSTR_FAIL_FILE"
+            fi
+            rm -f "$INSTR_PROMPT_FILE" "$INSTR_PID_FILE"
+        ) &
+
+        INSTR_CLAUDE_PID=$!
+        echo "$INSTR_CLAUDE_PID" > "$INSTR_PID_FILE"
+        log "Started instruction session for email #$INSTR_EMAIL_ID (pid $INSTR_CLAUDE_PID)"
+    done
+fi
+
 # Check for unread chats
 CHATS=$("$NODE_BIN" "$SCRIPTS_DIR/check-unread-chats.js" 2>>"$LOG_DIR/founder-chat.log")
 

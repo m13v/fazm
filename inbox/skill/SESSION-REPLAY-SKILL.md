@@ -6,24 +6,31 @@ Read ~/fazm/inbox/skill/AGENT-VOICE.md first for persona, tone rules, and invest
 
 ## Overview
 
-You are investigating issues found in session recordings of the Fazm macOS app. Gemini has already analyzed the video chunks and identified issues. Your job is to investigate each issue end-to-end in the source code, fix bugs when possible, and report findings.
+You are reviewing session recordings of the Fazm macOS app. Gemini has already analyzed the video chunks. Your job is two-fold: (1) investigate any problems end-to-end in the source code and fix bugs when possible, and (2) capture how the user actually uses Fazm — what they were trying to do, what worked well, and what didn't — so the report is product signal, not just a bug list.
 
 ## Workflow
 
 ### Step 1: Understand the analyses
 
-Read all Gemini analysis results provided in the prompt. For each analysis:
-- Note the title and severity of each issue
-- Distinguish between genuine Fazm issues vs normal desktop usage
-- Note any Sentry/PostHog cross-references Gemini made (these may be inaccurate; verify them)
+Each Gemini analysis has three sections: **WHAT THE USER DID**, **WHAT WORKED WELL**, and **WHAT DIDN'T WORK**. Read all of them.
 
-Categorize the combined issues:
+From **WHAT THE USER DID** and **WHAT WORKED WELL** across the analyses, build a picture of:
+- The user's goal / use case and which Fazm capabilities they used (voice, agent computer control, browser automation, screen vision, routines, plain chat).
+- What worked smoothly and any signs of satisfaction or value delivered.
+- Whether key features went unused or were tried once and dropped.
+
+From **WHAT DIDN'T WORK**, for each problem:
+- Note the title and severity.
+- Distinguish genuine Fazm problems from normal desktop usage.
+- Note any Sentry/PostHog cross-references Gemini made (these may be inaccurate; verify them).
+
+Categorize the combined problems:
 - **Crash/fatal** (EXC_BAD_ACCESS, SIGABRT, etc.)
 - **Hang/freeze** (App Hanging, bridge timeout)
 - **Functional bug** (feature doesn't work, wrong behavior)
 - **UX friction** (confusing flow, excessive retries)
 - **Performance** (slow loading, UI lag)
-- **No issues** (if all analyses say NO_ISSUES, skip to Step 4)
+- **No problems** (if every analysis says NO_ISSUES, skip Step 2 — but still write the usage/insight report in Step 4)
 
 ### Step 2: Investigate each issue
 
@@ -141,16 +148,21 @@ node ~/analytics/scripts/send-email.js \
 **Report MUST include:**
 1. **Who**: device ID, user email/name (or "unknown" if not resolved)
 2. **Session summary**: total chunks, time range, number of sessions
-3. **Issues found**: list each issue with severity
-4. **Investigation results**: for each issue:
+3. **How the user used Fazm**: their goal/use case, which capabilities they used (voice, agent computer control, browser automation, screen vision, routines, plain chat), and whether they completed, abandoned, or partially finished what they set out to do. Onboarding vs returning user.
+4. **What worked well**: features/flows that delivered, signs of value or satisfaction. If nothing stood out, say so.
+5. **What didn't work** (problems found): list each with severity.
+6. **Investigation results**: for each problem:
    - What Gemini reported
    - What Sentry/PostHog actually show for this user
    - Root cause (if found)
    - Whether it's already fixed, and in which commit
    - How many users are affected
-5. **Code changes**: files edited with paths, commit hashes, or "none"
-6. **User email sent**: yes/no, and what you said
-7. **Action needed from Matt**: None / Review changes / Prioritize fix / Discuss
+7. **Product insight**: one or two sentences — what this session suggests about adoption, friction, or unused features. This is the "what's working / not working" signal, separate from individual bugs.
+8. **Code changes**: files edited with paths, commit hashes, or "none"
+9. **User email sent**: yes/no, and what you said
+10. **Action needed from Matt**: None / Review changes / Prioritize fix / Discuss
+
+Write the report even when no problems were found — a clean session with a clear usage story is still useful product signal.
 
 ### Step 5: Write outcome file
 
@@ -167,6 +179,10 @@ cat > "$OUTCOME_FILE" <<'OUTCOME_EOF'
   "reportEmailSent": true,
   "reportEmailTo": "matt@mediar.ai",
   "summary": "Brief summary of findings and actions taken",
+  "usageSummary": "What the user was trying to do and the outcome (completed / abandoned / partial)",
+  "featuresUsed": ["voice", "browser-automation", "agent-computer-control"],
+  "whatWorked": "Short note on what performed well, or empty string if nothing notable",
+  "geminiAnalysisCount": 4,
   "issueDetails": [
     {"title": "Issue title", "severity": "crash", "status": "fixed_in_commit_abc123"},
     {"title": "Issue title", "severity": "functional", "status": "already_fixed"},
@@ -182,11 +198,17 @@ If you could not complete the investigation (missing env vars, API errors, etc.)
 
 ### Step 6: Mark as investigated
 
+**Precondition — do NOT mark unless BOTH are true:**
+1. Gemini produced at least one analysis for this device (`geminiAnalysisCount > 0`). If Gemini produced 0 analyses, the analysis pipeline has a gap — the device has not actually been reviewed. Leave it unmarked so it is retried once analysis works again.
+2. The report email to Matt was sent.
+
+If either is false, skip this step entirely. Do not call `mark-device-investigated.js`.
+
 ```bash
 node ~/fazm/inbox/scripts/mark-device-investigated.js DEVICE_ID "BRIEF_SUMMARY"
 ```
 
-**Note**: The shell orchestrator also validates the outcome file after you exit. If the outcome file is missing or shows emails were not sent, the device will NOT be marked as fully investigated and will be retried.
+**Note**: The shell orchestrator also re-validates after you exit — it will not finalize the mark if chunks are still unanalyzed or the report email was not sent. Marking a device with 0 Gemini analyses permanently removes it from the queue and is a known way recordings get silently dropped; never do it.
 
 ## Access
 
@@ -219,7 +241,8 @@ node ~/analytics/scripts/send-email.js --to "EMAIL" --subject "SUBJECT" --body "
 
 ## Important notes
 
-- ALWAYS send the report to Matt. ALWAYS mark as investigated. Never skip these steps.
+- ALWAYS send the report to Matt — including for clean sessions (the usage/insight story is the point, not just bugs).
+- Mark as investigated ONLY when Gemini produced at least one analysis AND the report email was sent (see Step 6 precondition). Never mark a device that has 0 Gemini analyses — that silently drops the recording from the queue forever.
 - Only send user email when there are genuine issues AND you have a valid email address.
 - Gemini's Sentry cross-references may be wrong (it searches globally, not per-user). Always verify.
 - If a bug is already fixed in the source code, still report it but note "already fixed in commit X".
