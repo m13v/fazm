@@ -159,6 +159,12 @@ class PushToTalkManager: ObservableObject {
     guard FloatingControlBarManager.shared.isEnabled else { return }
 
     let settings = ShortcutSettings.shared
+    // Honor user's PTT enable toggle. Cancel any pending delayed activation so a
+    // toggle-off mid-press doesn't fire later.
+    guard settings.pttEnabled else {
+      cancelControlDelayIfNeeded()
+      return
+    }
 
     let pttActive: Bool
     switch settings.pttKey {
